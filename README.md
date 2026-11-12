@@ -1,76 +1,53 @@
-# Godot Engine
+# OpenRAC Editor
 
-<p align="center">
-  <a href="https://godotengine.org">
-    <img src="misc/logo/logo_outlined.svg" width="400" alt="Godot Engine logo">
-  </a>
-</p>
+The level editor for [OpenRAC](https://github.com/OpenRAC/OpenRAC). It is a fork of
+[Godot 4.7.2](https://github.com/godotengine/godot) with everything OpenRAC does not use taken out.
+Godot's own readme is in [README.godot.md](README.godot.md).
 
-## 2D and 3D cross-platform game engine
+This fork is updated rarely. It does not follow new Godot releases.
 
-**[Godot Engine](https://godotengine.org) is a feature-packed, cross-platform
-game engine to create 2D and 3D games from a unified interface.** It provides a
-comprehensive set of [common tools](https://godotengine.org/features), so that
-users can focus on making games without having to reinvent the wheel. Games can
-be exported with one click to a number of platforms, including the major desktop
-platforms (Linux, macOS, Windows), mobile platforms (Android, iOS), as well as
-Web-based platforms and [consoles](https://godotengine.org/consoles).
+## What is different from Godot
 
-## Free, open source and community-driven
+- Desktop only: Windows, Linux and macOS.
+- Vulkan only, like the game. macOS uses MoltenVK. No OpenGL, Direct3D 12 or Metal.
+- No export platforms. OpenRAC packs levels with its own tools.
+- Editor text in English and Polish only. No translated class reference.
+- Unused modules are off: 2D and 3D physics, navigation, XR, networking, CSG, GridMap,
+  visual shaders, video, Ogg/MP3 audio, texture compressors, and image formats other than PNG, SVG and TGA.
+- The simple text server (no ICU or HarfBuzz), so right-to-left and complex scripts do not shape.
 
-Godot is completely free and open source under the very permissive [MIT license](https://godotengine.org/license).
-No strings attached, no royalties, nothing. The users' games are theirs, down
-to the last line of engine code. Godot's development is fully independent and
-community-driven, empowering users to help shape their engine to match their
-expectations. It is supported by the [Godot Foundation](https://godot.foundation/)
-not-for-profit.
+All build options are in [build/custom.py](build/custom.py). Source changes are marked with
+`OpenRAC Editor:` comments.
 
-Before being open sourced in [February 2014](https://github.com/godotengine/godot/commit/0b806ee0fc9097fa7bda7ac0109191c9c5e0a1ac),
-Godot had been developed by [Juan Linietsky](https://github.com/reduz) and
-[Ariel Manzur](https://github.com/punto-) for several years as an in-house
-engine, used to publish several work-for-hire titles.
+## Size
 
-![Screenshot of a 3D scene in the Godot Engine editor](https://raw.githubusercontent.com/godotengine/godot-design/master/screenshots/editor_tps_demo_1920x1080.jpg)
+Linux x86_64 editor, measured:
 
-## Getting the engine
+| Build | Program | Zip |
+|---|---|---|
+| Godot 4.7.2 (official) | 146 MB | 78 MB |
+| OpenRAC Editor | 73 MB | 29 MB |
 
-### Binary downloads
+## Build
 
-Official binaries for the Godot editor and the export templates can be found
-[on the Godot website](https://godotengine.org/download).
+You need Python 3, SCons and a C++ compiler, as for Godot
+([Godot's build docs](https://docs.godotengine.org/en/stable/contributing/development/compiling/index.html)).
+Run from the repo root:
 
-### Compiling from source
+```sh
+# Linux (Clang)
+scons platform=linuxbsd profile=build/custom.py use_llvm=yes linker=lld
 
-[See the official docs](https://docs.godotengine.org/en/latest/engine_details/development/compiling)
-for compilation instructions for every supported platform.
+# Windows (MSVC or MinGW)
+scons platform=windows profile=build/custom.py
 
-## Community and contributing
+# macOS (needs the Vulkan SDK with MoltenVK)
+scons platform=macos arch=arm64 profile=build/custom.py vulkan_sdk_path=<path to the Vulkan SDK>
+```
 
-Godot is not only an engine but an ever-growing community of users and engine
-developers. The main community channels are listed [on the homepage](https://godotengine.org/community).
+The program is written to `bin/`.
 
-The best way to get in touch with the core engine developers is to join the
-[Godot Contributors Chat](https://chat.godotengine.org).
+## License
 
-To get started contributing to the project, see the [contributing guide](CONTRIBUTING.md).
-This document also includes guidelines for reporting bugs.
-
-## Documentation and demos
-
-The official documentation is hosted on [Read the Docs](https://docs.godotengine.org).
-It is maintained by the Godot community in its own [GitHub repository](https://github.com/godotengine/godot-docs).
-
-The [class reference](https://docs.godotengine.org/en/latest/classes/)
-is also accessible from the Godot editor.
-
-We also maintain official demos in their own [GitHub repository](https://github.com/godotengine/godot-demo-projects)
-as well as a list of [awesome Godot community resources](https://github.com/godotengine/awesome-godot).
-
-There are also a number of other
-[learning resources](https://docs.godotengine.org/en/latest/community/tutorials.html)
-provided by the community, such as text and video tutorials, demos, etc.
-Consult the [community channels](https://godotengine.org/community)
-for more information.
-
-[![Code Triagers Badge](https://www.codetriage.com/godotengine/godot/badges/users.svg)](https://www.codetriage.com/godotengine/godot)
-[![Translate on Weblate](https://hosted.weblate.org/widgets/godot-engine/-/godot/svg-badge.svg)](https://hosted.weblate.org/engage/godot-engine/?utm_source=widget)
+MIT, like Godot. Keep [LICENSE.txt](LICENSE.txt) and [COPYRIGHT.txt](COPYRIGHT.txt) with every copy.
+"Godot" is a trademark of the Godot Foundation; this fork is not Godot.

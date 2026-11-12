@@ -93,8 +93,7 @@ for x in sorted(glob.glob("platform/*")):
 
     platform_name = x[9:]
 
-    if os.path.exists(x + "/export/export.cpp"):
-        platform_exporters.append(platform_name)
+    # OpenRAC Editor: no export platforms; levels are packed by OpenRAC's own tools.
     if os.path.exists(x + "/api/api.cpp"):
         platform_apis.append(platform_name)
     if detect.can_build():
