@@ -1,0 +1,4 @@
+No file user://t/none.cutscene
+user://t/bad.cutscene is not JSON
+user://t/other.cutscene is not a .cutscene
+Import into a new, empty cutscene

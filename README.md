@@ -70,6 +70,13 @@ his death, where the ship lands, cameras, sounds, volumes, paths and grind rails
 The OpenRAC launcher packs your edits into a mod and starts the game with them. Your disc image is
 never changed. You can also build a whole new world and add it as a ship destination.
 
+### Cutscenes
+
+Add a Cutscene to a level, key its camera and actors on the timeline, and give it lines, sounds and
+events. Saving the level writes it next to the level, and the cutscene player mod plays it in
+OpenRAC when its trigger happens: walking into an area, talking to someone, picking something up.
+See [the cutscene format](docs/CUTSCENE_FORMAT.md).
+
 ### Work with an AI assistant
 
 The editor has a built-in MCP server. Connect Claude or another assistant and it can find

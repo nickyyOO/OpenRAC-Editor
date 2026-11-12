@@ -160,13 +160,18 @@ uses. With `actor` the sound comes from that actor's place.
 { "t": 200, "do": "moby_hide", "spawn_id": 210, "on": true, "persistent": true }
 { "t": 260, "do": "moby_kill", "spawn_id": 211, "persistent": true }
 { "t": 300, "do": "mission_flag", "level": 3, "byte": 4, "value": 1, "persistent": true }
-{ "t": 600, "do": "fade", "to": [0, 0, 0], "length": 30 }
+{ "t": 600, "do": "fade", "to": [0, 0, 0], "length": 30 }      // to black over half a second
+{ "t": 660, "do": "fade", "to": null, "length": 30 }           // and back to the picture
 { "t": 0,   "do": "haze", "position": [260, 150, 52], "radius": 4, "strength": 0.1, "length": 120 }
 { "t": 700, "do": "play", "cutscene": "vendor_part2" }
 { "t": 710, "do": "travel", "level": 4 }
 ```
 
 `persistent` events are the ones a skip must still apply.
+
+A `fade` goes from the colour before it (none at first) to `to`, `[r, g, b]` or `[r, g, b, a]`
+from 0 to 1, over `length` ticks (30 if not given, 0 at once). `to` as `null` or with `a` 0 clears
+it. What a fade leaves goes with the way back to the game's camera.
 
 ## `variants`
 
@@ -176,16 +181,38 @@ uses. With `actor` the sound comes from that actor's place.
 
 Checked when the cutscene would start, in order: the first that holds plays instead.
 
+## In the editor
+
+A **Cutscene** node in the level (best under its `Game` node, so its children are in the game's
+units) is one file. **Set Up Timeline and Camera** adds an AnimationPlayer whose animation is the
+cutscene's timeline, and a **CutsceneCamera**. Its children are what the file lists:
+
+| Node | In the file |
+|------|-------------|
+| CutsceneCamera | `camera`: its place and turn on the timeline, sampled every tenth of a second and at each key; `cuts` (seconds) jump |
+| CutsceneActor | `actors`: **Take Selected Moby** makes it a moby of the level; a `sequence` key starts an animation, `visible` keys show and hide it |
+| CutsceneSubtitle | `subtitles` |
+| CutsceneSound | `sounds` |
+| CutsceneEvent | `events` |
+| a Node3D called HeroEnd | `hero.end` |
+
+Saving the level writes every Cutscene to `cutscenes/<name>.cutscene` beside the scene, and the
+launcher packs them with the level. **Export .cutscene** writes one now; **Import .cutscene** reads
+one back into a new, empty Cutscene (a `path`, `look_at` on actors, shake, bezier handles and
+events the editor has no node for are not kept: it says which). From a script, `to_cutscene()`,
+`export_cutscene()`, `from_cutscene(data)` and `import_cutscene(path)` do the same.
+
 ## What the player does today (version 0.1)
 
 The player is a mod on the port's mod interface (1.14, with `pack_folder` and `game_language`). It
 plays: the triggers, `once` (per save, in the mod's data folder), variants, the hero held or
 hidden, camera keys (linear, smooth, bezier, cuts, shake, the way back to the game's camera),
 actors of all four sources with `track`, `path`, `anims` and `visible`, subtitles (ASCII letters,
-the disc's language, the first language as fallback), sounds with fades, and the events
-`moby_hide`, `moby_kill`, `mission_flag`, `haze`, `play` and `travel`. Start skips.
+the disc's language, the first language as fallback), sounds with fades, the letterbox, and the
+events `moby_hide`, `moby_kill`, `mission_flag`, `haze`, `fade`, `play` and `travel`. Start skips.
+The letterbox and fades need the port's overlay for mods (`on_overlay`).
 
-Not yet, for want of a call in the mod interface: `fov`, the letterbox, hiding the HUD, `fade`,
+Not yet, for want of a call in the mod interface: `fov`, hiding the HUD,
 holding the world, lowering the music, `look_at` and `held` on actors, joints as look-at targets,
 `layers`, a game sound on an actor other than the hero, and Japanese subtitles (the HUD's text is
 ASCII). The player logs each one it skips, once a cutscene.
