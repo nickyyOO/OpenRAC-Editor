@@ -46,6 +46,8 @@ These are deleted from the source:
 
 - **MCP server** (`editor/mcp/`): AI assistants read and edit the open level, with undo. See
   [MCP.md](MCP.md).
+- **Cutscene player** (`mods/cutscene-player/`): the OpenRAC mod that plays the editor's
+  cutscenes. See [CUTSCENE_FORMAT.md](CUTSCENE_FORMAT.md).
 
 ## Build options
 
