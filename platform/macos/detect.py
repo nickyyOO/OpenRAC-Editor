@@ -241,7 +241,7 @@ def configure(env: "SConsEnvironment"):
     ## Flags
 
     env.Prepend(CPPPATH=["#platform/macos"])
-    env.Append(CPPDEFINES=["MACOS_ENABLED", "UNIX_ENABLED", "COREAUDIO_ENABLED", "COREMIDI_ENABLED"])
+    env.Append(CPPDEFINES=["MACOS_ENABLED", "UNIX_ENABLED", "COREAUDIO_ENABLED"])
     env.Append(
         LINKFLAGS=[
             "-framework",

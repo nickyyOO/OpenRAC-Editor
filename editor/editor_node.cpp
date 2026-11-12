@@ -50,7 +50,6 @@
 #include "core/string/translation_server.h"
 #include "core/version.h"
 #include "editor/animation/animation_player_editor_plugin.h"
-#include "editor/asset_library/asset_library_editor_plugin.h"
 #include "editor/audio/audio_stream_preview.h"
 #include "editor/audio/editor_audio_buses.h"
 #include "editor/debugger/debugger_editor_plugin.h"
@@ -125,7 +124,6 @@
 #include "editor/run/editor_run_bar.h"
 #include "editor/run/game_view_plugin.h"
 #include "editor/scene/3d/material_3d_conversion_plugins.h"
-#include "editor/scene/3d/mesh_library_editor_plugin.h"
 #include "editor/scene/3d/node_3d_editor_plugin.h"
 #include "editor/scene/3d/root_motion_editor_plugin.h"
 #include "editor/scene/canvas_item_editor_plugin.h"
@@ -149,7 +147,6 @@
 #include "editor/themes/editor_theme_manager.h"
 #include "editor/translations/editor_translation_parser.h"
 #include "editor/translations/packed_scene_translation_parser_plugin.h"
-#include "editor/version_control/version_control_editor_plugin.h"
 #include "main/main.h"
 #include "scene/2d/node_2d.h"
 #include "scene/3d/bone_attachment_3d.h"
@@ -168,7 +165,6 @@
 #include "scene/main/timer.h"
 #include "scene/main/window.h"
 #include "scene/property_utils.h"
-#include "scene/resources/3d/mesh_library.h"
 #include "scene/resources/dpi_texture.h"
 #include "scene/resources/image_texture.h"
 #include "scene/resources/packed_scene.h"
@@ -354,17 +350,6 @@ void EditorNode::disambiguate_filenames(const Vector<String> p_full_paths, Vecto
 	}
 }
 
-void EditorNode::_version_control_menu_option(int p_idx) {
-	switch (vcs_actions_menu->get_item_id(p_idx)) {
-		case VCS_METADATA: {
-			VersionControlEditorPlugin::get_singleton()->popup_vcs_metadata_dialog();
-		} break;
-		case VCS_SETTINGS: {
-			VersionControlEditorPlugin::get_singleton()->popup_vcs_set_up_dialog(gui_base);
-		} break;
-	}
-}
-
 void EditorNode::_update_title() {
 	const String appname = GLOBAL_GET("application/config/name");
 	String title = (appname.is_empty() ? TTR("Unnamed Project") : appname);
@@ -424,8 +409,6 @@ void EditorNode::shortcut_input(const Ref<InputEvent> &p_event) {
 			editor_main_screen->select(EditorMainScreen::EDITOR_GAME);
 		} else if (ED_IS_SHORTCUT("editor/editor_help", p_event)) {
 			emit_signal(SNAME("request_help_search"), "");
-		} else if (ED_IS_SHORTCUT("editor/editor_assetlib", p_event) && AssetLibraryEditorPlugin::is_available()) {
-			editor_main_screen->select(EditorMainScreen::EDITOR_ASSETLIB);
 		} else if (ED_IS_SHORTCUT("editor/editor_next", p_event)) {
 			editor_main_screen->select_next();
 		} else if (ED_IS_SHORTCUT("editor/editor_prev", p_event)) {
@@ -2765,38 +2748,6 @@ void EditorNode::_dialog_action(String p_file) {
 			}
 		} break;
 
-		case FILE_EXPORT_MESH_LIBRARY: {
-			const Dictionary &fd_options = file_export_lib->get_selected_options();
-			bool merge_with_existing_library = fd_options.get(TTR("Merge With Existing"), true);
-			bool apply_mesh_instance_transforms = fd_options.get(TTR("Apply MeshInstance Transforms"), false);
-
-			Ref<MeshLibrary> ml;
-			if (merge_with_existing_library && FileAccess::exists(p_file)) {
-				ml = ResourceLoader::load(p_file, "MeshLibrary");
-
-				if (ml.is_null()) {
-					show_accept(TTR("Can't load MeshLibrary for merging!"), TTR("OK"));
-					return;
-				}
-			}
-
-			if (ml.is_null()) {
-				ml.instantiate();
-			}
-
-			MeshLibraryEditor::update_library_file(editor_data.get_edited_scene_root(), ml, merge_with_existing_library, apply_mesh_instance_transforms);
-
-			Error err = ResourceSaver::save(ml, p_file);
-			if (err) {
-				show_accept(TTR("Error saving MeshLibrary!"), TTR("OK"));
-				return;
-			} else if (ResourceCache::has(p_file)) {
-				// Make sure MeshLibrary is updated in the editor.
-				ResourceLoader::load(p_file)->reload_from_file();
-			}
-
-		} break;
-
 		case PROJECT_PACK_AS_ZIP: {
 			ProjectZIPPacker::pack_project_zip(p_file);
 			{
@@ -4129,35 +4080,16 @@ void EditorNode::_tool_menu_option(int p_idx) {
 }
 
 void EditorNode::_export_as_menu_option(int p_idx) {
-	if (export_as_menu->get_item_id(p_idx) == FILE_EXPORT_MESH_LIBRARY) { // MeshLibrary
-		current_menu_option = FILE_EXPORT_MESH_LIBRARY;
+	// OpenRAC Editor: only options added by plugins (no MeshLibrary export).
+	if (export_as_menu->get_item_submenu(p_idx).is_empty()) { // If not a submenu
+		Callable callback = export_as_menu->get_item_metadata(p_idx);
+		Callable::CallError ce;
+		Variant result;
+		callback.callp(nullptr, 0, result, ce);
 
-		if (!editor_data.get_edited_scene_root()) {
-			show_accept(TTR("This operation can't be done without a scene."), TTR("OK"));
-			return;
-		}
-
-		List<String> extensions;
-		Ref<MeshLibrary> ml(memnew(MeshLibrary));
-		ResourceSaver::get_recognized_extensions(ml, &extensions);
-		file_export_lib->clear_filters();
-		for (const String &E : extensions) {
-			file_export_lib->add_filter("*." + E);
-		}
-
-		file_export_lib->set_title(TTR("Export Mesh Library"));
-		file_export_lib->popup_file_dialog();
-	} else { // Custom menu options added by plugins
-		if (export_as_menu->get_item_submenu(p_idx).is_empty()) { // If not a submenu
-			Callable callback = export_as_menu->get_item_metadata(p_idx);
-			Callable::CallError ce;
-			Variant result;
-			callback.callp(nullptr, 0, result, ce);
-
-			if (ce.error != Callable::CallError::CALL_OK) {
-				String err = Variant::get_callable_error_text(callback, nullptr, 0, ce);
-				ERR_PRINT("Error calling function from export_as menu: " + err);
-			}
+		if (ce.error != Callable::CallError::CALL_OK) {
+			String err = Variant::get_callable_error_text(callback, nullptr, 0, ce);
+			ERR_PRINT("Error calling function from export_as menu: " + err);
 		}
 	}
 }
@@ -7859,9 +7791,6 @@ void EditorNode::_feature_profile_changed() {
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_3D, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_3D));
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_SCRIPT, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_SCRIPT));
 		// OpenRAC Editor: the Game screen stays hidden.
-		if (AssetLibraryEditorPlugin::is_available()) {
-			editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_ASSETLIB, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_ASSET_LIB));
-		}
 	} else {
 		editor_dock_manager->set_dock_enabled(ImportDock::get_singleton(), true);
 		editor_dock_manager->set_dock_enabled(SignalsDock::get_singleton(), true);
@@ -7870,9 +7799,6 @@ void EditorNode::_feature_profile_changed() {
 		editor_dock_manager->set_dock_enabled(history_dock, true);
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_3D, true);
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_SCRIPT, true);
-		if (AssetLibraryEditorPlugin::is_available()) {
-			editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_ASSETLIB, true);
-		}
 	}
 
 	editor_dock_manager->update_docks_menu();
@@ -8916,7 +8842,6 @@ EditorNode::EditorNode() {
 	ED_SHORTCUT_AND_COMMAND("editor/quick_open_scene", TTRC("Quick Open Scene..."), KeyModifierMask::CMD_OR_CTRL + KeyModifierMask::SHIFT + Key::O);
 	ED_SHORTCUT_AND_COMMAND("editor/quick_open_script", TTRC("Quick Open Script..."), KeyModifierMask::CMD_OR_CTRL + KeyModifierMask::ALT + Key::O);
 
-	ED_SHORTCUT("editor/export_as_mesh_library", TTRC("MeshLibrary..."));
 
 	ED_SHORTCUT_AND_COMMAND("editor/reload_saved_scene", TTRC("Reload Saved Scene"));
 	ED_SHORTCUT_AND_COMMAND("editor/close_scene", TTRC("Close Scene"), KeyModifierMask::CMD_OR_CTRL + KeyModifierMask::SHIFT + Key::W);
@@ -8967,13 +8892,11 @@ EditorNode::EditorNode() {
 	ED_SHORTCUT_AND_COMMAND("editor/editor_3d", TTRC("Open 3D Workspace"), KeyModifierMask::CTRL | Key::F2);
 	ED_SHORTCUT_AND_COMMAND("editor/editor_script", TTRC("Open Script Editor"), KeyModifierMask::CTRL | Key::F3);
 	ED_SHORTCUT_AND_COMMAND("editor/editor_game", TTRC("Open Game View"), KeyModifierMask::CTRL | Key::F4);
-	ED_SHORTCUT_AND_COMMAND("editor/editor_assetlib", TTRC("Open Asset Store"), KeyModifierMask::CTRL | Key::F5);
 
 	ED_SHORTCUT_OVERRIDE("editor/editor_2d", "macos", KeyModifierMask::META | KeyModifierMask::CTRL | Key::KEY_1);
 	ED_SHORTCUT_OVERRIDE("editor/editor_3d", "macos", KeyModifierMask::META | KeyModifierMask::CTRL | Key::KEY_2);
 	ED_SHORTCUT_OVERRIDE("editor/editor_script", "macos", KeyModifierMask::META | KeyModifierMask::CTRL | Key::KEY_3);
 	ED_SHORTCUT_OVERRIDE("editor/editor_game", "macos", KeyModifierMask::META | KeyModifierMask::CTRL | Key::KEY_4);
-	ED_SHORTCUT_OVERRIDE("editor/editor_assetlib", "macos", KeyModifierMask::META | KeyModifierMask::CTRL | Key::KEY_5);
 
 	ED_SHORTCUT_AND_COMMAND("editor/editor_next", TTRC("Open the next Editor"));
 	ED_SHORTCUT_AND_COMMAND("editor/editor_prev", TTRC("Open the previous Editor"));
@@ -9294,13 +9217,6 @@ EditorNode::EditorNode() {
 	file->set_current_dir("res://");
 	file->set_transient_to_focused(true);
 
-	file_export_lib = memnew(EditorFileDialog);
-	file_export_lib->set_title(TTR("Export Library"));
-	file_export_lib->set_file_mode(EditorFileDialog::FILE_MODE_SAVE_FILE);
-	file_export_lib->connect("file_selected", callable_mp(this, &EditorNode::_dialog_action));
-	file_export_lib->add_option(TTR("Merge With Existing"), Vector<String>(), true);
-	file_export_lib->add_option(TTR("Apply MeshInstance Transforms"), Vector<String>(), false);
-	gui_base->add_child(file_export_lib);
 
 	file_pack_zip = memnew(EditorFileDialog);
 	file_pack_zip->connect("file_selected", callable_mp(this, &EditorNode::_dialog_action));
@@ -9368,12 +9284,6 @@ EditorNode::EditorNode() {
 	ScriptTextEditor::register_editor(); // Register one for text scripts.
 	TextEditor::register_editor();
 	TextShaderEditor::register_editor();
-
-	if (AssetLibraryEditorPlugin::is_available()) {
-		add_editor_plugin(memnew(AssetLibraryEditorPlugin));
-	} else {
-		print_verbose("Asset Store not available (due to using Web editor, or SSL support disabled).");
-	}
 
 	// More visually meaningful to have this later.
 	add_editor_plugin(memnew(AnimationPlayerEditorPlugin));

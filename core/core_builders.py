@@ -72,24 +72,9 @@ uint8_t script_encryption_key[32] = {{
 
 
 def make_certs_header(target, source, env):
-    buffer = methods.get_buffer(str(source[0]))
-    decomp_size = len(buffer)
-    buffer = methods.compress_buffer(buffer)
-
+    # OpenRAC Editor: no TLS, so no built-in certificates.
     with methods.generated_wrapper(str(target[0])) as file:
-        # System certs path. Editor will use them if defined. (for package maintainers)
-        file.write('#define _SYSTEM_CERTS_PATH "{}"\n'.format(source[2].read() or ""))
-        if source[1].read():
-            # Defined here and not in env so changing it does not trigger a full rebuild.
-            file.write(f"""\
-#define BUILTIN_CERTS_ENABLED
-
-inline constexpr int _certs_compressed_size = {len(buffer)};
-inline constexpr int _certs_uncompressed_size = {decomp_size};
-inline constexpr unsigned char _certs_compressed[] = {{
-{methods.format_buffer(buffer, 1)}
-}};
-""")
+        file.write('#define _SYSTEM_CERTS_PATH "{}"\n'.format(source[0].read() or ""))
 
 
 def make_authors_header(target, source, env):
@@ -115,41 +100,6 @@ def make_authors_header(target, source, env):
                     close_section()
                     reading = False
                 section = SECTIONS[line[3:].strip()]
-                if section:
-                    file.write(f"inline constexpr const char *{section}[] = {{\n")
-                    reading = True
-
-        if reading:
-            close_section()
-
-
-def make_donors_header(target, source, env):
-    SECTIONS = {
-        "Patrons": "DONORS_PATRONS",
-        "Platinum sponsors": "DONORS_SPONSORS_PLATINUM",
-        "Gold sponsors": "DONORS_SPONSORS_GOLD",
-        "Silver sponsors": "DONORS_SPONSORS_SILVER",
-        "Diamond members": "DONORS_MEMBERS_DIAMOND",
-        "Titanium members": "DONORS_MEMBERS_TITANIUM",
-        "Platinum members": "DONORS_MEMBERS_PLATINUM",
-        "Gold members": "DONORS_MEMBERS_GOLD",
-    }
-    buffer = methods.get_buffer(str(source[0]))
-    reading = False
-
-    with methods.generated_wrapper(str(target[0])) as file:
-
-        def close_section():
-            file.write("\tnullptr,\n};\n\n")
-
-        for line in buffer.decode().splitlines():
-            if line.startswith("    ") and reading:
-                file.write(f'\t"{methods.to_escaped_cstring(line).strip()}",\n')
-            elif line.startswith("## "):
-                if reading:
-                    close_section()
-                    reading = False
-                section = SECTIONS.get(line[3:].strip())
                 if section:
                     file.write(f"inline constexpr const char *{section}[] = {{\n")
                     reading = True

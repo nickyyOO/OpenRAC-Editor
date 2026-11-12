@@ -162,7 +162,6 @@ public:
 		SCENE_CLOSE_ALL,
 		SCENE_QUIT,
 
-		FILE_EXPORT_MESH_LIBRARY,
 
 		// Project menu.
 		PROJECT_OPEN_SETTINGS,
@@ -180,8 +179,6 @@ public:
 		TOOLS_PROJECT_UPGRADE,
 		TOOLS_CUSTOM,
 
-		VCS_METADATA,
-		VCS_SETTINGS,
 
 		// Editor menu.
 		EDITOR_OPEN_SETTINGS,
@@ -399,13 +396,11 @@ private:
 	OptionButton *choose_android_export_profile = nullptr;
 	Ref<EditorExportPreset> android_export_preset;
 
-	PopupMenu *vcs_actions_menu = nullptr;
 	EditorFileDialog *file = nullptr;
 	ExportTemplateManager *export_template_manager = nullptr;
 	EditorFeatureProfileManager *feature_profile_manager = nullptr;
 	EditorBuildProfileManager *build_profile_manager = nullptr;
 	EditorFileDialog *file_templates = nullptr;
-	EditorFileDialog *file_export_lib = nullptr;
 	EditorFileDialog *file_android_build_source = nullptr;
 	EditorFileDialog *file_pack_zip = nullptr;
 	MenuButton *update_spinner = nullptr;
@@ -572,7 +567,6 @@ private:
 	void _load_editor_plugin_states_from_config(const Ref<ConfigFile> &p_config_file);
 	void _update_title();
 	void _update_unsaved_cache();
-	void _version_control_menu_option(int p_idx);
 	void _close_messages();
 	void _show_messages();
 	void _vp_resized();

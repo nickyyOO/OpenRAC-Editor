@@ -51,7 +51,6 @@
 #include "editor/editor_node.h"
 #include "editor/file_system/editor_paths.h"
 #include "editor/inspector/editor_property_name_processor.h"
-#include "editor/project_manager/engine_update_label.h"
 #include "editor/themes/editor_theme_manager.h"
 #include "editor/translations/editor_translation.h"
 #include "main/main.h"
@@ -497,11 +496,6 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 		project_manager_screen_hints += ",Screen " + itos(i + 1) + ":" + itos(i);
 	}
 	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "interface/editor/appearance/project_manager_screen", EditorSettings::InitialScreen::INITIAL_SCREEN_PRIMARY, project_manager_screen_hints)
-
-	{
-		const String update_hint = vformat("Disable Update Checks,Auto (%s),Check Newest Preview,Check Newest Stable,Check Newest Patch", (str_compare(GODOT_VERSION_STATUS, "stable") == 0) ? "Stable" : "Preview");
-		EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "network/connection/check_for_updates", EngineUpdateLabel::UpdateMode::AUTO, update_hint);
-	}
 
 	EDITOR_SETTING_USAGE(Variant::BOOL, PROPERTY_HINT_NONE, "interface/editor/appearance/use_embedded_menu", false, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_EDITOR_BASIC_SETTING)
 	EDITOR_SETTING_USAGE(Variant::BOOL, PROPERTY_HINT_NONE, "interface/editor/appearance/use_native_file_dialogs", false, "", PROPERTY_USAGE_DEFAULT)

@@ -203,7 +203,7 @@ env.add_source_files(env.core_sources, gen_encrypt)
 # Certificates
 env.CommandNoCache(
     "#core/io/certs_compressed.gen.h",
-    ["#thirdparty/certs/ca-bundle.crt", env.Value(env["builtin_certs"]), env.Value(env["system_certs_path"])],
+    [env.Value(env["system_certs_path"])],
     env.Run(core_builders.make_certs_header),
 )
 
@@ -211,7 +211,6 @@ env.CommandNoCache(
 env.CommandNoCache("#core/authors.gen.h", "#AUTHORS.md", env.Run(core_builders.make_authors_header))
 
 # Donors
-env.CommandNoCache("#core/donors.gen.h", "#DONORS.md", env.Run(core_builders.make_donors_header))
 
 # License
 env.CommandNoCache(

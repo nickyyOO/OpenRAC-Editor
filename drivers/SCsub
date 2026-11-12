@@ -25,11 +25,7 @@ if env["platform"] == "macos":
     SConscript("apple/SCsub")
     SConscript("coreaudio/SCsub")
 
-# Midi drivers
-SConscript("alsamidi/SCsub")
-if env["platform"] in ["macos"]:
-    SConscript("coremidi/SCsub")
-SConscript("winmidi/SCsub")
+# OpenRAC Editor: no MIDI drivers.
 
 # Graphics drivers. OpenRAC Editor: Vulkan, and Metal on macOS.
 if env["vulkan"]:

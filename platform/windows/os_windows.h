@@ -35,7 +35,6 @@
 #include "core/input/input_event.h"
 #include "core/os/os.h"
 #include "drivers/wasapi/audio_driver_wasapi.h"
-#include "drivers/winmidi/midi_driver_winmidi.h"
 
 #ifdef XAUDIO2_ENABLED
 #include "drivers/xaudio2/audio_driver_xaudio2.h"

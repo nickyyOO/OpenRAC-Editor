@@ -79,47 +79,26 @@
 #include "editor/inspector/input_event_editor_plugin.h"
 #include "editor/inspector/sub_viewport_preview_editor_plugin.h"
 #include "editor/inspector/tool_button_editor_plugin.h"
-#include "editor/scene/2d/camera_2d_editor_plugin.h"
-#include "editor/scene/2d/light_occluder_2d_editor_plugin.h"
-#include "editor/scene/2d/line_2d_editor_plugin.h"
-#include "editor/scene/2d/particles_2d_editor_plugin.h"
-#include "editor/scene/2d/path_2d_editor_plugin.h"
-#include "editor/scene/2d/physics/cast_2d_editor_plugin.h"
-#include "editor/scene/2d/physics/collision_polygon_2d_editor_plugin.h"
-#include "editor/scene/2d/physics/collision_shape_2d_editor_plugin.h"
-#include "editor/scene/2d/polygon_2d_editor_plugin.h"
-#include "editor/scene/2d/scene_paint_2d_editor_plugin.h"
-#include "editor/scene/2d/skeleton_2d_editor_plugin.h"
-#include "editor/scene/2d/sprite_2d_editor_plugin.h"
-#include "editor/scene/2d/tiles/tiles_editor_plugin.h"
 #include "editor/scene/3d/bone_map_editor_plugin.h"
 #include "editor/scene/3d/camera_3d_editor_plugin.h"
-#include "editor/scene/3d/gpu_particles_collision_sdf_editor_plugin.h"
-#include "editor/scene/3d/lightmap_gi_editor_plugin.h"
 #include "editor/scene/3d/mesh_editor_plugin.h"
 #include "editor/scene/3d/mesh_instance_3d_editor_plugin.h"
-#include "editor/scene/3d/mesh_library_editor_plugin.h"
 #include "editor/scene/3d/multimesh_editor_plugin.h"
 #include "editor/scene/3d/node_3d_editor_gizmos.h"
 #include "editor/scene/3d/occluder_instance_3d_editor_plugin.h"
 #include "editor/scene/3d/particles_3d_editor_plugin.h"
 #include "editor/scene/3d/path_3d_editor_plugin.h"
-#include "editor/scene/3d/physics/physical_bone_3d_editor_plugin.h"
 #include "editor/scene/3d/polygon_3d_editor_plugin.h"
 #include "editor/scene/3d/skeleton_3d_editor_plugin.h"
-#include "editor/scene/3d/voxel_gi_editor_plugin.h"
 #include "editor/scene/curve_editor_plugin.h"
 #include "editor/scene/gradient_editor_plugin.h"
 #include "editor/scene/gui/control_editor_plugin.h"
 #include "editor/scene/gui/font_config_plugin.h"
 #include "editor/scene/gui/margin_container_editor_plugin.h"
 #include "editor/scene/gui/style_box_editor_plugin.h"
-#include "editor/scene/gui/theme_editor_plugin.h"
-#include "editor/scene/gui/virtual_joystick_editor_plugin.h"
 #include "editor/scene/material_editor_plugin.h"
 #include "editor/scene/packed_scene_editor_plugin.h"
 #include "editor/scene/resource_preloader_editor_plugin.h"
-#include "editor/scene/sprite_frames_editor_plugin.h"
 #include "editor/scene/texture/bit_map_editor_plugin.h"
 #include "editor/scene/texture/gradient_texture_2d_editor_plugin.h"
 #include "editor/scene/texture/texture_3d_editor_plugin.h"
@@ -136,11 +115,9 @@
 #include "editor/shader/shader_editor_plugin.h"
 #include "editor/shader/shader_file_editor_plugin.h"
 #include "editor/translations/editor_translation_parser.h"
-#include "editor/version_control/editor_vcs_interface.h"
 #include "servers/rendering/rendering_server.h"
 
 #ifndef DISABLE_DEPRECATED
-#include "editor/scene/2d/parallax_background_editor_plugin.h"
 #include "editor/scene/3d/skeleton_ik_3d_editor_plugin.h"
 #endif
 
@@ -169,7 +146,6 @@ void register_editor_types() {
 	GDREGISTER_CLASS(EditorResourceTooltipPlugin);
 	GDREGISTER_ABSTRACT_CLASS(EditorFileSystem);
 	GDREGISTER_CLASS(EditorFileSystemDirectory);
-	GDREGISTER_CLASS(EditorVCSInterface);
 	GDREGISTER_ABSTRACT_CLASS(ScriptEditor);
 	GDREGISTER_ABSTRACT_CLASS(ScriptEditorBase);
 	GDREGISTER_CLASS(EditorSyntaxHighlighter);
@@ -283,8 +259,6 @@ void register_editor_types() {
 
 	GLOBAL_DEF("editor/export/convert_text_resources_to_binary", true);
 
-	GLOBAL_DEF("editor/version_control/plugin_name", "");
-	GLOBAL_DEF("editor/version_control/autoload_on_startup", false);
 
 	EditorInterface::create();
 	Engine::Singleton ei_singleton = Engine::Singleton("EditorInterface", EditorInterface::get_singleton());

@@ -125,7 +125,6 @@
 #include "editor/file_system/editor_file_system.h"
 #include "editor/file_system/editor_paths.h"
 #include "editor/gui/progress_dialog.h"
-#include "editor/project_manager/project_manager.h"
 #include "editor/register_editor_types.h"
 #include "editor/settings/editor_settings.h"
 #include "editor/translations/editor_translation.h"
@@ -2672,15 +2671,6 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	OS::get_singleton()->set_current_rendering_driver_name(rendering_driver, rendering_driver_source);
 	OS::get_singleton()->set_current_rendering_method(rendering_method, rendering_method_source);
 
-#ifdef TOOLS_ENABLED
-	if (!force_res && project_manager) {
-		// Ensure splash screen size matches the project manager window size
-		// (see `editor/project_manager.cpp` for defaults).
-		window_size.width = ProjectManager::DEFAULT_WINDOW_WIDTH;
-		window_size.height = ProjectManager::DEFAULT_WINDOW_HEIGHT;
-	}
-#endif
-
 	if (use_custom_res) {
 		if (!force_res) {
 			window_size.width = GLOBAL_GET("display/window/size/viewport_width");
@@ -4808,23 +4798,6 @@ int Main::start() {
 			OS::get_singleton()->alert("Open a level from the OpenRAC launcher.", GODOT_VERSION_NAME);
 			return EXIT_FAILURE;
 		}
-		if (project_manager) {
-			OS::get_singleton()->benchmark_begin_measure("Startup", "Project Manager");
-			Engine::get_singleton()->set_editor_hint(true);
-
-			sml->get_root()->set_translation_domain("godot.editor");
-			if (editor_pseudolocalization) {
-				translation_server->get_editor_domain()->set_pseudolocalization_enabled(true);
-			}
-
-			ProjectManager *pmanager = memnew(ProjectManager);
-			ProgressDialog *progress_dialog = memnew(ProgressDialog);
-			pmanager->add_child(progress_dialog);
-
-			sml->get_root()->add_child(pmanager);
-			OS::get_singleton()->benchmark_end_measure("Startup", "Project Manager");
-		}
-
 		if (project_manager || editor) {
 			// Load SSL Certificates from Editor Settings (or builtin)
 			Crypto::load_default_certificates(

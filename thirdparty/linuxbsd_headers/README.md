@@ -45,13 +45,6 @@ Patches:
 - License: LGPL-2.1+
 
 
-## speechd
-
-- Upstream: https://www.freebsoft.org/pub/projects/speechd/
-- Version: 0.8.8
-- License: LGPL-2.1+
-
-
 ## udev
 
 - Upstream: https://www.freedesktop.org/wiki/Software/systemd/

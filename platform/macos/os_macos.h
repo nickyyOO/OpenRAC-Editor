@@ -35,7 +35,6 @@
 #include "core/input/input_event.h"
 #include "core/templates/rb_map.h"
 #import "drivers/coreaudio/audio_driver_coreaudio.h"
-#import "drivers/coremidi/midi_driver_coremidi.h"
 #include "drivers/unix/os_unix.h"
 #include "servers/audio/audio_server.h"
 
