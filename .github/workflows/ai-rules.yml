@@ -1,0 +1,48 @@
+# The repository's rules on AI tools (CONTRIBUTING.md), on every pull request and push: each new
+# commit's subject (Conventional Commits), message, author and committer, the lines the change adds,
+# and the pull request's title and description. No agent trailers (Co-Authored-By,
+# Claude-Session), no AI tool footers, no links to private AI sessions, no AI agent as author or
+# committer. scripts/commit-msg.py is the same check as a local git hook.
+name: ai-rules
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: The rules' own tests
+        run: python3 scripts/test_ai_rules.py -v
+      - name: The rules on the change
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+            python3 scripts/check-ai.py --base "$(git merge-base "$PR_BASE" HEAD)" \
+              --title "$PR_TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            python3 scripts/check-ai.py --base "$PUSH_BEFORE"
+          else
+            python3 scripts/check-ai.py --base "$(git rev-list --max-parents=0 HEAD | tail -1)"
+          fi
