@@ -42,6 +42,11 @@ These are deleted from the source:
 - **Rendering:** Vulkan on Windows and Linux, Metal on macOS. One renderer, so no renderer switch.
 - **About window:** says what the editor is; Godot's authors and licenses stay.
 
+## Added
+
+- **MCP server** (`editor/mcp/`): AI assistants read and edit the open level, with undo. See
+  [MCP.md](MCP.md).
+
 ## Build options
 
 [build/custom.py](../build/custom.py) holds the rest: size-optimized production build, no

@@ -107,6 +107,7 @@
 #include "editor/import/resource_importer_texture.h"
 #include "editor/import/resource_importer_texture_atlas.h"
 #include "editor/import/resource_importer_wav.h"
+#include "editor/mcp/editor_mcp_server.h" // OpenRAC Editor: MCP server.
 #include "editor/inspector/editor_context_menu_plugin.h"
 #include "editor/inspector/editor_inspector.h"
 #include "editor/inspector/editor_preview_plugins.h"
@@ -9504,6 +9505,7 @@ EditorNode::EditorNode() {
 
 	follow_system_theme = EDITOR_GET("interface/theme/follow_system_theme");
 	use_system_accent_color = EDITOR_GET("interface/theme/use_system_accent_color");
+	add_child(memnew(EditorMCPServer)); // OpenRAC Editor: MCP server for AI tools.
 }
 
 EditorNode::~EditorNode() {

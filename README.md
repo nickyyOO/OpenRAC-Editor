@@ -70,6 +70,12 @@ his death, where the ship lands, cameras, sounds, volumes, paths and grind rails
 The OpenRAC launcher packs your edits into a mod and starts the game with them. Your disc image is
 never changed. You can also build a whole new world and add it as a ship destination.
 
+### Work with an AI assistant
+
+The editor has a built-in MCP server. Connect Claude or another assistant and it can find
+objects, change them, look at the 3D view and undo its steps, as you would. See
+[MCP](docs/MCP.md).
+
 ### Your own tools
 
 Write your own editor tools and checks in GDScript. The class reference is built in: **Help > Search
