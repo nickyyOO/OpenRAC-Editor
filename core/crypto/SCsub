@@ -6,7 +6,7 @@ Import("env")
 env_crypto = env.Clone()
 
 is_builtin = env["builtin_mbedtls"]
-has_module = env["module_mbedtls_enabled"]
+has_module = False  # OpenRAC Editor: no mbedtls module, only the core hashing parts.
 thirdparty_obj = []
 
 if is_builtin or not has_module:

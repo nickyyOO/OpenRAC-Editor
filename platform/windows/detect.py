@@ -232,7 +232,7 @@ def get_opts():
         BoolVariable("debug_crt", "Compile with MSVC's debug CRT (/MDd)", False),
         BoolVariable("incremental_link", "Use MSVC incremental linking. May increase or decrease build times.", False),
         BoolVariable("silence_msvc", "Silence MSVC's cl/link stdout bloat, redirecting any errors to stderr.", True),
-        BoolVariable("winrt", "Use WinRT API (OneCore TTS support).", True),
+        BoolVariable("winrt", "Use WinRT API (OneCore TTS support).", False),  # OpenRAC Editor: no text-to-speech.
         # Screen reader support.
         (
             "accesskit_sdk_path",
@@ -291,7 +291,7 @@ def get_flags():
 
     return {
         "arch": arch,
-        "d3d12": True,
+        "d3d12": False,  # OpenRAC Editor: Vulkan only.
         "supported": ["d3d12", "dcomp", "library", "mono", "xaudio2"],
     }
 
