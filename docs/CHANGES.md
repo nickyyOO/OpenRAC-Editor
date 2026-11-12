@@ -5,7 +5,7 @@ Every change to Godot's own code has an `OpenRAC Editor:` comment beside it.
 
 ## Taken out
 
-These folders are deleted:
+These are deleted from the source:
 
 - **Platforms:** Android, iOS, visionOS and Web, and the export code of every platform.
 - **Modules:** text_server_adv, msdfgen, astcenc, basis_universal, bcdec, betsy, bmp, camera, csg,
@@ -14,22 +14,23 @@ These folders are deleted:
   multiplayer, navigation_2d, navigation_3d, noise, objectdb_profiler, ogg, openxr, raycast, tga,
   theora, tinyexr, upnp, vhacd, visual_shader, vorbis, webp, webrtc, websocket, webxr,
   xatlas_unwrap. GDScript has no language server.
-- **Drivers:** OpenGL, Direct3D 12, EGL, SDL input, AccessKit, XAudio2.
-- **Libraries** in `thirdparty/` that only those used.
+- **Drivers:** OpenGL, Direct3D 12, EGL, SDL input, AccessKit, XAudio2, MIDI. Linux has no
+  text-to-speech.
+- **Editor:** the project list, Asset Store, version control, the 2D node editors, the TileMap,
+  GridMap MeshLibrary, baked lighting (LightmapGI, VoxelGI), SDF collision, physical bone, sprite
+  frames, virtual joystick and UI theme editors.
+- **Libraries** in `thirdparty/` that only those used, the built-in TLS certificates and the
+  fallback fonts for other scripts. `COPYRIGHT.txt` lists only what is left.
 - **Translations:** all editor and class reference translations. The editor is in English.
 - **Godot's project files:** CI workflows, issue templates, unit tests, doc tools, changelog,
-  Godot's logos, Linux and Windows packaging, export templates.
+  donors list, Godot's logos, Visual Studio project generation, clang settings, Linux and Windows
+  packaging, export templates.
 
-## Hidden or cut in the editor
+## Hidden in the editor
 
-- No project list. The OpenRAC launcher opens each level; started without one, the editor says so
-  and quits.
-- No Asset Store, update check, version control, export, export templates, Android build template,
-  build profiles or feature profiles.
+- Started without a level, the editor says to open one from the OpenRAC launcher and quits.
+- No update check, export or export templates, build profiles or feature profiles.
 - No 2D and Game screens: levels are 3D and the game runs in OpenRAC.
-- No editors for 2D nodes, GridMap, baked lighting (LightmapGI, VoxelGI), physical bones, sprite
-  frames or UI themes.
-- Fonts: Inter and JetBrains Mono only, no fallback fonts for other scripts.
 - The Help menu links to OpenRAC's level editor guide and bug tracker.
 
 ## Changed
@@ -37,9 +38,9 @@ These folders are deleted:
 - **Name:** OpenRAC Editor (`version.py`). Settings live in their own folder (`openrac_editor`), apart
   from Godot's.
 - **Look:** OpenRAC's icon, logo, splash and the launcher's colours: warm coal (#24221e) and gold
-  (#f5c040). Themes: OpenRAC and Black (OLED).
+  (#f5c040). Themes: OpenRAC and Black (OLED). Fonts: Inter and JetBrains Mono.
 - **Rendering:** Vulkan on Windows and Linux, Metal on macOS. One renderer, so no renderer switch.
-- **About window:** says what the editor is; Godot's authors, donors and licenses stay.
+- **About window:** says what the editor is; Godot's authors and licenses stay.
 
 ## Build options
 
