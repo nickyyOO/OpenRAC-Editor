@@ -2,8 +2,9 @@
 // A small JSON reader for .cutscene files: enough for what the editor writes, no dependencies.
 #pragma once
 
+#include <charconv>
+#include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <map>
 #include <memory>
 #include <string>
@@ -26,8 +27,12 @@ public:
     bool is_bool() const { return m_kind == Kind::Bool; }
 
     double number(double fallback = 0.0) const { return m_kind == Kind::Number ? m_number : fallback; }
+    // The number towards zero, held to int's range (a non-number, or NaN, is the fallback).
     int integer(int fallback = 0) const {
-        return m_kind == Kind::Number ? static_cast<int>(m_number) : fallback;
+        if (m_kind != Kind::Number || std::isnan(m_number)) return fallback;
+        if (m_number >= 2147483647.0) return 2147483647;
+        if (m_number <= -2147483648.0) return -2147483647 - 1;
+        return static_cast<int>(m_number);
     }
     bool boolean(bool fallback = false) const { return m_kind == Kind::Bool ? m_bool : fallback; }
     const std::string& string() const { return m_string; }
@@ -114,13 +119,20 @@ private:
             }
         }
         std::uint32_t hex4() {
-            if (pos + 4 > text.size()) {
-                fail("short \\u escape");
-                return 0;
+            std::uint32_t cp = 0;
+            for (int i = 0; i < 4; ++i, ++pos) {
+                const char c = pos < text.size() ? text[pos] : '\0';
+                const int d = c >= '0' && c <= '9'   ? c - '0'
+                              : c >= 'a' && c <= 'f' ? c - 'a' + 10
+                              : c >= 'A' && c <= 'F' ? c - 'A' + 10
+                                                     : -1;
+                if (d < 0) {
+                    fail("a bad \\u escape");
+                    return 0xFFFD;
+                }
+                cp = cp * 16 + static_cast<std::uint32_t>(d);
             }
-            const std::string digits(text.substr(pos, 4));
-            pos += 4;
-            return static_cast<std::uint32_t>(std::strtoul(digits.c_str(), nullptr, 16));
+            return cp;
         }
         std::string str() {
             std::string out;
@@ -145,7 +157,15 @@ private:
                             && text[pos + 1] == 'u') {
                             pos += 2;
                             const std::uint32_t low = hex4();
-                            cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                            if (low >= 0xDC00 && low < 0xE000) {
+                                cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                            } else {
+                                // Not the second half: the first is lost, the second kept.
+                                utf8(out, 0xFFFD);
+                                cp = low >= 0xD800 && low < 0xE000 ? 0xFFFD : low;
+                            }
+                        } else if (cp >= 0xD800 && cp < 0xE000) {
+                            cp = 0xFFFD;  // half of a pair
                         }
                         utf8(out, cp);
                         break;
@@ -213,14 +233,48 @@ private:
             } else if (text.substr(pos, 4) == "null") {
                 pos += 4;
             } else {
-                const std::string rest(text.substr(pos, 40));
-                char* end = nullptr;
-                const double d = std::strtod(rest.c_str(), &end);
-                if (end == rest.c_str()) {
+                // A number as JSON has it (no "+", "nan", hex or leading zeros), read the same in
+                // every locale.
+                const std::size_t begin = pos;
+                auto digits = [&] {
+                    const std::size_t from = pos;
+                    while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') ++pos;
+                    return pos > from;
+                };
+                if (pos < text.size() && text[pos] == '-') ++pos;
+                const std::size_t int_start = pos;
+                if (!digits() || (text[int_start] == '0' && pos - int_start > 1)) {
+                    pos = begin;
                     fail("a value");
                     return v;
                 }
-                pos += static_cast<std::size_t>(end - rest.c_str());
+                if (pos < text.size() && text[pos] == '.') {
+                    ++pos;
+                    if (!digits()) {
+                        fail("digits after '.'");
+                        return v;
+                    }
+                }
+                if (pos < text.size() && (text[pos] == 'e' || text[pos] == 'E')) {
+                    ++pos;
+                    if (pos < text.size() && (text[pos] == '+' || text[pos] == '-')) ++pos;
+                    if (!digits()) {
+                        fail("digits after 'e'");
+                        return v;
+                    }
+                }
+                double d = 0;
+                const auto [end, ec] = std::from_chars(text.data() + begin, text.data() + pos, d);
+                if (ec == std::errc::result_out_of_range) {
+                    // Past what a double holds: a tiny one is zero, a huge one infinite.
+                    const std::string_view num = text.substr(begin, pos - begin);
+                    const std::size_t e = num.find_first_of("eE");
+                    const bool tiny = e != std::string_view::npos ? num[e + 1] == '-' : text[int_start] == '0';
+                    d = tiny ? 0.0 : (num[0] == '-' ? -HUGE_VAL : HUGE_VAL);
+                } else if (ec != std::errc() || end != text.data() + pos) {
+                    fail("a value");
+                    return v;
+                }
                 v.m_kind = Kind::Number;
                 v.m_number = d;
             }

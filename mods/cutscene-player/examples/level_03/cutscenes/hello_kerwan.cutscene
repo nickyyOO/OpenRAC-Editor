@@ -18,7 +18,7 @@
   },
   "options": {
     "skippable": true,
-    "letterbox": false
+    "letterbox": true
   },
   "hero": {
     "mode": "held"
@@ -203,6 +203,22 @@
       "radius": 2,
       "strength": 0.15,
       "length": 120
+    },
+    {
+      "t": 166,
+      "do": "fade",
+      "to": [
+        0,
+        0,
+        0
+      ],
+      "length": 14
+    },
+    {
+      "t": 181,
+      "do": "fade",
+      "to": null,
+      "length": 20
     }
   ]
 }

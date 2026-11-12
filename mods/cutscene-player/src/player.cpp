@@ -4,6 +4,7 @@
 // <pack>/level_NN/cutscenes/*.cutscene when a level loads, starts each one when its trigger
 // happens, and drives the camera, the actors, the subtitles, the sounds and the events tick by tick.
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -12,65 +13,22 @@
 #include <format>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
 #include <vector>
 
-#include "json.hpp"
 #include "openrac/mod.hpp"
+#include "timeline.hpp"
 
 namespace {
 
 namespace fs = std::filesystem;
-using cutscene::json::Value;
+using namespace cutscene;
 
-constexpr double kTickRate = 60.0;  // cutscene ticks a second, every game and disc
 constexpr int kCameraEaseOut = 30;  // ticks from the last key back to the game's camera
-
-// ---------------------------------------------------------------------------------------------
-// Small vector maths
-
-struct V3 {
-    float x = 0, y = 0, z = 0;
-};
-V3 operator+(V3 a, V3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
-V3 operator-(V3 a, V3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
-V3 operator*(V3 a, float s) { return {a.x * s, a.y * s, a.z * s}; }
-float dot(V3 a, V3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-V3 cross(V3 a, V3 b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
-float length(V3 a) { return std::sqrt(dot(a, a)); }
-V3 normal(V3 a, V3 fallback) {
-    const float l = length(a);
-    return l > 1e-6f ? a * (1.0f / l) : fallback;
-}
-V3 lerp(V3 a, V3 b, float u) { return a + (b - a) * u; }
-V3 catmull(V3 p0, V3 p1, V3 p2, V3 p3, float u) {
-    const float u2 = u * u, u3 = u2 * u;
-    return (p1 * 2.0f + (p2 - p0) * u + (p0 * 2.0f - p1 * 5.0f + p2 * 4.0f - p3) * u2
-            + (p1 * 3.0f - p0 - p2 * 3.0f + p3) * u3)
-           * 0.5f;
-}
-V3 bezier(V3 a, V3 b, V3 c, V3 d, float u) {
-    const float v = 1.0f - u;
-    return a * (v * v * v) + b * (3 * v * v * u) + c * (3 * v * u * u) + d * (u * u * u);
-}
-float angle_lerp(float a, float b, float u) {
-    float d = std::fmod(b - a, 6.28318531f);
-    if (d > 3.14159265f) d -= 6.28318531f;
-    if (d < -3.14159265f) d += 6.28318531f;
-    return a + d * u;
-}
-V3 vec(const Value& v, V3 fallback = {}) {
-    if (!v.is_array() || v.size() < 3) return fallback;
-    return {static_cast<float>(v[0].number()), static_cast<float>(v[1].number()),
-            static_cast<float>(v[2].number())};
-}
-// A direction from a rotation [x, y, z]: z the yaw (0 along +x), y the pitch (above 0 looks down).
-V3 direction(V3 rotation) {
-    const float cp = std::cos(rotation.y);
-    return {std::cos(rotation.z) * cp, std::sin(rotation.z) * cp, -std::sin(rotation.y)};
-}
+constexpr int kMaxVariantHops = 8;  // variants that lead to variants: a loop stops here
 
 // ---------------------------------------------------------------------------------------------
 // The port
@@ -292,7 +250,6 @@ struct ActorRun {
     int prop = -1;
     openrac_moby original{};  // a level moby as it was, for "end": "restore"
     int anim = -1;  // the anims entry playing
-    bool anim_fresh = false;
     int visible = -1;  // last visibility asked
     V3 position;  // where it is this tick, for look_at and sounds
     V3 rotation;
@@ -323,15 +280,18 @@ struct Play {
         int until;
     };
     std::vector<Haze> haze;
-    std::string language;
     std::string after;  // a cutscene an event asked to play next
     int travel = -1;
     std::set<std::string> warned;
-    openrac_camera last_camera{};
+    CameraPose last_camera;  // the last picture of the cutscene's camera, for the way back
     bool has_camera = false;
     bool hero_hidden = false;
 };
-Play* g_play = nullptr;
+std::unique_ptr<Play> g_play;
+// What the overlay draws, set on the game's thread and read on the window's.
+std::atomic<float> g_bars{0};  // the letterbox, 0 to 1
+std::atomic<std::uint32_t> g_fade{0};  // the colour over the picture, 0xRRGGBBAA
+bool g_has_overlay = false;  // the port draws for mods
 std::string g_language;
 bool g_subtitles = true;  // the "subtitles" setting
 std::map<std::string, int> g_sounds;  // pack path -> sound id (kept until the program ends)
@@ -372,11 +332,7 @@ bool target_point(Play& p, const Value& v, V3& out) {
 }
 
 std::string pick_language(const Value& by_language, const Value& languages) {
-    if (by_language.has(g_language)) return g_language;
-    if (languages.is_array() && languages.size() > 0 && by_language.has(languages[0].string())) {
-        return languages[0].string();
-    }
-    return by_language.members().empty() ? std::string() : by_language.members().begin()->first;
+    return cutscene::pick_language(by_language, languages, g_language);
 }
 
 int sound_id(Play& p, const std::string& file) {
@@ -437,84 +393,13 @@ void actors_begin(Play& p) {
     }
 }
 
-// The track's place, rotation and scale at tick t.
-void track_at(const Value& track, int t, V3& pos, V3& rot, float& scale) {
-    const auto& keys = track.items();
-    if (keys.empty()) return;
-    // Each key gives what it has; the rest carries from the key before.
-    std::vector<V3> P(keys.size()), R(keys.size());
-    std::vector<float> S(keys.size());
-    for (std::size_t i = 0; i < keys.size(); ++i) {
-        P[i] = vec(keys[i]["position"], i ? P[i - 1] : pos);
-        R[i] = vec(keys[i]["rotation"], i ? R[i - 1] : rot);
-        S[i] = static_cast<float>(keys[i]["scale"].number(i ? S[i - 1] : scale));
-    }
-    std::size_t i = 0;
-    while (i + 1 < keys.size() && keys[i + 1]["t"].integer() <= t) ++i;
-    if (i + 1 >= keys.size() || t <= keys[0]["t"].integer()) {
-        const std::size_t k = t <= keys[0]["t"].integer() ? 0 : i;
-        pos = P[k], rot = R[k], scale = S[k];
-        return;
-    }
-    const int t0 = keys[i]["t"].integer(), t1 = keys[i + 1]["t"].integer();
-    if (keys[i + 1]["cut"].boolean()) {
-        pos = P[i], rot = R[i], scale = S[i];
-        return;
-    }
-    const float u = t1 > t0 ? static_cast<float>(t - t0) / static_cast<float>(t1 - t0) : 1.0f;
-    const std::string ease = keys[i]["ease"].string_or("linear");
-    if (ease == "smooth") {
-        pos = catmull(P[i ? i - 1 : i], P[i], P[i + 1], P[std::min(i + 2, keys.size() - 1)], u);
-    } else {
-        pos = lerp(P[i], P[i + 1], u);
-    }
-    rot = {angle_lerp(R[i].x, R[i + 1].x, u), angle_lerp(R[i].y, R[i + 1].y, u),
-           angle_lerp(R[i].z, R[i + 1].z, u)};
-    scale = S[i] + (S[i + 1] - S[i]) * u;
-}
-
-// Walks `path` from its start tick at its speed: the place along its points and the yaw of the
-// stretch it is on. False before it starts.
-bool path_at(const Value& path, int t, V3& pos, V3& rot) {
-    const auto& pts = path["points"].items();
-    const int start = path["t"].integer();
-    if (pts.size() < 2 || t < start) return false;
-    float left = static_cast<float>((t - start) / kTickRate * path["speed"].number(8));
-    for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
-        const V3 a = vec(pts[i]), b = vec(pts[i + 1]);
-        const float len = length(b - a);
-        rot.z = std::atan2(b.y - a.y, b.x - a.x);
-        if (left <= len || i + 2 == pts.size()) {
-            pos = len > 0 ? lerp(a, b, std::min(1.0f, left / len)) : b;
-            return true;
-        }
-        left -= len;
-    }
-    return true;
-}
-
-// Euler [x, y, z] (z the yaw, applied last) as a quaternion (x, y, z, w).
-void quaternion(V3 r, float out[4]) {
-    const float cx = std::cos(r.x / 2), sx = std::sin(r.x / 2);
-    const float cy = std::cos(r.y / 2), sy = std::sin(r.y / 2);
-    const float cz = std::cos(r.z / 2), sz = std::sin(r.z / 2);
-    out[0] = sx * cy * cz - cx * sy * sz;
-    out[1] = cx * sy * cz + sx * cy * sz;
-    out[2] = cx * cy * sz - sx * sy * cz;
-    out[3] = cx * cy * cz + sx * sy * sz;
-}
-
 void actor_tick(Play& p, ActorRun& a, int t) {
     if (a.kind == ActorRun::Kind::None) return;
     const Value& def = *a.def;
     track_at(def["track"], t, a.position, a.rotation, a.scale);
     path_at(def["path"], t, a.position, a.rotation);
 
-    // Visibility: the last "visible" key at or before t.
-    int visible = 1;
-    for (const Value& k : def["visible"].items()) {
-        if (k["t"].integer() <= t) visible = k["on"].boolean(true) ? 1 : 0;
-    }
+    const int visible = visible_at(def["visible"], t) ? 1 : 0;
 
     if (a.kind == ActorRun::Kind::Prop) {
         openrac_prop_pose pose{};
@@ -530,11 +415,8 @@ void actor_tick(Play& p, ActorRun& a, int t) {
 
     // Animation: a new anims entry starts its sequence at its frame; after that the game plays it
     // on by itself, so the pose hands back what the moby has (no pull back to a key).
-    int anim = -1;
     const auto& anims = def["anims"].items();
-    for (std::size_t i = 0; i < anims.size(); ++i) {
-        if (anims[i]["t"].integer() <= t) anim = static_cast<int>(i);
-    }
+    const int anim = anim_at(def["anims"], t);
     const int slot = a.kind == ActorRun::Kind::Figure ? g_api->figure_slot(g_mod, a.figure) : a.slot;
     const openrac_moby* now = moby_at(slot);
     if (a.base_scale <= 0) {
@@ -629,110 +511,59 @@ void actors_end(Play& p) {
 
 // --- Camera
 
-struct CamKey {
-    int t = 0;
-    V3 eye;
-    bool has_target = false;
-    V3 target;  // look_at
-    V3 forward;
-    float roll = 0;
-    bool cut = false;
-    std::string ease;
-    V3 in, out;  // bezier handles, as offsets from eye
-};
-
 std::vector<CamKey> camera_keys(Play& p) {
+    const auto& all = (*p.doc)["camera"]["keys"].items();
     std::vector<CamKey> keys;
-    for (const Value& k : (*p.doc)["camera"]["keys"].items()) {
-        CamKey c;
-        c.t = k["t"].integer();
-        c.eye = vec(k["eye"], keys.empty() ? V3{} : keys.back().eye);
-        c.has_target = target_point(p, k["look_at"], c.target);
-        const V3 rot = vec(k["rotation"]);
-        c.forward = c.has_target ? normal(c.target - c.eye, {1, 0, 0}) : direction(rot);
-        c.roll = static_cast<float>(k["roll"].number(rot.x));
-        c.cut = k["cut"].boolean();
-        c.ease = k["ease"].string_or("smooth");
-        c.in = vec(k["in"]);
-        c.out = vec(k["out"]);
+    for (std::size_t i : by_time(all)) {
+        const Value& k = all[i];
+        V3 target;
+        const bool has_target = target_point(p, k["look_at"], target);
+        keys.push_back(camera_key(k, keys.empty() ? nullptr : &keys.back(), has_target ? &target : nullptr));
         if (k.has("fov")) warn_once(p, "a camera field of view");
-        keys.push_back(c);
     }
     return keys;
 }
 
 openrac_camera make_camera(V3 eye, V3 forward, float roll) {
-    const V3 f = normal(forward, {1, 0, 0});
-    V3 left = normal(cross({0, 0, 1}, f), {0, 1, 0});
-    V3 up = normal(cross(f, left), {0, 0, 1});
-    if (roll != 0) {
-        const float c = std::cos(roll), s = std::sin(roll);
-        const V3 l2 = left * c + up * s, u2 = up * c - left * s;
-        left = l2, up = u2;
-    }
+    const CameraAxes axes = camera_axes(forward, roll);
     openrac_camera cam{};
     cam.size = sizeof(cam);
     std::memcpy(cam.eye, &eye, sizeof(float) * 3);
-    std::memcpy(cam.forward, &f, sizeof(float) * 3);
-    std::memcpy(cam.left, &left, sizeof(float) * 3);
-    std::memcpy(cam.up, &up, sizeof(float) * 3);
+    std::memcpy(cam.forward, &axes.forward, sizeof(float) * 3);
+    std::memcpy(cam.left, &axes.left, sizeof(float) * 3);
+    std::memcpy(cam.up, &axes.up, sizeof(float) * 3);
     return cam;
 }
 
-bool camera_at(Play& p, int t, openrac_camera& out) {
-    const std::vector<CamKey> keys = camera_keys(p);
-    if (keys.empty()) return false;
-    std::size_t i = 0;
-    while (i + 1 < keys.size() && keys[i + 1].t <= t) ++i;
-    V3 eye, forward;
-    float roll;
-    if (t <= keys[0].t || i + 1 >= keys.size() || keys[i + 1].cut) {
-        const CamKey& k = t <= keys[0].t ? keys[0] : keys[i];
-        eye = k.eye, forward = k.forward, roll = k.roll;
-    } else {
-        const CamKey &a = keys[i], &b = keys[i + 1];
-        const float u = b.t > a.t ? static_cast<float>(t - a.t) / static_cast<float>(b.t - a.t) : 1.0f;
-        // Neighbours for the smooth curve, not across a cut.
-        const CamKey& before = (i > 0 && !a.cut) ? keys[i - 1] : a;
-        const CamKey& after = (i + 2 < keys.size() && !keys[i + 2].cut) ? keys[i + 2] : b;
-        if (a.ease == "linear") {
-            eye = lerp(a.eye, b.eye, u);
-        } else if (a.ease == "bezier") {
-            eye = bezier(a.eye, a.eye + a.out, b.eye + b.in, b.eye, u);
-        } else {
-            eye = catmull(before.eye, a.eye, b.eye, after.eye, u);
-        }
-        if (a.has_target && b.has_target) {
-            const V3 target = a.ease == "linear" ? lerp(a.target, b.target, u)
-                                                 : catmull(before.has_target ? before.target : a.target,
-                                                           a.target, b.target,
-                                                           after.has_target ? after.target : b.target, u);
-            forward = normal(target - eye, a.forward);
-        } else {
-            forward = normal(lerp(a.forward, b.forward, u), a.forward);
-        }
-        roll = a.roll + (b.roll - a.roll) * u;
-    }
-    // Shake: a wobble of the eye, fading over its length.
-    for (const Value& s : (*p.doc)["camera"]["shake"].items()) {
-        const int st = s["t"].integer(), len = std::max(1, s["length"].integer(30));
-        if (t < st || t >= st + len) continue;
-        const float k = static_cast<float>(s["strength"].number(0.3)) * (1.0f - float(t - st) / float(len));
-        eye = eye + V3{std::sin(t * 1.7f), std::sin(t * 2.3f + 1.0f), std::sin(t * 2.9f + 2.0f)} * k;
-    }
-    out = make_camera(eye, forward, roll);
+bool camera_at(Play& p, int t, CameraPose& out) {
+    if (!camera_pose(camera_keys(p), t, out)) return false;
+    out.eye = out.eye + shake_at((*p.doc)["camera"]["shake"], t);
     return true;
 }
 
-// --- Subtitles
+// --- Over the picture
 
-std::string ascii(const std::string& utf8) {
-    std::string out;
-    for (unsigned char c : utf8) {
-        if (c >= 32 && c < 127) out += static_cast<char>(c);
-    }
-    return out;
+// The letterbox and the fade at t, `k` of the way in (less on the way back to the game).
+void overlay_tick(Play& p, int t, float k) {
+    if (!g_has_overlay) return;
+    g_bars = (*p.doc)["options"]["letterbox"].boolean(true) ? letterbox_at(t) * k : 0.0f;
+    Rgba fade = fade_at((*p.doc)["events"], t);
+    fade.a *= k;
+    g_fade = pack_rgba(fade);
 }
+
+void draw_overlay(void*, const openrac_overlay* o) {
+    constexpr float kWidth = 512, kHeight = 448, kBar = kHeight * 0.12f;
+    const float bars = g_bars.load();
+    if (bars > 0) {
+        o->rect(o->context, 0, 0, kWidth, kBar * bars, 0x000000FFu);
+        o->rect(o->context, 0, kHeight - kBar * bars, kWidth, kBar * bars, 0x000000FFu);
+    }
+    const std::uint32_t fade = g_fade.load();
+    if ((fade & 0xFFu) != 0) o->rect(o->context, 0, 0, kWidth, kHeight, fade);
+}
+
+// --- Subtitles
 
 void subtitles_tick(Play& p, int t) {
     std::vector<openrac_hud_text> lines;
@@ -745,18 +576,8 @@ void subtitles_tick(Play& p, int t) {
             warn_once(p, "Japanese subtitles (the HUD font has only ASCII)");
             continue;
         }
-        const std::string words = ascii(text.is_string() ? text.string() : text[lang].string());
         // Lines of up to 40 letters, broken at spaces, at most three.
-        std::vector<std::string> rows;
-        std::istringstream in(words);
-        for (std::string w; in >> w;) {
-            if (rows.empty() || rows.back().size() + 1 + w.size() > 40) {
-                rows.push_back(w);
-            } else {
-                rows.back() += " " + w;
-            }
-        }
-        if (rows.size() > 3) rows.resize(3);
+        const std::vector<std::string> rows = wrap(ascii(text.is_string() ? text.string() : text[lang].string()));
         for (std::size_t r = 0; r < rows.size(); ++r) {
             openrac_hud_text line{};
             std::snprintf(line.text, sizeof(line.text), "%s", rows[r].c_str());
@@ -811,15 +632,14 @@ void sounds_tick(Play& p, int t) {
     }
     // Fades.
     for (Voice& v : p.voices) {
-        float k = 1;
-        if (v.fade_in > 0 && t - v.start < v.fade_in) k = float(t - v.start) / float(v.fade_in);
-        if (v.end >= 0 && v.fade_out > 0 && t > v.end - v.fade_out) k = std::max(0.0f, float(v.end - t) / float(v.fade_out));
         if (v.end >= 0 && t >= v.end) {
             g_api->sound_stop(g_mod, v.voice);
             v.voice = 0;
             continue;
         }
-        if (v.fade_in > 0 || v.fade_out > 0) g_api->sound_set(g_mod, v.voice, v.volume * k, 1.0f);
+        if (v.fade_in > 0 || v.fade_out > 0) {
+            g_api->sound_set(g_mod, v.voice, v.volume * fade_gain(v.start, v.fade_in, v.fade_out, v.end, t), 1.0f);
+        }
     }
     std::erase_if(p.voices, [](const Voice& v) { return v.voice == 0; });
 }
@@ -858,6 +678,9 @@ void event_run(Play& p, const Value& e) {
         h.patch.strength = static_cast<float>(e["strength"].number(0.1));
         h.until = e["t"].integer() + e["length"].integer(60);
         p.haze.push_back(h);
+    } else if (what == "fade") {
+        // Drawn from the events each tick (overlay_tick); without the port's overlay, not at all.
+        if (!g_has_overlay) warn_once(p, "a fade (needs the port's overlay)");
     } else if (what == "play") {
         p.after = e["cutscene"].string();
     } else if (what == "travel") {
@@ -885,50 +708,51 @@ void events_tick(Play& p, int t) {
 
 // --- Start and end
 
-void start(Cutscene& c) {
-    // A variant whose condition holds plays instead.
+void start(Cutscene& c, int hops = 0) {
+    // A variant whose condition holds plays instead (not round in a loop).
     for (const Value& v : c.doc["variants"].items()) {
-        if (flag_holds(v["if"])) {
-            if (Cutscene* other = g_level.find(v["play"].string()); other != nullptr && other != &c) {
-                if (c.doc["trigger"]["once"].boolean(true)) g_seen.add(seen_key(c));
-                start(*other);
-                return;
-            }
+        if (hops >= kMaxVariantHops || !flag_holds(v["if"])) continue;
+        if (Cutscene* other = g_level.find(v["play"].string()); other != nullptr && other != &c) {
+            if (c.doc["trigger"]["once"].boolean(true)) g_seen.add(seen_key(c));
+            start(*other, hops + 1);
+            return;
         }
     }
-    auto* p = new Play();
+    auto p = std::make_unique<Play>();
     p->scene = &c;
     p->doc = &c.doc;
     p->events_done.assign(c.doc["events"].size(), 0);
     p->sounds_done.assign(c.doc["sounds"].size(), 0);
     const Value& opts = c.doc["options"];
-    if (opts["letterbox"].boolean(true)) warn_once(*p, "the letterbox");
+    if (opts["letterbox"].boolean(true) && !g_has_overlay) warn_once(*p, "the letterbox (needs the port's overlay)");
     if (opts["world"].string_or("run") != "run") warn_once(*p, "holding the world");
     if (opts["music"].string_or("duck") != "keep") warn_once(*p, "lowering the game's music");
     if (c.doc["trigger"]["once"].boolean(true)) g_seen.add(seen_key(c));
     g_api->hero_grab(g_mod, -1, 0);
-    g_play = p;
+    g_play = std::move(p);
     g_swallow_start = true;
     g_cutscene_on = true;
     log(OPENRAC_LOG_INFO, std::format("playing {}", c.name));
 }
 
+// Ends the cutscene: what it leaves stays, the rest goes back. With `level_gone` the level it played
+// in was reloaded or left, and its mobys with it: only the port's state is put back.
 void finish(bool level_gone) {
     Play& p = *g_play;
+    if (!level_gone && p.skipped) {
+        // Everything still to come that lasts.
+        std::fill(p.sounds_done.begin(), p.sounds_done.end(), 1);
+        events_tick(p, p.scene->length);
+    }
+    for (Voice& v : p.voices) g_api->sound_stop(g_mod, v.voice);
+    p.voices.clear();
+    g_api->hud_text_set(g_mod, nullptr, 0);
+    g_api->haze_set(g_mod, nullptr, 0);
+    g_api->camera_set(g_mod, nullptr);
+    g_api->hero_release(g_mod);
     if (!level_gone) {
-        if (p.skipped) {
-            // Everything still to come that lasts.
-            std::fill(p.sounds_done.begin(), p.sounds_done.end(), 1);
-            events_tick(p, p.scene->length);
-            for (Voice& v : p.voices) g_api->sound_stop(g_mod, v.voice);
-            p.voices.clear();
-        }
         actors_end(p);
-        g_api->hud_text_set(g_mod, nullptr, 0);
-        g_api->haze_set(g_mod, nullptr, 0);
-        g_api->camera_set(g_mod, nullptr);
         if (p.hero_hidden) g_api->moby_hide(g_mod, g_api->figure_slot(g_mod, -1), 0);
-        g_api->hero_release(g_mod);
         const Value& end = (*p.doc)["hero"]["end"];
         if (end.is_object()) {
             const V3 pos = vec(end["position"]);
@@ -936,12 +760,12 @@ void finish(bool level_gone) {
             g_api->hero_place(g_mod, at, static_cast<float>(end["yaw"].number()), OPENRAC_PLACE_GROUND);
         }
     }
-    for (Voice& v : p.voices) g_api->sound_stop(g_mod, v.voice);
     const std::string done = p.scene->name, next = p.after;
     const int travel = p.travel;
-    delete g_play;
-    g_play = nullptr;
+    g_play.reset();
     g_cutscene_on = false;
+    g_bars = 0;
+    g_fade = 0;
     log(OPENRAC_LOG_INFO, std::format("{} ended", done));
     if (level_gone) return;
     if (travel >= 0) {
@@ -981,16 +805,15 @@ void play_tick() {
         // Back to the game's camera, then the end.
         openrac_camera game{};
         game.size = sizeof(game);
+        const float u = float(p.ease_out) / float(kCameraEaseOut);
+        const float s = u * u * (3 - 2 * u);
         if (p.has_camera && g_api->camera_view(&game) == OPENRAC_HOOK_OK) {
-            const float u = float(p.ease_out) / float(kCameraEaseOut);
-            const float s = u * u * (3 - 2 * u);
-            const V3 eye = lerp(V3{p.last_camera.eye[0], p.last_camera.eye[1], p.last_camera.eye[2]},
-                                V3{game.eye[0], game.eye[1], game.eye[2]}, s);
-            const V3 f = lerp(V3{p.last_camera.forward[0], p.last_camera.forward[1], p.last_camera.forward[2]},
-                              V3{game.forward[0], game.forward[1], game.forward[2]}, s);
-            openrac_camera cam = make_camera(eye, f, 0);
+            const V3 eye = lerp(p.last_camera.eye, V3{game.eye[0], game.eye[1], game.eye[2]}, s);
+            const V3 f = lerp(p.last_camera.forward, V3{game.forward[0], game.forward[1], game.forward[2]}, s);
+            openrac_camera cam = make_camera(eye, normal(f, p.last_camera.forward), p.last_camera.roll * (1 - s));
             g_api->camera_set(g_mod, &cam);
         }
+        overlay_tick(p, p.scene->length, 1 - s);
         if (++p.ease_out > kCameraEaseOut) finish(false);
         return;
     }
@@ -1004,15 +827,17 @@ void play_tick() {
 
     const int t = p.t;
     for (ActorRun& a : p.actors) actor_tick(p, a, t);
-    openrac_camera cam;
-    if (camera_at(p, t, cam)) {
+    CameraPose pose;
+    if (camera_at(p, t, pose)) {
+        const openrac_camera cam = make_camera(pose.eye, pose.forward, pose.roll);
         g_api->camera_set(g_mod, &cam);
-        p.last_camera = cam;
+        p.last_camera = pose;
         p.has_camera = true;
     }
     subtitles_tick(p, t);
     sounds_tick(p, t);
     events_tick(p, t);
+    overlay_tick(p, t, 1);
     if (p.travel >= 0) {
         finish(false);
         return;
@@ -1035,17 +860,6 @@ void play_tick() {
 bool can_start(const openrac_play_status& s, const openrac_pose& hero) {
     return s.phase == OPENRAC_PLAY_PLAYING && g_api->scene_playing(nullptr) < 0 && hero.health > 0
            && !(hero.flags & OPENRAC_POSE_AIRBORNE);
-}
-
-bool inside(const Value& tr, V3 at) {
-    if (tr["box"].is_object()) {
-        const V3 lo = vec(tr["box"]["min"]), hi = vec(tr["box"]["max"]);
-        return at.x >= lo.x && at.y >= lo.y && at.z >= lo.z && at.x <= hi.x && at.y <= hi.y && at.z <= hi.z;
-    }
-    if (tr["sphere"].is_object()) {
-        return length(at - vec(tr["sphere"]["position"])) <= tr["sphere"]["radius"].number(4);
-    }
-    return false;
 }
 
 void triggers_tick(const openrac_play_status& s) {
@@ -1140,6 +954,7 @@ void load(openrac::Mod& mod) {
         throw openrac::Error("this player needs a newer OpenRAC (mod interface 1.14 with pack_folder)");
     }
     g_subtitles = mod.setting<bool>("subtitles");
+    g_has_overlay = mod.on_overlay(draw_overlay);
     mod.on_frame(frame);
     mod.on_pad(on_pad);
     mod.info("ready");

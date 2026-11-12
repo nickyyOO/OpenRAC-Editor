@@ -17,6 +17,15 @@ cmake --build build
 python3 .sdk/openrac-mod-sdk-*/tools/package_mod.py build/package/cutscene_player
 ```
 
+## Test
+
+The timeline's sums (tracks, paths, the camera, subtitles, fades, the letterbox, volumes) and the
+JSON reader are in `src/timeline.hpp` and `src/json.hpp`, apart from the port, with their tests:
+
+```sh
+cmake -S tests -B build/tests -G Ninja && cmake --build build/tests && ctest --test-dir build/tests
+```
+
 ## Try it
 
 Run the port with the editor's pack and the mod, for example:
