@@ -8,13 +8,16 @@ This fork is updated rarely. It does not follow new Godot releases.
 
 ## What is different from Godot
 
+- Its own name, icon, splash screen and colours (the OpenRAC launcher's warm coal and gold).
 - Desktop only: Windows, Linux and macOS.
-- Vulkan only, like the game. macOS uses MoltenVK. No OpenGL, Direct3D 12 or Metal.
-- No export platforms. OpenRAC packs levels with its own tools.
-- Editor text in English and Polish only. No translated class reference.
-- Unused modules are off: 2D and 3D physics, navigation, XR, networking, CSG, GridMap,
-  visual shaders, video, Ogg/MP3 audio, texture compressors, and image formats other than PNG, SVG and TGA.
-- The simple text server (no ICU or HarfBuzz), so right-to-left and complex scripts do not shape.
+- One renderer: Vulkan on Windows and Linux, Metal on macOS (Apple Silicon). No OpenGL or Direct3D 12.
+- No project list. The OpenRAC launcher opens each level; started on its own, the editor says so and quits.
+- English only: no translations and no fonts for other scripts.
+- Removed: export platforms and templates, Asset Store, update check, version control, the 2D and
+  Game screens, 2D node editors, GridMap, baked lighting, UI theme editor.
+- Unused modules are off: 2D and 3D physics, navigation, XR, networking and TLS, CSG, GridMap,
+  visual shaders, video, Ogg/MP3 audio, texture compressors, and image formats other than PNG and SVG.
+- The simple text server (no ICU or HarfBuzz).
 
 All build options are in [build/custom.py](build/custom.py). Source changes are marked with
 `OpenRAC Editor:` comments.
@@ -26,7 +29,7 @@ Linux x86_64 editor, measured:
 | Build | Program | Zip |
 |---|---|---|
 | Godot 4.7.2 (official) | 146 MB | 78 MB |
-| OpenRAC Editor | 73 MB | 29 MB |
+| OpenRAC Editor | 67 MB | 25 MB |
 
 ## Build
 
@@ -41,11 +44,12 @@ scons platform=linuxbsd profile=build/custom.py use_llvm=yes linker=lld
 # Windows (MSVC or MinGW)
 scons platform=windows profile=build/custom.py
 
-# macOS (needs the Vulkan SDK with MoltenVK)
-scons platform=macos arch=arm64 profile=build/custom.py vulkan_sdk_path=<path to the Vulkan SDK>
+# macOS (Apple Silicon, Metal)
+scons platform=macos arch=arm64 profile=build/custom.py metal=yes vulkan=no
 ```
 
-The program is written to `bin/`.
+The program is written to `bin/`. For macOS, copy `misc/dist/macos_tools.app` to `OpenRAC Editor.app`
+and put the program in `Contents/MacOS/OpenRAC Editor`.
 
 ## License
 

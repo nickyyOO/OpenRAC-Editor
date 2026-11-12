@@ -283,6 +283,11 @@ void EditorMainScreen::add_main_plugin(EditorPlugin *p_editor) {
 
 	tb->connect(SceneStringName(pressed), callable_mp(this, &EditorMainScreen::select).bind(buttons.size()));
 
+	// OpenRAC Editor: levels are 3D and the game runs in OpenRAC, so the 2D and Game screens have no button.
+	if (p_editor->get_plugin_name() == "2D" || p_editor->get_plugin_name() == "Game") {
+		tb->hide();
+	}
+
 	buttons.push_back(tb);
 	button_hb->add_child(tb);
 	editor_table.push_back(p_editor);

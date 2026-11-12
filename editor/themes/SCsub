@@ -6,10 +6,9 @@ Import("env")
 import editor_theme_builders
 
 # Fonts
-flist = Glob("#thirdparty/fonts/*.ttf")
-flist.extend(Glob("#thirdparty/fonts/*.otf"))
-flist.extend(Glob("#thirdparty/fonts/*.woff"))
-flist.extend(Glob("#thirdparty/fonts/*.woff2"))
+# OpenRAC Editor: only the fonts the English editor uses.
+flist = Glob("#thirdparty/fonts/Inter_*.woff2")
+flist.extend(Glob("#thirdparty/fonts/JetBrainsMono_*.woff2"))
 flist.sort()
 env.CommandNoCache(
     "#editor/themes/builtin_fonts.gen.h",

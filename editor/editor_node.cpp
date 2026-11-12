@@ -748,7 +748,6 @@ void EditorNode::_update_theme(bool p_skip_creation) {
 		help_menu->set_item_icon(help_menu->get_item_index(HELP_SEARCH), get_editor_theme_native_menu_icon(SNAME("HelpSearch"), menu_type == MENU_TYPE_GLOBAL, dark_mode));
 		help_menu->set_item_icon(help_menu->get_item_index(HELP_COPY_SYSTEM_INFO), get_editor_theme_native_menu_icon(SNAME("ActionCopy"), menu_type == MENU_TYPE_GLOBAL, dark_mode));
 		help_menu->set_item_icon(help_menu->get_item_index(HELP_ABOUT), get_editor_theme_native_menu_icon(SNAME("Godot"), menu_type == MENU_TYPE_GLOBAL, dark_mode));
-		help_menu->set_item_icon(help_menu->get_item_index(HELP_SUPPORT_GODOT_DEVELOPMENT), get_editor_theme_native_menu_icon(SNAME("Heart"), menu_type == MENU_TYPE_GLOBAL, dark_mode));
 
 		_update_renderer_color();
 	}
@@ -3922,13 +3921,13 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 			command_palette->open_popup();
 		} break;
 		case HELP_DOCS: {
-			OS::get_singleton()->shell_open(GODOT_VERSION_DOCS_URL "/");
+			OS::get_singleton()->shell_open("https://github.com/OpenRAC/OpenRAC/blob/develop/editor/README.md");
 		} break;
 		case HELP_FORUM: {
 			OS::get_singleton()->shell_open("https://forum.godotengine.org/");
 		} break;
 		case HELP_REPORT_A_BUG: {
-			OS::get_singleton()->shell_open("https://github.com/godotengine/godot/issues");
+			OS::get_singleton()->shell_open("https://github.com/OpenRAC/OpenRAC/issues");
 		} break;
 		case HELP_COPY_SYSTEM_INFO: {
 			String info = _get_system_info();
@@ -4098,7 +4097,6 @@ void EditorNode::_check_system_theme_changed() {
 		help_menu->set_item_icon(help_menu->get_item_index(HELP_SEARCH), get_editor_theme_native_menu_icon(SNAME("HelpSearch"), menu_type == MENU_TYPE_GLOBAL, dark_mode));
 		help_menu->set_item_icon(help_menu->get_item_index(HELP_COPY_SYSTEM_INFO), get_editor_theme_native_menu_icon(SNAME("ActionCopy"), menu_type == MENU_TYPE_GLOBAL, dark_mode));
 		help_menu->set_item_icon(help_menu->get_item_index(HELP_ABOUT), get_editor_theme_native_menu_icon(SNAME("Godot"), menu_type == MENU_TYPE_GLOBAL, dark_mode));
-		help_menu->set_item_icon(help_menu->get_item_index(HELP_SUPPORT_GODOT_DEVELOPMENT), get_editor_theme_native_menu_icon(SNAME("Heart"), menu_type == MENU_TYPE_GLOBAL, dark_mode));
 		editor_dock_manager->update_docks_menu();
 	}
 }
@@ -4131,7 +4129,7 @@ void EditorNode::_tool_menu_option(int p_idx) {
 }
 
 void EditorNode::_export_as_menu_option(int p_idx) {
-	if (p_idx == 0) { // MeshLibrary
+	if (export_as_menu->get_item_id(p_idx) == FILE_EXPORT_MESH_LIBRARY) { // MeshLibrary
 		current_menu_option = FILE_EXPORT_MESH_LIBRARY;
 
 		if (!editor_data.get_edited_scene_root()) {
@@ -7860,9 +7858,7 @@ void EditorNode::_feature_profile_changed() {
 
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_3D, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_3D));
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_SCRIPT, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_SCRIPT));
-		if (!Engine::get_singleton()->is_recovery_mode_hint()) {
-			editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_GAME, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_GAME));
-		}
+		// OpenRAC Editor: the Game screen stays hidden.
 		if (AssetLibraryEditorPlugin::is_available()) {
 			editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_ASSETLIB, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_ASSET_LIB));
 		}
@@ -7874,9 +7870,6 @@ void EditorNode::_feature_profile_changed() {
 		editor_dock_manager->set_dock_enabled(history_dock, true);
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_3D, true);
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_SCRIPT, true);
-		if (!Engine::get_singleton()->is_recovery_mode_hint()) {
-			editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_GAME, true);
-		}
 		if (AssetLibraryEditorPlugin::is_available()) {
 			editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_ASSETLIB, true);
 		}
@@ -8025,9 +8018,9 @@ void EditorNode::_build_file_menu() {
 	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/quick_open_script"), SCENE_QUICK_OPEN_SCRIPT);
 	file_menu->add_separator();
 
+	// OpenRAC Editor: "Export As..." keeps what plugins add (glTF), without the GridMap MeshLibrary.
 	if (!export_as_menu) {
 		export_as_menu = memnew(PopupMenu);
-		export_as_menu->add_shortcut(ED_GET_SHORTCUT("editor/export_as_mesh_library"), FILE_EXPORT_MESH_LIBRARY);
 		export_as_menu->connect("index_pressed", callable_mp(this, &EditorNode::_export_as_menu_option));
 	}
 	file_menu->add_submenu_node_item(TTRC("Export As..."), export_as_menu, SCENE_EXPORT_AS);
@@ -8062,19 +8055,6 @@ void EditorNode::_build_project_menu() {
 	project_menu->add_shortcut(ED_GET_SHORTCUT("editor/find_in_files"), PROJECT_FIND_IN_FILES);
 	project_menu->add_separator();
 
-	project_menu->add_item(TTRC("Version Control"), PROJECT_VERSION_CONTROL);
-	if (!vcs_actions_menu) {
-		vcs_actions_menu = VersionControlEditorPlugin::get_singleton()->get_version_control_actions_panel();
-		vcs_actions_menu->connect("index_pressed", callable_mp(this, &EditorNode::_version_control_menu_option));
-		vcs_actions_menu->add_item(TTRC("Create/Override Version Control Metadata..."), VCS_METADATA);
-		vcs_actions_menu->add_item(TTRC("Version Control Settings..."), VCS_SETTINGS);
-	}
-	project_menu->set_item_submenu_node(project_menu->get_item_index(PROJECT_VERSION_CONTROL), vcs_actions_menu);
-
-	project_menu->add_separator();
-	project_menu->add_shortcut(ED_GET_SHORTCUT("editor/export"), PROJECT_EXPORT);
-	project_menu->add_item(TTRC("Pack Project as ZIP..."), PROJECT_PACK_AS_ZIP);
-	project_menu->add_item(TTRC("Install Android Build Template..."), PROJECT_INSTALL_ANDROID_SOURCE);
 #ifndef ANDROID_ENABLED
 	project_menu->add_item(TTRC("Open User Data Folder"), PROJECT_OPEN_USER_DATA_FOLDER);
 #endif
@@ -8084,14 +8064,12 @@ void EditorNode::_build_project_menu() {
 		tool_menu = memnew(PopupMenu);
 		tool_menu->connect("index_pressed", callable_mp(this, &EditorNode::_tool_menu_option));
 		tool_menu->add_shortcut(ED_GET_SHORTCUT("editor/orphan_resource_explorer"), TOOLS_ORPHAN_RESOURCES);
-		tool_menu->add_shortcut(ED_GET_SHORTCUT("editor/engine_compilation_configuration_editor"), TOOLS_BUILD_PROFILE_MANAGER);
 		tool_menu->add_shortcut(ED_GET_SHORTCUT("editor/upgrade_project"), TOOLS_PROJECT_UPGRADE);
 	}
 	project_menu->add_submenu_node_item(TTRC("Tools"), tool_menu);
 
 	project_menu->add_separator();
 	project_menu->add_shortcut(ED_GET_SHORTCUT("editor/reload_current_project"), PROJECT_RELOAD_CURRENT_PROJECT);
-	project_menu->add_shortcut(ED_GET_SHORTCUT("editor/quit_to_project_list"), PROJECT_QUIT_TO_PROJECT_MANAGER, true);
 }
 
 void EditorNode::_build_settings_menu() {
@@ -8135,14 +8113,8 @@ void EditorNode::_build_settings_menu() {
 		settings_menu->add_item(TTRC("Open Editor Data Folder"), EDITOR_OPEN_DATA_FOLDER);
 		settings_menu->add_item(TTRC("Open Editor Settings Folder"), EDITOR_OPEN_CONFIG_FOLDER);
 	}
-	settings_menu->add_separator();
 #endif
 
-	settings_menu->add_item(TTRC("Manage Editor Features..."), EDITOR_MANAGE_FEATURE_PROFILES);
-	settings_menu->add_item(TTRC("Manage Export Templates..."), EDITOR_MANAGE_EXPORT_TEMPLATES);
-#if !defined(ANDROID_ENABLED) && !defined(WEB_ENABLED)
-	settings_menu->add_item(TTRC("Configure FBX Importer..."), EDITOR_CONFIGURE_FBX_IMPORTER);
-#endif
 }
 
 void EditorNode::_build_help_menu() {
@@ -8159,15 +8131,11 @@ void EditorNode::_build_help_menu() {
 	bool dark_mode = DisplayServer::get_singleton()->is_dark_mode_supported() && DisplayServer::get_singleton()->is_dark_mode();
 	help_menu->add_icon_shortcut(get_editor_theme_native_menu_icon(SNAME("HelpSearch"), menu_type == MENU_TYPE_GLOBAL, dark_mode), ED_GET_SHORTCUT("editor/editor_help"), HELP_SEARCH);
 	help_menu->add_separator();
-	help_menu->add_shortcut(ED_GET_SHORTCUT("editor/online_docs"), HELP_DOCS);
-	help_menu->add_shortcut(ED_GET_SHORTCUT("editor/forum"), HELP_FORUM);
-	help_menu->add_shortcut(ED_GET_SHORTCUT("editor/community"), HELP_COMMUNITY);
-	help_menu->add_separator();
+	// OpenRAC Editor: OpenRAC's own guide and bug tracker.
+	help_menu->add_item(TTRC("Level Editor Guide"), HELP_DOCS);
+	help_menu->add_item(TTRC("Report a Bug"), HELP_REPORT_A_BUG);
 	help_menu->add_icon_shortcut(get_editor_theme_native_menu_icon(SNAME("ActionCopy"), menu_type == MENU_TYPE_GLOBAL, dark_mode), ED_GET_SHORTCUT("editor/copy_system_info"), HELP_COPY_SYSTEM_INFO);
 	help_menu->set_item_tooltip(-1, TTRC("Copies the system info as a single-line text into the clipboard."));
-	help_menu->add_shortcut(ED_GET_SHORTCUT("editor/report_a_bug"), HELP_REPORT_A_BUG);
-	help_menu->add_shortcut(ED_GET_SHORTCUT("editor/suggest_a_feature"), HELP_SUGGEST_A_FEATURE);
-	help_menu->add_shortcut(ED_GET_SHORTCUT("editor/send_docs_feedback"), HELP_SEND_DOCS_FEEDBACK);
 	help_menu->add_separator();
 #ifdef MACOS_ENABLED
 	if (menu_type != MENU_TYPE_GLOBAL) {
@@ -8177,7 +8145,6 @@ void EditorNode::_build_help_menu() {
 #else
 	help_menu->add_icon_shortcut(get_editor_theme_native_menu_icon(SNAME("Godot"), menu_type == MENU_TYPE_GLOBAL, dark_mode), ED_GET_SHORTCUT("editor/about"), HELP_ABOUT);
 #endif
-	help_menu->add_icon_shortcut(get_editor_theme_native_menu_icon(SNAME("Heart"), menu_type == MENU_TYPE_GLOBAL, dark_mode), ED_GET_SHORTCUT("editor/support_development"), HELP_SUPPORT_GODOT_DEVELOPMENT);
 }
 
 void EditorNode::_add_to_main_menu(const String &p_name, PopupMenu *p_menu) {
@@ -9413,7 +9380,6 @@ EditorNode::EditorNode() {
 	add_editor_plugin(memnew(AnimationTrackKeyEditEditorPlugin));
 	add_editor_plugin(memnew(AnimationMarkerKeyEditEditorPlugin));
 
-	add_editor_plugin(VersionControlEditorPlugin::get_singleton());
 
 	add_editor_plugin(memnew(AudioBusesEditorPlugin(audio_bus_editor)));
 

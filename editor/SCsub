@@ -57,11 +57,11 @@ if env.editor_build:
     # Generated with `make include-list` for each resource.
 
     translation_targets = {
-        # OpenRAC Editor: Polish only (English is built in); no class reference translations.
-        "#editor/translations/editor_translations.gen.cpp": Glob("#editor/translations/editor/pl.po"),
-        "#editor/translations/property_translations.gen.cpp": Glob("#editor/translations/properties/pl.po"),
+        # OpenRAC Editor: English only, no translations.
+        "#editor/translations/editor_translations.gen.cpp": [],
+        "#editor/translations/property_translations.gen.cpp": [],
         "#editor/translations/doc_translations.gen.cpp": [],
-        "#editor/translations/extractable_translations.gen.cpp": Glob("#editor/translations/extractable/pl.po"),
+        "#editor/translations/extractable_translations.gen.cpp": [],
     }
     for target_cpp, sources in translation_targets.items():
         target_h = os.path.splitext(target_cpp)[0] + ".h"

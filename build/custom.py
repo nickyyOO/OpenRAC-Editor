@@ -1,4 +1,4 @@
-# OpenRAC Editor build options: desktop editor, Vulkan only, unused modules off.
+# OpenRAC Editor build options: desktop editor, one renderer, unused modules off.
 # Use from the repo root: scons platform=<linuxbsd|windows|macos> profile=build/custom.py
 
 target = "editor"
@@ -8,11 +8,15 @@ debug_symbols = "no"
 deprecated = "no"
 tests = "no"
 
-# Rendering: Vulkan only (MoltenVK on macOS), like the game.
+# Rendering: Vulkan on Windows and Linux. macOS builds pass metal=yes vulkan=no (README).
 vulkan = "yes"
 opengl3 = "no"
 d3d12 = "no"
 metal = "no"
+
+# OpenRAC look and name: our splash, no update check against godotengine.org.
+no_editor_splash = "no"
+engine_update_check = "no"
 
 # Desktop editor: no screen reader kit, no gamepad driver, no XR.
 accesskit = "no"
@@ -44,7 +48,9 @@ module_hdr_enabled = "no"
 module_interactive_music_enabled = "no"
 module_jolt_physics_enabled = "no"
 module_jpg_enabled = "no"
+module_jsonrpc_enabled = "no"
 module_ktx_enabled = "no"
+module_mbedtls_enabled = "no"
 module_lightmapper_rd_enabled = "no"
 module_mobile_vr_enabled = "no"
 module_mono_enabled = "no"
@@ -57,6 +63,7 @@ module_objectdb_profiler_enabled = "no"
 module_ogg_enabled = "no"
 module_openxr_enabled = "no"
 module_raycast_enabled = "no"
+module_tga_enabled = "no"
 module_theora_enabled = "no"
 module_tinyexr_enabled = "no"
 module_upnp_enabled = "no"

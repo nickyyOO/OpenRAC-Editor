@@ -57,6 +57,8 @@ void EditorAbout::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_TRANSLATION_CHANGED: {
 			_about_text_label->set_text(
+					// OpenRAC Editor: say what it is built on; Godot's copyright stays.
+					String("The level editor for OpenRAC, built on Godot Engine.\n") +
 					String(U"© 2014-present ") + TTR("Godot Engine contributors") + ".\n" +
 					String(U"© 2007-2014 Juan Linietsky, Ariel Manzur.\n"));
 
@@ -211,7 +213,7 @@ Label *EditorAbout::_create_section(Control *p_parent, const String &p_name, con
 }
 
 EditorAbout::EditorAbout() {
-	set_title(TTRC("Thanks from the Godot community!"));
+	set_title(TTRC("About OpenRAC Editor"));
 	set_hide_on_ok(true);
 
 	VBoxContainer *vbc = memnew(VBoxContainer);

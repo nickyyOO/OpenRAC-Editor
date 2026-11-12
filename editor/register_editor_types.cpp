@@ -237,60 +237,34 @@ void register_editor_types() {
 	EditorPlugins::add_by_type<EditorScriptPlugin>();
 	EditorPlugins::add_by_type<FontEditorPlugin>();
 	EditorPlugins::add_by_type<GPUParticles3DEditorPlugin>();
-	EditorPlugins::add_by_type<GPUParticlesCollisionSDF3DEditorPlugin>();
 	EditorPlugins::add_by_type<GradientEditorPlugin>();
 	EditorPlugins::add_by_type<GradientTexture2DEditorPlugin>();
 	EditorPlugins::add_by_type<InputEventEditorPlugin>();
-	EditorPlugins::add_by_type<LightmapGIEditorPlugin>();
 	EditorPlugins::add_by_type<MarginContainerEditorPlugin>();
 	EditorPlugins::add_by_type<MaterialEditorPlugin>();
 	EditorPlugins::add_by_type<MeshEditorPlugin>();
 	EditorPlugins::add_by_type<MeshInstance3DEditorPlugin>();
-	EditorPlugins::add_by_type<MeshLibraryEditorPlugin>();
 	EditorPlugins::add_by_type<MultiMeshEditorPlugin>();
 	EditorPlugins::add_by_type<OccluderInstance3DEditorPlugin>();
 	EditorPlugins::add_by_type<PackedSceneEditorPlugin>();
 	EditorPlugins::add_by_type<Path3DEditorPlugin>();
-	EditorPlugins::add_by_type<PhysicalBone3DEditorPlugin>();
 	EditorPlugins::add_by_type<Polygon3DEditorPlugin>();
 	EditorPlugins::add_by_type<ResourcePreloaderEditorPlugin>();
 	EditorPlugins::add_by_type<ShaderEditorPlugin>();
 	EditorPlugins::add_by_type<ShaderFileEditorPlugin>();
 	EditorPlugins::add_by_type<Skeleton3DEditorPlugin>();
-	EditorPlugins::add_by_type<SpriteFramesEditorPlugin>();
 	EditorPlugins::add_by_type<StyleBoxEditorPlugin>();
 	EditorPlugins::add_by_type<SubViewportPreviewEditorPlugin>();
 	EditorPlugins::add_by_type<Texture3DEditorPlugin>();
 	EditorPlugins::add_by_type<TextureEditorPlugin>();
 	EditorPlugins::add_by_type<TextureLayeredEditorPlugin>();
 	EditorPlugins::add_by_type<TextureRegionEditorPlugin>();
-	EditorPlugins::add_by_type<ThemeEditorPlugin>();
 	EditorPlugins::add_by_type<ToolButtonEditorPlugin>();
-	EditorPlugins::add_by_type<VirtualJoystickEditorPlugin>();
-	EditorPlugins::add_by_type<VoxelGIEditorPlugin>();
 #ifndef DISABLE_DEPRECATED
 	EditorPlugins::add_by_type<SkeletonIK3DEditorPlugin>();
 #endif
 
-	// 2D
-	EditorPlugins::add_by_type<Camera2DEditorPlugin>();
-	EditorPlugins::add_by_type<CollisionPolygon2DEditorPlugin>();
-	EditorPlugins::add_by_type<CollisionShape2DEditorPlugin>();
-	EditorPlugins::add_by_type<CPUParticles2DEditorPlugin>();
-	EditorPlugins::add_by_type<GPUParticles2DEditorPlugin>();
-	EditorPlugins::add_by_type<LightOccluder2DEditorPlugin>();
-	EditorPlugins::add_by_type<Line2DEditorPlugin>();
-	EditorPlugins::add_by_type<Path2DEditorPlugin>();
-	EditorPlugins::add_by_type<Polygon2DEditorPlugin>();
-	EditorPlugins::add_by_type<Cast2DEditorPlugin>();
-	EditorPlugins::add_by_type<Skeleton2DEditorPlugin>();
-	EditorPlugins::add_by_type<Sprite2DEditorPlugin>();
-	EditorPlugins::add_by_type<TileSetEditorPlugin>();
-	EditorPlugins::add_by_type<TileMapEditorPlugin>();
-	EditorPlugins::add_by_type<ScenePaint2DEditorPlugin>();
-#ifndef DISABLE_DEPRECATED
-	EditorPlugins::add_by_type<ParallaxBackgroundEditorPlugin>();
-#endif
+	// OpenRAC Editor: no 2D node editors; levels are 3D.
 
 	// For correct doc generation.
 	GLOBAL_DEF(PropertyInfo(Variant::STRING, "editor/run/main_run_args", PROPERTY_HINT_NONE, "monospace"), "");

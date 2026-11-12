@@ -4804,6 +4804,11 @@ int Main::start() {
 
 #ifdef TOOLS_ENABLED
 		if (project_manager) {
+			// OpenRAC Editor: no project list; the OpenRAC launcher opens each level.
+			OS::get_singleton()->alert("Open a level from the OpenRAC launcher.", GODOT_VERSION_NAME);
+			return EXIT_FAILURE;
+		}
+		if (project_manager) {
 			OS::get_singleton()->benchmark_begin_measure("Startup", "Project Manager");
 			Engine::get_singleton()->set_editor_hint(true);
 
