@@ -93,6 +93,20 @@ Control *EditorTitleBar::get_center_control() const {
 	return center_control;
 }
 
+// OpenRAC Editor: centered above an area of the window.
+void EditorTitleBar::set_center_over(Control *p_area) {
+	center_over = p_area;
+	if (center_over) {
+		center_over->connect(SceneStringName(resized), callable_mp(this, &EditorTitleBar::_center_over_moved));
+		center_over->connect(SceneStringName(item_rect_changed), callable_mp(this, &EditorTitleBar::_center_over_moved));
+	}
+	queue_sort();
+}
+
+void EditorTitleBar::_center_over_moved() {
+	queue_sort();
+}
+
 void EditorTitleBar::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_EXIT_TREE: {
@@ -152,6 +166,11 @@ void EditorTitleBar::_notification(int p_what) {
 				int max_offset = next->get_position().x + next->get_size().x - next->get_combined_minimum_size().x - c_size.x;
 
 				int offset = (title_size.width - c_size.width) / 2;
+				// OpenRAC Editor: above the main screen's middle, where it is shown.
+				if (center_over && center_over->is_visible_in_tree()) {
+					const Rect2 area = center_over->get_global_rect();
+					offset = int(area.get_center().x - get_global_position().x) - c_size.width / 2;
+				}
 				offset = CLAMP(offset, min_offset, max_offset);
 
 				fit_child_in_rect(prev, Rect2i(prev->get_position().x, 0, offset - prev->get_position().x, title_size.height));

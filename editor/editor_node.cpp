@@ -8647,6 +8647,8 @@ EditorNode::EditorNode() {
 	center_split->set_collapsed(true);
 	center_vb->add_child(center_split);
 	center_split->connect("drag_ended", callable_mp(this, &EditorNode::_bottom_panel_resized));
+	// OpenRAC Editor: without the 2D and Game buttons, 3D / Script read best above the viewport.
+	title_bar->set_center_over(center_split);
 
 	right_l_vsplit = memnew(DockSplitContainer);
 	right_l_vsplit->set_name("DockVSplitRightL");

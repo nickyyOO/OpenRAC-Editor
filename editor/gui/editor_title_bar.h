@@ -39,6 +39,9 @@ class EditorTitleBar : public HBoxContainer {
 	bool moving = false;
 	bool can_move = false;
 	Control *center_control = nullptr;
+	Control *center_over = nullptr; // OpenRAC Editor: the area the center control is centered above.
+
+	void _center_over_moved(); // OpenRAC Editor.
 
 protected:
 	void _notification(int p_what);
@@ -49,6 +52,9 @@ protected:
 public:
 	void set_center_control(Control *p_center_control);
 	Control *get_center_control() const;
+	// OpenRAC Editor: center the center control above this area (the main screen between the docks)
+	// instead of the whole bar, so the 3D / Script buttons sit over the viewport.
+	void set_center_over(Control *p_area);
 
 	void set_can_move_window(bool p_enabled);
 	bool get_can_move_window() const;
