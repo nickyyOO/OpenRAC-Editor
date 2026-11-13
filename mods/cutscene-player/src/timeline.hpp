@@ -69,6 +69,11 @@ inline V3 direction(V3 rotation) {
     const float cp = std::cos(rotation.y);
     return {std::cos(rotation.z) * cp, std::sin(rotation.z) * cp, -std::sin(rotation.y)};
 }
+// `v` turned by `yaw` radians about z.
+inline V3 turn_z(V3 v, float yaw) {
+    const float c = std::cos(yaw), s = std::sin(yaw);
+    return {v.x * c - v.y * s, v.x * s + v.y * c, v.z};
+}
 // Euler [x, y, z] (z the yaw, applied last) as a quaternion (x, y, z, w).
 inline void quaternion(V3 r, float out[4]) {
     const float cx = std::cos(r.x / 2), sx = std::sin(r.x / 2);
@@ -183,6 +188,13 @@ inline int anim_at(const Value& anims, int t) {
     return found;
 }
 
+// The "ride" key in force at t: the latest at or before it, -1 before any or for one with no actor
+// (the ride is over).
+inline int ride_at(const Value& rides, int t) {
+    const int i = anim_at(rides, t);
+    return i >= 0 && rides[static_cast<std::size_t>(i)]["actor"].string().empty() ? -1 : i;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Camera
 
@@ -199,11 +211,11 @@ struct CamKey {
 };
 
 // A key from the file: `target` is its look_at point, when it has one (the player finds actors);
-// `eye` carries from the key before when the key has none.
-inline CamKey camera_key(const Value& k, const CamKey* before, const V3* target) {
+// `eye` is where an eye on an actor is now; an eye that is neither carries from the key before.
+inline CamKey camera_key(const Value& k, const CamKey* before, const V3* target, const V3* eye = nullptr) {
     CamKey c;
     c.t = k["t"].integer();
-    c.eye = vec(k["eye"], before ? before->eye : V3{});
+    c.eye = eye != nullptr ? *eye : vec(k["eye"], before ? before->eye : V3{});
     c.has_target = target != nullptr;
     if (target) c.target = *target;
     const bool has_rot = k.has("rotation");
@@ -412,6 +424,89 @@ inline Rgba fade_at(const Value& events, int t) {
     return now;
 }
 
+// The scene's air at t from its "air" events: each eases over `length` ticks (30 if not given) to
+// its `fog` ({"colour": [r, g, b] 0 to 1, "near", "far" units, "thickness" 0 to 1}) and
+// `background` ([r, g, b] 0 to 1); one with neither eases back to the game's (weight 0).
+struct Air {
+    float weight = 0;
+    bool fog = false, background = false;
+    float fog_colour[3] = {0, 0, 0};
+    float fog_near = 0, fog_far = 100, fog_thickness = 0;
+    float back[3] = {0, 0, 0};
+};
+inline Air air_at(const Value& events, int t) {
+    Air now;
+    const auto& list = events.items();
+    const auto unit = [](const Value& v, float fallback) {
+        return std::clamp(static_cast<float>(v.number(fallback)), 0.0f, 1.0f);
+    };
+    for (std::size_t i : by_time(list)) {
+        const Value& e = list[i];
+        if (e["do"].string() != "air") continue;
+        const int t0 = e["t"].integer();
+        if (t < t0) break;
+        Air to = now;
+        const Value& fog = e["fog"];
+        const Value& back = e["background"];
+        to.weight = fog.is_object() || back.is_array() ? 1.0f : 0.0f;
+        if (fog.is_object()) {
+            if (!now.fog) {  // fog new to the scene starts from none, at the new key's colour
+                for (int k = 0; k < 3; ++k) now.fog_colour[k] = unit(fog["colour"][k], 0);
+                now.fog_near = static_cast<float>(fog["near"].number(0));
+                now.fog_far = static_cast<float>(fog["far"].number(100));
+            }
+            to.fog = true;
+            for (int k = 0; k < 3; ++k) to.fog_colour[k] = unit(fog["colour"][k], 0);
+            to.fog_near = std::max(0.0f, static_cast<float>(fog["near"].number(0)));
+            to.fog_far = std::max(to.fog_near + 0.01f, static_cast<float>(fog["far"].number(100)));
+            to.fog_thickness = unit(fog["thickness"], 1);
+        } else if (to.weight > 0) {
+            to.fog_thickness = 0;  // a key with only a background clears the scene's fog
+        }
+        if (back.is_array()) {
+            if (!now.background) {
+                for (int k = 0; k < 3; ++k) now.back[k] = unit(back[k], 0);
+            }
+            to.background = true;
+            for (int k = 0; k < 3; ++k) to.back[k] = unit(back[k], 0);
+        }
+        const int len = std::max(0, e["length"].integer(30));
+        const float u = len > 0 ? std::min(1.0f, static_cast<float>(t - t0) / static_cast<float>(len)) : 1.0f;
+        const auto mix = [u](float a, float b) { return a + (b - a) * u; };
+        Air out = to;
+        out.weight = mix(now.weight, to.weight);
+        for (int k = 0; k < 3; ++k) {
+            out.fog_colour[k] = mix(now.fog_colour[k], to.fog_colour[k]);
+            out.back[k] = mix(now.back[k], to.back[k]);
+        }
+        out.fog_near = mix(now.fog_near, to.fog_near);
+        out.fog_far = mix(now.fog_far, to.fog_far);
+        out.fog_thickness = mix(now.fog_thickness, to.fog_thickness);
+        out.fog = now.fog || to.fog;
+        out.background = now.background || to.background;
+        now = out;
+    }
+    return now;
+}
+
+// Slow motion at t from the "slow" events: each eases over `length` ticks (0 if not given) to its
+// `stretch` (1 the game's speed, up to 8).
+inline float stretch_at(const Value& events, int t) {
+    float now = 1;
+    const auto& list = events.items();
+    for (std::size_t i : by_time(list)) {
+        const Value& e = list[i];
+        if (e["do"].string() != "slow") continue;
+        const int t0 = e["t"].integer();
+        if (t < t0) break;
+        const float to = std::clamp(static_cast<float>(e["stretch"].number(1)), 1.0f, 8.0f);
+        const int len = std::max(0, e["length"].integer(0));
+        const float u = len > 0 ? std::min(1.0f, static_cast<float>(t - t0) / static_cast<float>(len)) : 1.0f;
+        now += (to - now) * u;
+    }
+    return now;
+}
+
 // A colour as the overlay takes it, 0xRRGGBBAA.
 inline std::uint32_t pack_rgba(Rgba c) {
     // Held to 0 to 1, NaN as 0.
@@ -589,6 +684,133 @@ inline float music_gain(const std::string& mode, int t, float k) {
     const float low = mode == "stop" ? 0.0f : mode == "keep" ? 1.0f : kMusicDucked;
     const float in = std::clamp(static_cast<float>(t) / kMusicTicks, 0.0f, 1.0f) * std::clamp(k, 0.0f, 1.0f);
     return 1.0f + (low - 1.0f) * in;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Walks and faces: the gait for a walk, talking, blinking, moods, the head's share of a look
+
+// Where a walk is at t: 0 not started, 1 walking, 2 arrived (or a walk of no length).
+inline int walk_state(const Value& path, int t) {
+    const auto& pts = path["points"].items();
+    const int start = path["t"].integer();
+    if (pts.size() < 2 || t < start) return 0;
+    float total = 0;
+    for (std::size_t i = 0; i + 1 < pts.size(); ++i) total += length(vec(pts[i + 1]) - vec(pts[i]));
+    const double speed = std::max(0.0, path["speed"].number(8));
+    if (speed <= 0 || total <= 1e-6f) return 2;
+    return (t - start) / kTickRate * speed < total ? 1 : 2;
+}
+
+// The sequence a walk plays: of `gaits` ([{"seq", "speed"}]), the one with the highest speed not
+// above the walk's while walking, the slowest once arrived (standing); -1 for none.
+inline int gait_at(const Value& gaits, int state, double speed) {
+    int seq = -1;
+    double best = -1, slowest = 1e30;
+    int slow_seq = -1;
+    for (const Value& g : gaits.items()) {
+        const double s = g["speed"].number(0);
+        const int q = g["seq"].integer(-1);
+        if (q < 0) continue;
+        if (s < slowest) slowest = s, slow_seq = q;
+        if (s <= speed && s > best) best = s, seq = q;
+    }
+    if (state == 2) return slow_seq;
+    return state == 1 ? (seq >= 0 ? seq : slow_seq) : -1;
+}
+
+// A turn of `degrees` about `axis` (any length; none gives no turn) as a unit quaternion (x, y, z, w).
+inline void axis_angle(V3 axis, float degrees, float out[4]) {
+    out[0] = out[1] = out[2] = 0, out[3] = 1;
+    const float l = length(axis);
+    if (!(l > 1e-6f) || !std::isfinite(degrees)) return;
+    const float h = degrees * kPi / 360.0f, s = std::sin(h) / l;
+    out[0] = axis.x * s, out[1] = axis.y * s, out[2] = axis.z * s, out[3] = std::cos(h);
+}
+
+// a * b as quaternions (x, y, z, w): b's turn, then a's.
+inline void quat_mul(const float a[4], const float b[4], float out[4]) {
+    const float r[4] = {
+        a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+        a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+        a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+        a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+    };
+    for (int k = 0; k < 4; ++k) out[k] = r[k];
+}
+
+// How open the mouth is at tick t (0 shut, 1 wide) for a talk starting at `start` whose envelope is
+// `bytes`: a byte every thirtieth of a second (two ticks), 0 to 255, straight between them; shut
+// before and after.
+inline float envelope_at(const std::string& bytes, int start, int t) {
+    if (t < start || bytes.empty()) return 0;
+    const double at = (t - start) / 2.0;
+    const std::size_t i = static_cast<std::size_t>(at);
+    if (i >= bytes.size()) return 0;
+    const float a = static_cast<unsigned char>(bytes[i]) / 255.0f;
+    const float b = i + 1 < bytes.size() ? static_cast<unsigned char>(bytes[i + 1]) / 255.0f : 0.0f;
+    return a + (b - a) * static_cast<float>(at - static_cast<double>(i));
+}
+
+// How shut the eyelids are at t (0 open, 1 shut): a blink every two to six seconds, the gaps drawn
+// from `seed` so a cutscene blinks the same way each time; 3 ticks shutting, 1 shut, 4 opening.
+inline float blink_at(std::uint32_t seed, int t) {
+    if (t < 0) return 0;
+    std::uint32_t h = seed * 2654435761u + 0x9E3779B9u;
+    const auto next = [&] {
+        h ^= h >> 15, h *= 0x2C1B3C6Du, h ^= h >> 12, h *= 0x297A2D39u, h ^= h >> 15;
+        return h;
+    };
+    int at = 60 + static_cast<int>(next() % 120);
+    while (at + 8 <= t) at += 120 + static_cast<int>(next() % 240);
+    const int d = t - at;
+    if (d < 0) return 0;
+    if (d < 3) return (d + 1) / 4.0f;
+    if (d < 4) return 1;
+    return 1 - (d - 3) / 4.0f;
+}
+
+// The moods on the face at t, by name and weight: "moods" keys ({"t", "mood", "weight" 1,
+// "blend" 10 ticks}) each fade their mood in while the key before fades out; a key with no mood
+// fades back to the face's own.
+inline std::vector<std::pair<std::string, float>> moods_at(const Value& keys, int t) {
+    std::vector<std::pair<std::string, float>> out;
+    const auto& all = keys.items();
+    if (all.empty()) return out;
+    const std::vector<std::size_t> order = by_time(all);
+    int i = -1;
+    for (std::size_t n = 0; n < order.size(); ++n) {
+        if (all[order[n]]["t"].integer() <= t) i = static_cast<int>(n);
+    }
+    if (i < 0) return out;
+    const auto add = [&](const Value& k, float w) {
+        const std::string mood = k["mood"].string();
+        w *= static_cast<float>(std::clamp(k["weight"].number(1), 0.0, 1.0));
+        if (mood.empty() || w <= 1e-4f) return;
+        for (auto& m : out) {
+            if (m.first == mood) {
+                m.second = std::min(1.0f, m.second + w);
+                return;
+            }
+        }
+        out.emplace_back(mood, w);
+    };
+    const Value& now = all[order[static_cast<std::size_t>(i)]];
+    const int blend = std::max(0, now["blend"].integer(10));
+    const float u = blend == 0 ? 1.0f : std::clamp(static_cast<float>(t - now["t"].integer()) / blend, 0.0f, 1.0f);
+    add(now, u);
+    if (i > 0 && u < 1) add(all[order[static_cast<std::size_t>(i - 1)]], 1 - u);
+    return out;
+}
+
+// A look of `want` radians away from where the body faces, shared: the head takes up to `limit`
+// radians of it, the body turns the rest.
+inline void head_share(float want, float limit, float& head, float& body) {
+    float d = std::fmod(want, 2 * kPi);
+    if (d > kPi) d -= 2 * kPi;
+    if (d < -kPi) d += 2 * kPi;
+    limit = std::max(0.0f, limit);
+    head = std::clamp(d, -limit, limit);
+    body = d - head;
 }
 
 // ---------------------------------------------------------------------------------------------

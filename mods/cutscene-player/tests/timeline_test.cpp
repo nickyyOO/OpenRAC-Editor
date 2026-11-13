@@ -551,6 +551,156 @@ void subtitle_pictures() {
           runs[1].length == 8);
 }
 
+void walks_and_faces() {
+    // A walk of 6 units at 3 a second from tick 30: walking for two seconds, then arrived.
+    const Value path = parse(R"({"t": 30, "speed": 3, "points": [[0, 0, 0], [6, 0, 0]]})");
+    CHECK(walk_state(path, 29) == 0);
+    CHECK(walk_state(path, 30) == 1);
+    CHECK(walk_state(path, 149) == 1);
+    CHECK(walk_state(path, 150) == 2);
+    CHECK(walk_state(parse(R"({"t": 0, "speed": 0, "points": [[0, 0, 0], [6, 0, 0]]})"), 5) == 2);
+    CHECK(walk_state(parse(R"({"t": 0, "points": [[1, 1, 1], [1, 1, 1]]})"), 5) == 2);
+    CHECK(walk_state(parse(R"({"t": 0, "points": [[1, 1, 1]]})"), 5) == 0);
+
+    const Value gaits = parse(R"([{"seq": 1, "speed": 0}, {"seq": 4, "speed": 2}, {"seq": 7, "speed": 6}])");
+    CHECK(gait_at(gaits, 1, 3) == 4);
+    CHECK(gait_at(gaits, 1, 6) == 7);
+    CHECK(gait_at(gaits, 1, 9) == 7);
+    CHECK(gait_at(gaits, 1, 1) == 1);
+    CHECK(gait_at(gaits, 2, 9) == 1);  // arrived: standing
+    CHECK(gait_at(gaits, 0, 9) == -1);
+    CHECK(gait_at(parse("[]"), 1, 3) == -1);
+    CHECK(gait_at(parse(R"([{"seq": 5, "speed": 4}])"), 1, 1) == 5);  // slower than any: the slowest
+    CHECK(gait_at(parse(R"([{"speed": 4}])"), 1, 5) == -1);           // no sequence
+
+    float q[4];
+    axis_angle({1, 0, 0}, 90, q);
+    CHECK(near(q[0], std::sqrt(0.5f)) && near(q[3], std::sqrt(0.5f)) && near(q[1], 0) && near(q[2], 0));
+    axis_angle({0, 0, 5}, 180, q);  // any length of axis
+    CHECK(near(q[2], 1) && near(q[3], 0));
+    axis_angle({0, 0, 0}, 90, q);
+    CHECK(q[3] == 1 && q[0] == 0);
+    axis_angle({1, 0, 0}, NAN, q);
+    CHECK(q[3] == 1);
+    float a[4], b[4], r[4];
+    axis_angle({0, 0, 1}, 30, a);
+    axis_angle({0, 0, 1}, 60, b);
+    quat_mul(a, b, r);
+    axis_angle({0, 0, 1}, 90, q);
+    CHECK(near(r[2], q[2]) && near(r[3], q[3]));
+    const float id[4] = {0, 0, 0, 1};
+    quat_mul(id, a, r);
+    CHECK(near(r[2], a[2]) && near(r[3], a[3]));
+
+    // The envelope: a byte each two ticks, straight between, shut outside.
+    const std::string env = std::string("\x00\xff\x80", 3);
+    CHECK(envelope_at(env, 10, 9) == 0);
+    CHECK(near(envelope_at(env, 10, 10), 0));
+    CHECK(near(envelope_at(env, 10, 11), 0.5f));
+    CHECK(near(envelope_at(env, 10, 12), 1));
+    CHECK(near(envelope_at(env, 10, 14), 128 / 255.0f));
+    CHECK(near(envelope_at(env, 10, 15), 64 / 255.0f));  // towards shut after the last
+    CHECK(envelope_at(env, 10, 16) == 0);
+    CHECK(envelope_at("", 0, 0) == 0);
+
+    // Blinks: the same each time, apart, each one whole.
+    int blinks = 0, shut = 0;
+    float before = 0;
+    for (int t = 0; t < 60 * 60; ++t) {
+        const float v = blink_at(7, t);
+        CHECK(v >= 0 && v <= 1);
+        CHECK(v == blink_at(7, t));
+        if (v == 1) ++shut;
+        if (v > 0 && before == 0) ++blinks;
+        before = v;
+    }
+    CHECK(blinks >= 10 && blinks <= 30);  // every two to six seconds over a minute
+    CHECK(shut == blinks);
+    CHECK(blink_at(7, -5) == 0);
+    bool differ = false;
+    for (int t = 0; t < 600 && !differ; ++t) differ = blink_at(7, t) != blink_at(8, t);
+    CHECK(differ);
+
+    // Moods: in over the blend, the one before out, none back to the face's own.
+    const Value moods = parse(R"([{"t": 100, "mood": "angry", "blend": 0},
+                                  {"t": 0, "mood": "happy", "weight": 0.8},
+                                  {"t": 200}])");
+    CHECK(moods_at(moods, -1).empty());
+    auto m = moods_at(moods, 5);
+    CHECK(m.size() == 1 && m[0].first == "happy" && near(m[0].second, 0.4f));
+    m = moods_at(moods, 50);
+    CHECK(m.size() == 1 && near(m[0].second, 0.8f));
+    m = moods_at(moods, 100);
+    CHECK(m.size() == 1 && m[0].first == "angry" && near(m[0].second, 1));
+    m = moods_at(moods, 205);
+    CHECK(m.size() == 1 && m[0].first == "angry" && near(m[0].second, 0.5f));
+    CHECK(moods_at(moods, 210).empty());
+    m = moods_at(parse(R"([{"t": 0, "mood": "sad"}, {"t": 10, "mood": "sad", "blend": 10}])"), 15);
+    CHECK(m.size() == 1 && near(m[0].second, 1));  // the same mood again stays whole
+
+    // The head takes its share of a look, the body the rest, the short way round.
+    float head, body;
+    head_share(0.5f, 1.0f, head, body);
+    CHECK(near(head, 0.5f) && near(body, 0));
+    head_share(1.5f, 1.0f, head, body);
+    CHECK(near(head, 1.0f) && near(body, 0.5f));
+    head_share(-2.0f, 1.0f, head, body);
+    CHECK(near(head, -1.0f) && near(body, -1.0f));
+    head_share(2 * kPi - 0.2f, 1.0f, head, body);
+    CHECK(near(head, -0.2f) && near(body, 0));
+    head_share(0.3f, -1.0f, head, body);
+    CHECK(head == 0 && near(body, 0.3f));
+}
+
+void rides_and_eyes() {
+    CHECK(near3(turn_z({1, 0, 0}, kPi / 2), {0, 1, 0}));
+    CHECK(near3(turn_z({1, 2, 3}, 0), {1, 2, 3}));
+    CHECK(near3(turn_z({0, 1, 5}, kPi), {0, -1, 5}));
+    const Value rides = parse(R"([{"t": 100, "actor": "ship"}, {"t": 300}, {"t": 400, "actor": "lift"}])");
+    CHECK(ride_at(rides, 99) == -1);
+    CHECK(ride_at(rides, 100) == 0);
+    CHECK(ride_at(rides, 299) == 0);
+    CHECK(ride_at(rides, 300) == -1);  // off again
+    CHECK(ride_at(rides, 500) == 2);
+    CHECK(ride_at(parse("[]"), 5) == -1);
+    // A key whose eye is on an actor takes the place given; the next key with no eye keeps it.
+    const Value k = parse(R"({"t": 0, "eye": {"actor": "ship"}, "rotation": [0, 0, 0]})");
+    const V3 on = {5, 6, 7};
+    const CamKey a = camera_key(k, nullptr, nullptr, &on);
+    CHECK(near3(a.eye, on));
+    const CamKey b = camera_key(parse(R"({"t": 10})"), &a, nullptr);
+    CHECK(near3(b.eye, on));
+    const CamKey c = camera_key(parse(R"({"t": 10, "eye": [1, 2, 3]})"), &a, nullptr);
+    CHECK(near3(c.eye, {1, 2, 3}));
+}
+
+void air_and_slow() {
+    const Value ev = parse(R"([
+        {"t": 10, "do": "air", "fog": {"colour": [1, 0, 0], "near": 5, "far": 50, "thickness": 0.5},
+         "length": 10},
+        {"t": 40, "do": "air", "background": [0, 0, 1], "length": 0},
+        {"t": 60, "do": "air", "length": 20},
+        {"t": 5, "do": "slow", "stretch": 4},
+        {"t": 20, "do": "slow", "stretch": 1, "length": 10},
+        {"t": 30, "do": "slow", "stretch": 20}])");
+    CHECK(air_at(ev, 5).weight == 0);
+    const Air half = air_at(ev, 15);
+    CHECK(half.fog && near(half.weight, 0.5f) && near(half.fog_colour[0], 1));
+    CHECK(near(half.fog_thickness, 0.25f) && near(half.fog_near, 5) && near(half.fog_far, 50));
+    const Air full = air_at(ev, 30);
+    CHECK(near(full.weight, 1) && near(full.fog_thickness, 0.5f) && !full.background);
+    // A background-only key clears the fog and keeps its colour.
+    const Air back = air_at(ev, 45);
+    CHECK(back.background && near(back.back[2], 1) && near(back.fog_thickness, 0));
+    CHECK(near(air_at(ev, 70).weight, 0.5f));
+    CHECK(air_at(ev, 80).weight == 0);
+    CHECK(stretch_at(ev, 0) == 1);
+    CHECK(stretch_at(ev, 5) == 4);
+    CHECK(near(stretch_at(ev, 25), 2.5f));
+    CHECK(near(stretch_at(ev, 29), 1.3f));
+    CHECK(stretch_at(ev, 30) == 8);  // up to 8
+}
+
 int main() {
     json_values();
     json_numbers();
@@ -571,6 +721,9 @@ int main() {
     layers();
     music();
     subtitle_pictures();
+    walks_and_faces();
+    rides_and_eyes();
+    air_and_slow();
     std::printf("timeline: %d check(s), %d failed\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

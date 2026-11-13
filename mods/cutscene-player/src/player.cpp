@@ -4,6 +4,7 @@
 // <pack>/level_NN/cutscenes/*.cutscene when a level loads, starts each one when its trigger
 // happens, and drives the camera, the actors, the subtitles, the sounds and the events tick by tick.
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
@@ -274,6 +275,15 @@ struct ActorRun {
     };
     std::vector<Layer> layers;
     bool joints_set = false;
+    // face: its talks' envelopes (start tick, bytes), the blink seed, and the head's share of a look.
+    std::vector<std::pair<int, std::string>> talks;
+    std::uint32_t blink_seed = 0;
+    float head_yaw = 0;
+    int gait = -1;  // the walk's sequence playing, -1 for none
+    // ride: the key in force, and where its carrier was and faced when it began.
+    int ride = -1;
+    V3 ride_from;
+    float ride_yaw = 0;
     // The moby the actor is in the level (a figure's too), -1 for none.
     int moby_slot() const;
 };
@@ -327,6 +337,9 @@ struct Play {
     // Subtitles drawn as pictures, decoded once: by subtitle and language.
     std::map<std::pair<std::size_t, std::string>, std::shared_ptr<const SubPicture>> pictures;
     float last_fov = 0;  // the field of view last asked for, 0 for the game's
+    bool air_set = false;      // the scene's fog or background is on
+    float last_stretch = 1;    // the slow motion last asked for
+    std::vector<int> ties_hidden;  // ties hidden only for the scene
     bool hud_hidden = false;
     std::string music = "keep";  // options.music, when the port can lower it
 };
@@ -344,6 +357,11 @@ void show_pictures(std::vector<std::shared_ptr<const SubPicture>> pictures) {
 bool g_has_overlay = false;  // the port draws for mods
 std::string g_language;
 bool g_subtitles = true;  // the "subtitles" setting
+bool g_play_scenes = true;  // the "play" setting
+std::atomic<int> g_host_play{-1};  // the party host's "play" (its rules), -1 for none
+
+// Whether cutscenes play: in a party the host decides, for every game in it.
+bool scenes_on() { return g_host_play >= 0 ? g_host_play != 0 : g_play_scenes; }
 // Holding the world (options.world "hold"): the gate skips the update of every moby but these.
 bool g_holding = false;
 std::set<int> g_hold_free;
@@ -383,14 +401,30 @@ bool target_point(Play& p, const Value& v, V3& out) {
         }
         warn_once(p, "a joint as a look-at target (the port cannot place joints)");
     }
+    // "turn": the offset turns with the actor (in its own axes, x ahead), as a camera on it would.
     const V3 offset = vec(v["offset"], {0, 0, 1});
+    const bool turn = v["turn"].boolean();
     if (a != nullptr) {
-        out = a->position + offset;
+        out = a->position + (turn ? turn_z(offset, a->rotation.z) : offset);
         return true;
     }
     openrac_pose hero;
     if (id == "hero" && hero_pose(hero)) {
-        out = V3{hero.position[0], hero.position[1], hero.position[2]} + offset;
+        out = V3{hero.position[0], hero.position[1], hero.position[2]} + (turn ? turn_z(offset, hero.rotation[2]) : offset);
+        return true;
+    }
+    return false;
+}
+
+// Where an actor (or the hero) faces now, its yaw.
+bool actor_yaw(Play& p, const std::string& id, float& out) {
+    if (const ActorRun* a = actor(p, id)) {
+        out = a->rotation.z;
+        return true;
+    }
+    openrac_pose hero;
+    if (id == "hero" && hero_pose(hero)) {
+        out = hero.rotation[2];
         return true;
     }
     return false;
@@ -450,22 +484,114 @@ void load_layers(Play& p, ActorRun& a) {
     }
 }
 
-// The actor's layers at t, as joint offsets on its moby.
-void layers_tick(ActorRun& a, int t) {
-    if (a.layers.empty()) return;
-    const int slot = a.moby_slot();
-    if (slot < 0) return;
-    std::vector<openrac_joint_offset> offsets;
-    for (const ActorRun::Layer& layer : a.layers) {
-        const float w = weight_at((*layer.def)["weight"], t);
-        for (std::size_t j = 0; j < layer.joints.size() && offsets.size() < OPENRAC_JOINT_OFFSETS_MAX; ++j) {
-            openrac_joint_offset o{};
-            o.joint = static_cast<std::uint32_t>(layer.joints[j]);
-            layer_rotation(layer.frames, j, t, w, o.rotation);
-            offsets.push_back(o);
+// The actor's face: its talks' envelopes decoded once, and a blink of its own.
+void load_face(Play& p, ActorRun& a) {
+    const Value& face = (*a.def)["face"];
+    if (!API_HAS(moby_set_joints)) {
+        warn_once(p, "a face (the port cannot turn a moby's joints)");
+        return;
+    }
+    for (const Value& talk : face["talk"].items()) {
+        std::string bytes;
+        if (!base64_decode(talk["envelope"].string(), bytes) || bytes.empty()) {
+            log(OPENRAC_LOG_WARN, std::format("{}: actor \"{}\": a talk with no envelope", p.scene->name, a.id));
+            continue;
+        }
+        a.talks.emplace_back(talk["t"].integer(), std::move(bytes));
+    }
+    a.blink_seed = static_cast<std::uint32_t>(std::hash<std::string>{}(p.scene->name + "/" + a.id));
+}
+
+// Turns of the actor's joints, in order, each joint's composed into one.
+struct JointTurns {
+    std::vector<int> joints;
+    std::vector<std::array<float, 4>> turns;
+    void add(int joint, const float q[4]) {
+        if (joint < 0 || joint > 255) return;
+        for (std::size_t i = 0; i < joints.size(); ++i) {
+            if (joints[i] == joint) {
+                float r[4];
+                quat_mul(turns[i].data(), q, r);
+                std::copy(r, r + 4, turns[i].begin());
+                return;
+            }
+        }
+        if (joints.size() >= OPENRAC_JOINT_OFFSETS_MAX) return;
+        joints.push_back(joint);
+        turns.push_back({q[0], q[1], q[2], q[3]});
+    }
+};
+
+// One turn about an axis the rig names ("axis": [x, y, z], `fallback` with none).
+void turn_about(JointTurns& out, const Value& part, int joint, float degrees, V3 fallback = {1, 0, 0}) {
+    if (degrees == 0) return;
+    float q[4];
+    axis_angle(vec(part["axis"], fallback), degrees, q);
+    out.add(joint, q);
+}
+
+// The face at t: the jaw open as loud as the talk, the lids in a blink, the moods' poses, and the
+// head's share of a look.
+void face_turns(const ActorRun& a, int t, JointTurns& out) {
+    const Value& face = (*a.def)["face"];
+    const Value& rig = face["rig"];
+    if (!rig.is_object()) return;
+    for (const auto& [mood, w] : moods_at(face["moods"], t)) {
+        for (const Value& j : rig["moods"][mood].items()) {
+            float q[4] = {static_cast<float>(j["rotation"][0].number()), static_cast<float>(j["rotation"][1].number()),
+                          static_cast<float>(j["rotation"][2].number()), static_cast<float>(j["rotation"][3].number(1))};
+            // From none to the pose by the mood's weight.
+            if (q[3] < 0) q[0] = -q[0], q[1] = -q[1], q[2] = -q[2], q[3] = -q[3];
+            float r[4] = {q[0] * w, q[1] * w, q[2] * w, 1 + (q[3] - 1) * w};
+            const float l = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2] + r[3] * r[3]);
+            if (!(l > 1e-6f) || !std::isfinite(l)) continue;
+            for (float& v : r) v /= l;
+            out.add(j["joint"].integer(-1), r);
         }
     }
-    a.joints_set = g_api->moby_set_joints(g_mod, slot, offsets.data(), static_cast<int>(offsets.size())) == OPENRAC_HOOK_OK;
+    const Value& jaw = rig["jaw"];
+    if (jaw.is_object() && !a.talks.empty()) {
+        float open = 0;
+        for (const auto& [start, bytes] : a.talks) open = std::max(open, envelope_at(bytes, start, t));
+        turn_about(out, jaw, jaw["joint"].integer(-1), static_cast<float>(jaw["open"].number(20)) * open);
+    }
+    const Value& lids = rig["lids"];
+    if (lids.is_object() && face["blink"].boolean(true)) {
+        const float shut = blink_at(a.blink_seed, t);
+        for (const Value& j : lids["joints"].items()) {
+            turn_about(out, lids, j.integer(-1), static_cast<float>(lids["close"].number(30)) * shut);
+        }
+    }
+    const Value& head = rig["head"];
+    if (head.is_object() && a.head_yaw != 0) {
+        turn_about(out, head, head["joint"].integer(-1), a.head_yaw * 180.0f / kPi, {0, 0, 1});
+    }
+}
+
+// The actor's joints at t: its layers, then its face, as offsets on its moby.
+void joints_tick(ActorRun& a, int t) {
+    if (a.layers.empty() && !(*a.def)["face"].is_object()) return;
+    if (!API_HAS(moby_set_joints)) return;
+    const int slot = a.moby_slot();
+    if (slot < 0) return;
+    JointTurns turns;
+    for (const ActorRun::Layer& layer : a.layers) {
+        const float w = weight_at((*layer.def)["weight"], t);
+        for (std::size_t j = 0; j < layer.joints.size(); ++j) {
+            float q[4];
+            layer_rotation(layer.frames, j, t, w, q);
+            turns.add(layer.joints[j], q);
+        }
+    }
+    face_turns(a, t, turns);
+    std::vector<openrac_joint_offset> offsets(turns.joints.size());
+    for (std::size_t i = 0; i < offsets.size(); ++i) {
+        offsets[i].joint = static_cast<std::uint32_t>(turns.joints[i]);
+        std::copy(turns.turns[i].begin(), turns.turns[i].end(), offsets[i].rotation);
+    }
+    if (offsets.empty() && !a.joints_set) return;
+    a.joints_set = g_api->moby_set_joints(g_mod, slot, offsets.empty() ? nullptr : offsets.data(),
+                                          static_cast<int>(offsets.size())) == OPENRAC_HOOK_OK;
 }
 
 // What an actor holds at t: a figure's pieces through the port; on a moby, a moby of the class kept
@@ -528,6 +654,42 @@ void held_tick(Play& p, ActorRun& a, int t) {
     g_api->moby_pose(g_mod, a.held_slot, &pose);
 }
 
+// Riding another actor (or the hero, or one's joint): from a "ride" key on, the actor's own place
+// and turn are kept as they were against its carrier when the key began, so it goes where the
+// carrier goes and turns as it turns.
+void ride_tick(Play& p, ActorRun& a, int t) {
+    const Value& rides = (*a.def)["ride"];
+    if (!rides.is_array()) return;
+    const int i = ride_at(rides, t);
+    if (i < 0) {
+        a.ride = -1;
+        return;
+    }
+    const Value& key = rides[static_cast<std::size_t>(i)];
+    const std::string carrier_id = key["actor"].string();
+    if (carrier_id == a.id) return;
+    ActorRun* carrier = actor(p, carrier_id);
+    V3 at;
+    float yaw = 0;
+    if (carrier != nullptr) {
+        yaw = carrier->rotation.z;
+    } else if (openrac_pose hero; carrier_id == "hero" && hero_pose(hero)) {
+        yaw = hero.rotation[2];
+    }
+    if (!target_point(p, key, at)) {
+        warn_once(p, std::format("a ride on \"{}\", who is not there", carrier_id));
+        return;
+    }
+    if (a.ride != i) {
+        a.ride = i;
+        a.ride_from = at;
+        a.ride_yaw = yaw;
+    }
+    const float turned = yaw - a.ride_yaw;
+    a.position = at + turn_z(a.position - a.ride_from, turned);
+    a.rotation.z += turned;
+}
+
 // Turns the actor's body towards what its look_at keys say, by their weight.
 void look_tick(Play& p, ActorRun& a, int t) {
     const Value& keys = (*a.def)["look_at"];
@@ -535,6 +697,7 @@ void look_tick(Play& p, ActorRun& a, int t) {
     const Look look = look_at(keys, t);
     if (look.key == -1) {
         a.looking = false;
+        a.head_yaw = 0;
         return;
     }
     if (look.key >= 0) {
@@ -547,7 +710,15 @@ void look_tick(Play& p, ActorRun& a, int t) {
     // A new target turns the body round over a few ticks, not at once.
     a.look_turn = a.looking ? turn_toward(a.look_turn, goal, 0.2f) : goal;
     a.looking = true;
-    a.rotation.z = a.look_turn;
+    // With a head in the face's rig, the head turns first, up to its limit, and the body the rest.
+    const Value& head = (*a.def)["face"]["rig"]["head"];
+    if (head.is_object()) {
+        float body = 0;
+        head_share(a.look_turn - a.rotation.z, static_cast<float>(head["limit"].number(60)) * kPi / 180.0f, a.head_yaw, body);
+        a.rotation.z += body;
+    } else {
+        a.rotation.z = a.look_turn;
+    }
 }
 
 void actors_begin(Play& p) {
@@ -592,6 +763,9 @@ void actors_begin(Play& p) {
         if (def.has("layers") && a.kind != ActorRun::Kind::None && a.kind != ActorRun::Kind::Prop) {
             load_layers(p, a);
         }
+        if (def.has("face") && a.kind != ActorRun::Kind::None && a.kind != ActorRun::Kind::Prop) {
+            load_face(p, a);
+        }
         p.actors.push_back(std::move(a));
     }
 }
@@ -601,6 +775,7 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     const Value& def = *a.def;
     track_at(def["track"], t, a.position, a.rotation, a.scale);
     path_at(def["path"], t, a.position, a.rotation);
+    ride_tick(p, a, t);
     if (!a.looking) a.look_yaw = a.rotation.z;
     look_tick(p, a, t);
 
@@ -621,7 +796,14 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     // Animation: a new anims entry starts its sequence at its frame; after that the game plays it
     // on by itself, so the pose hands back what the moby has (no pull back to a key).
     const auto& anims = def["anims"].items();
-    const int anim = anim_at(def["anims"], t);
+    int anim = anim_at(def["anims"], t);
+    // A walk with gaits plays them (walking, then standing), unless an anims entry started after
+    // the walk did.
+    const Value& path = def["path"];
+    int gait = -1;
+    if (path["gaits"].is_array() && (anim < 0 || anims[static_cast<std::size_t>(anim)]["t"].integer() < path["t"].integer())) {
+        gait = gait_at(path["gaits"], walk_state(path, t), path["speed"].number(8));
+    }
     const int slot = a.kind == ActorRun::Kind::Figure ? g_api->figure_slot(g_mod, a.figure) : a.slot;
     const openrac_moby* now = moby_at(slot);
     if (a.base_scale <= 0) {
@@ -639,7 +821,13 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     std::uint32_t seq = now ? now->seq : 0, frame = now ? now->frame : 0;
     std::uint32_t next = now ? now->next_frame : 0;
     float anim_time = now ? now->anim_time : 0, speed = now ? now->anim_speed : 1;
-    if (anim >= 0) {
+    if (gait >= 0) {
+        speed = 1;
+        if (gait != a.gait) {
+            seq = static_cast<std::uint32_t>(gait), frame = 0, next = 1, anim_time = 0;
+        }
+        anim = a.anim;  // kept: an anims entry after the walk still starts as new
+    } else if (anim >= 0) {
         const Value& e = anims[static_cast<std::size_t>(anim)];
         speed = static_cast<float>(e["speed"].number(1));
         if (anim != a.anim) {
@@ -651,6 +839,7 @@ void actor_tick(Play& p, ActorRun& a, int t) {
         }
     }
     a.anim = anim;
+    a.gait = gait;
 
     if (a.kind == ActorRun::Kind::Figure) {
         openrac_pose pose{};
@@ -678,7 +867,7 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     if (visible != a.visible && slot >= 0) g_api->moby_hide(g_mod, slot, !visible);
     a.visible = visible;
     held_tick(p, a, t);
-    layers_tick(a, t);
+    joints_tick(a, t);
     if (a.held_slot >= 0 && a.held_hidden != !visible) {
         g_api->moby_hide(g_mod, a.held_slot, !visible);
         a.held_hidden = !visible;
@@ -735,9 +924,20 @@ std::vector<CamKey> camera_keys(Play& p) {
     std::vector<CamKey> keys;
     for (std::size_t i : by_time(all)) {
         const Value& k = all[i];
-        V3 target;
+        V3 target, eye;
         const bool has_target = target_point(p, k["look_at"], target);
-        keys.push_back(camera_key(k, keys.empty() ? nullptr : &keys.back(), has_target ? &target : nullptr));
+        // An eye on an actor ({"actor", "joint", "offset", "turn"}) goes with it.
+        const bool on_actor = k["eye"].is_object() && target_point(p, k["eye"], eye);
+        CamKey c = camera_key(k, keys.empty() ? nullptr : &keys.back(), has_target ? &target : nullptr,
+                              on_actor ? &eye : nullptr);
+        // "turn": the key's turn is the actor's own, so the camera turns as the actor does.
+        float yaw = 0;
+        if (on_actor && k["eye"]["turn"].boolean() && !has_target && actor_yaw(p, k["eye"]["actor"].string(), yaw)) {
+            if (k.has("rotation")) c.forward = turn_z(c.forward, yaw);
+            c.in = turn_z(c.in, yaw);
+            c.out = turn_z(c.out, yaw);
+        }
+        keys.push_back(c);
     }
     return keys;
 }
@@ -923,6 +1123,43 @@ void sounds_tick(Play& p, int t) {
     std::erase_if(p.voices, [](const Voice& v) { return v.voice == 0; });
 }
 
+// --- Air and slow motion
+
+// The scene's fog and background, eased by `k` (1 in the scene, to 0 on the way out).
+void air_tick(Play& p, int t, float k) {
+    if (!API_HAS(scene_air)) return;
+    const Air a = air_at((*p.doc)["events"], t);
+    if (a.weight * k <= 0 || (!a.fog && !a.background)) {
+        if (p.air_set) g_api->scene_air(g_mod, nullptr);
+        p.air_set = false;
+        return;
+    }
+    openrac_air air{};
+    air.size = sizeof(air);
+    air.flags = (a.fog ? OPENRAC_AIR_FOG : 0u) | (a.background ? OPENRAC_AIR_BACKGROUND : 0u);
+    std::memcpy(air.fog_colour, a.fog_colour, sizeof(air.fog_colour));
+    air.fog_near = a.fog_near;
+    air.fog_far = a.fog_far;
+    air.fog_thickness = a.fog_thickness;
+    std::memcpy(air.background, a.back, sizeof(air.background));
+    air.weight = a.weight * k;
+    p.air_set = g_api->scene_air(g_mod, &air) == OPENRAC_HOOK_OK;
+}
+
+void stretch_set(Play& p, float stretch) {
+    if (stretch == p.last_stretch || !API_HAS(time_stretch)) return;
+    if (g_api->time_stretch(g_mod, stretch) == OPENRAC_HOOK_OK) p.last_stretch = stretch;
+}
+
+void air_check(Play& p) {
+    for (const Value& e : (*p.doc)["events"].items()) {
+        const std::string what = e["do"].string();
+        if (what == "air" && !API_HAS(scene_air)) warn_once(p, "fog or background (needs a newer port)");
+        if (what == "slow" && !API_HAS(time_stretch)) warn_once(p, "slow motion (needs a newer port)");
+        if (what == "tie_hide" && !API_HAS(tie_hide)) warn_once(p, "hiding ties (needs a newer port)");
+    }
+}
+
 // --- Events
 
 void event_run(Play& p, const Value& e) {
@@ -960,6 +1197,16 @@ void event_run(Play& p, const Value& e) {
     } else if (what == "fade") {
         // Drawn from the events each tick (overlay_tick); without the port's overlay, not at all.
         if (!g_has_overlay) warn_once(p, "a fade (needs the port's overlay)");
+    } else if (what == "tie_hide") {
+        if (!API_HAS(tie_hide)) return;
+        const int tie = e["tie"].integer(-1);
+        const bool on = e["on"].boolean(true);
+        if (g_api->tie_hide(g_mod, tie, on ? 1 : 0) != OPENRAC_HOOK_OK) return;
+        // Not persistent: shown again when the scene ends.
+        std::erase(p.ties_hidden, tie);
+        if (on && !e["persistent"].boolean()) p.ties_hidden.push_back(tie);
+    } else if (what == "air" || what == "slow") {
+        // Read each tick (air_tick, stretch_at).
     } else if (what == "play") {
         p.after = e["cutscene"].string();
     } else if (what == "travel") {
@@ -1019,7 +1266,9 @@ void start(Cutscene& c, int hops = 0) {
             warn_once(*p, "hiding the HUD (the port cannot)");
         }
     }
-    if (c.doc["trigger"]["once"].boolean(true)) g_seen.add(seen_key(c));
+    // Off (the "play" setting, or the party host's): it ends at once, as a skip, so what it leaves in
+    // the world still happens.
+    if (!scenes_on()) p->skipped = true;
     g_api->hero_grab(g_mod, -1, 0);
     g_play = std::move(p);
     g_swallow_start = true;
@@ -1042,6 +1291,11 @@ void finish(bool level_gone) {
     show_pictures({});
     g_api->haze_set(g_mod, nullptr, 0);
     if (p.last_fov > 0) fov_set(p, 0);
+    if (p.air_set) g_api->scene_air(g_mod, nullptr);
+    stretch_set(p, 1);
+    if (!level_gone) {
+        for (int tie : p.ties_hidden) g_api->tie_hide(g_mod, tie, 0);
+    }
     g_api->camera_set(g_mod, nullptr);
     g_api->hero_release(g_mod);
     if (p.hud_hidden) g_api->hud_hide(g_mod, 0);
@@ -1060,6 +1314,8 @@ void finish(bool level_gone) {
     }
     const std::string done = p.scene->name, next = p.after;
     const int travel = p.travel;
+    // Seen only once it ended or was skipped: a game closed in the middle plays it again.
+    if (!level_gone && (*p.doc)["trigger"]["once"].boolean(true)) g_seen.add(seen_key(*p.scene));
     g_play.reset();
     g_cutscene_on = false;
     g_bars = 0;
@@ -1098,6 +1354,7 @@ void play_tick() {
             p.hero_hidden = g_api->moby_hide(g_mod, g_api->figure_slot(g_mod, -1), 1) == OPENRAC_HOOK_OK;
         }
         actors_begin(p);
+        air_check(p);
         if ((*p.doc)["options"]["world"].string_or("run") == "hold" && g_has_gate) {
             // Every moby but the actors, the hero and what the mods' figures are holds still.
             g_hold_free.clear();
@@ -1126,6 +1383,8 @@ void play_tick() {
         }
         overlay_tick(p, p.scene->length, 1 - s);
         music_set(p, p.scene->length, 1 - s);
+        air_tick(p, p.scene->length, 1 - s);
+        stretch_set(p, 1 + (stretch_at((*p.doc)["events"], p.scene->length) - 1) * (1 - s));
         if (++p.ease_out > kCameraEaseOut) finish(false);
         return;
     }
@@ -1138,7 +1397,13 @@ void play_tick() {
     }
 
     const int t = p.t;
-    for (ActorRun& a : p.actors) actor_tick(p, a, t);
+    // Carriers first, so a rider goes where its carrier is this tick.
+    for (ActorRun& a : p.actors) {
+        if (!(*a.def)["ride"].is_array()) actor_tick(p, a, t);
+    }
+    for (ActorRun& a : p.actors) {
+        if ((*a.def)["ride"].is_array()) actor_tick(p, a, t);
+    }
     CameraPose pose;
     if (camera_at(p, t, pose)) {
         const openrac_camera cam = make_camera(pose.eye, pose.forward, pose.roll);
@@ -1152,6 +1417,8 @@ void play_tick() {
     sounds_tick(p, t);
     events_tick(p, t);
     overlay_tick(p, t, 1);
+    air_tick(p, t, 1);
+    stretch_set(p, stretch_at((*p.doc)["events"], t));
     if (p.travel >= 0) {
         finish(false);
         return;
@@ -1273,6 +1540,15 @@ void load(openrac::Mod& mod) {
         throw openrac::Error("this player needs a newer OpenRAC (mod interface 1.14 with pack_folder)");
     }
     g_subtitles = mod.setting<bool>("subtitles");
+    g_play_scenes = mod.setting<bool>("play");
+    // "play" is the host's in a party: published as this game's rules, taken from the host's.
+    if (API_HAS(party_rules_publish) && API_HAS(on_party_rules)) {
+        const std::uint8_t rule = g_play_scenes ? 1 : 0;
+        g_api->party_rules_publish(g_mod, &rule, 1, g_play_scenes ? "Cutscenes on" : "Cutscenes off");
+        g_api->on_party_rules(g_mod, [](void*, const void* data, std::uint32_t size) {
+            g_host_play = data != nullptr && size >= 1 ? *static_cast<const std::uint8_t*>(data) : -1;
+        }, nullptr);
+    }
     g_has_overlay = mod.on_overlay(draw_overlay);
     // The gate holds the world (options.world "hold"); it lets every update run otherwise.
     g_has_gate = g_api->on_moby_update(g_mod, moby_gate, nullptr) == OPENRAC_HOOK_OK;
@@ -1283,4 +1559,4 @@ void load(openrac::Mod& mod) {
 
 }  // namespace
 
-OPENRAC_MOD_CPP("cutscene-player", "0.2.0", load)
+OPENRAC_MOD_CPP("cutscene-player", "0.3.0", load)
