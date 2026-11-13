@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/cutscene-editor.gif" alt="The game\'s own RYNO scene on Rilgar, loaded unchanged into the editor and played through the cutscene camera, with its subtitles and the Cutscene dock\'s timeline below" width="100%">
+  <img src="docs/assets/cutscene-editor.gif" alt="The game's own RYNO scene on Rilgar, loaded unchanged into the editor with every character's own animation, played through the cutscene camera, with its subtitles and the Cutscene dock's timeline below" width="100%">
 </p>
 
 ## What is OpenRAC Editor?
