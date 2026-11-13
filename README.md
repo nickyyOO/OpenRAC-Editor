@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/editor.png" alt="OpenRAC Editor with Kerwan open: the scene tree, the 3D view and the inspector" width="100%">
+  <img src="docs/assets/cutscene-editor.gif" alt="A cutscene on Kerwan in the editor: the camera's view framed as the game shows it, with letterbox and subtitles, and the Cutscene dock's timeline below" width="100%">
 </p>
 
 ## What is OpenRAC Editor?
@@ -40,42 +40,68 @@ Ratchet & Clank levels.
 
 ## Features
 
+### Make your own cutscenes
+
+Add a Cutscene to a level and direct it: key the camera, place characters, give them lines,
+voices and music. The Cutscene dock shows the whole scene on one timeline, and the 3D view shows
+the camera's picture framed as the game shows it (4:3 or 16:9), with the letterbox, the safe areas
+and the subtitles.
+
+Saving the level writes the cutscene beside it, and the cutscene player mod plays it in OpenRAC
+when its trigger happens: the level starting, walking into an area, talking to someone, picking
+something up, a mission flag, or another cutscene ending. Start skips it, and a skip leaves the
+world just as watching does.
+
+<p align="center">
+  <img src="docs/assets/cutscene-in-game.gif" alt="The cutscene playing in OpenRAC: letterbox, subtitles, a camera move and a cut" width="80%">
+</p>
+
+### Characters that stand on the ground
+
+Actors are the level's own characters, new ones of any class the level has, a figure in the hero's
+look, or your own glTF meshes. They walk along paths, play the game's animations and look at each
+other. **Foot IK** keeps their feet on steps and slopes: a scene made on flat ground still stands
+right where the ground is not.
+
+<p align="center">
+  <img src="docs/assets/foot-ik.gif" alt="Ratchet standing on the edge of a step: without foot IK one foot floats, with foot IK it reaches down to the lower ground" width="80%">
+</p>
+
+Faces move too: mouths follow the voice lines, eyes blink, and moods (happy, angry, ...) change the
+face over time. Animation layers move only some joints (an arm, the head) over the animation under
+them, and an animation from another rig (a glTF file) can be retargeted onto a character.
+
+### Subtitles in the disc's languages
+
+Lines are written in each language the disc has (English, French, German, Spanish and Italian on
+PAL, English on NTSC-U), one field each, and the game shows the one it is set to. Lines the game's
+font cannot write, such as accented letters, are drawn into the file as pictures.
+
+### Events
+
+At any time a cutscene can hide, show or remove objects, set a mission flag, fade, add heat haze,
+change the fog and background colour, slow time down, play another cutscene or travel to another
+planet.
+
+See [the cutscene format](docs/CUTSCENE_FORMAT.md).
+
 ### Every object, in the scene tree
 
 Each moby, tie and shrub of a level is a node. Pick one in the 3D view or the scene tree, then move,
 turn or scale it, copy it, or delete it. The inspector shows what the game stores for each moby,
 such as its spawn id, group, colour and class variables, and your changes go back into the level.
 
-<p align="center">
-  <img src="docs/assets/inspector.png" alt="The vendor picked in the 3D view, with its game data in the inspector" width="100%">
-</p>
-
-### Collision
+### Collision and gameplay data
 
 The Collision panel draws the ground the game tests Ratchet against, coloured by surface type. Pick
-faces in the 3D view to repaint, move or delete them, or add new ones on the game's grid. Each
-kind of object has its own collision shapes to edit too, and every change can be undone.
-
-<p align="center">
-  <img src="docs/assets/collision.png" alt="The Collision panel showing Kerwan's ground by surface type" width="100%">
-</p>
-
-### Gameplay data
-
-Change what each level starts with: fog and background colour, the height where Ratchet falls to
-his death, where the ship lands, cameras, sounds, volumes, paths and grind rails.
+faces to repaint, move or delete them, or add new ones on the game's grid. Change what each level
+starts with too: fog and background colour, the height where Ratchet falls to his death, where the
+ship lands, cameras, sounds, volumes, paths and grind rails.
 
 ### Play your changes
 
 The OpenRAC launcher packs your edits into a mod and starts the game with them. Your disc image is
 never changed. You can also build a whole new world and add it as a ship destination.
-
-### Cutscenes
-
-Add a Cutscene to a level, key its camera and actors on the timeline, and give it lines, sounds and
-events. Saving the level writes it next to the level, and the cutscene player mod plays it in
-OpenRAC when its trigger happens: walking into an area, talking to someone, picking something up.
-See [the cutscene format](docs/CUTSCENE_FORMAT.md).
 
 ### Work with an AI assistant
 
