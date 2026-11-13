@@ -81,6 +81,30 @@ struct Level {
 };
 Level g_level;
 
+// A level moby by its spawn id (the record's uid, as the editor writes it): the port finds a moby
+// by its key (the record's place), so the level's uids are mapped to keys once a load. A port
+// without moby_uid takes the spawn id as the key.
+std::map<int, int> g_uid_keys;
+std::uint32_t g_uid_loads = ~0u;
+int spawn_slot(int uid) {
+    if (uid < 0) return -1;
+    if (!API_HAS(moby_uid)) return g_api->moby_slot(uid);
+    if (g_uid_loads != g_level.loads || g_uid_keys.empty()) {
+        g_uid_loads = g_level.loads;
+        g_uid_keys.clear();
+        std::vector<openrac_moby> list(4096);
+        for (openrac_moby& m : list) m.size = sizeof(openrac_moby);
+        const int n = std::min(g_api->moby_list(list.data(), static_cast<int>(list.size())), static_cast<int>(list.size()));
+        for (int i = 0; i < n; ++i) {
+            if (list[i].key < 0) continue;
+            const int id = g_api->moby_uid(list[i].slot);
+            if (id >= 0) g_uid_keys.emplace(id, list[i].key);
+        }
+    }
+    const auto it = g_uid_keys.find(uid);
+    return it != g_uid_keys.end() ? g_api->moby_slot(it->second) : -1;
+}
+
 std::string pack_folder() {
     char buf[4096];
     return g_api->pack_folder(buf, sizeof(buf)) > 0 ? std::string(buf) : std::string();
@@ -367,6 +391,10 @@ struct Play {
     float last_stretch = 1;    // the slow motion last asked for
     std::vector<int> ties_hidden;  // ties hidden only for the scene
     std::vector<int> mobys_hidden;  // level mobys hidden only for the scene (their slots)
+    // Level mobys a hide or show event set, and how: kept so each tick, as the class's own code
+    // may hide or show the moby again (an amoeboid hides itself until Ratchet comes near).
+    std::map<int, bool> mobys_forced;
+    std::vector<int> mobys_shown;  // level mobys hidden before, shown only for the scene
     bool hud_hidden = false;
     std::string music = "keep";  // options.music, when the port can lower it
 };
@@ -924,7 +952,7 @@ void actors_begin(Play& p) {
         std::memcpy(first.rotation, &rot, sizeof(float) * 3);
         first.scale = 0;  // the class's own size; the track's scale multiplies it from the first tick
         if (src.has("spawn_id")) {
-            a.slot = g_api->moby_slot(src["spawn_id"].integer());
+            a.slot = spawn_slot(src["spawn_id"].integer());
             const bool taken = std::any_of(p.actors.begin(), p.actors.end(), [&](const ActorRun& o) {
                 return o.kind == ActorRun::Kind::Moby && o.slot == a.slot;
             });
@@ -1420,17 +1448,29 @@ void event_run(Play& p, const Value& e) {
     const std::string what = e["do"].string();
     const int level = e["level"].integer(g_level.number);
     if (what == "moby_hide" || what == "moby_kill") {
-        const int slot = g_api->moby_slot(e["spawn_id"].integer());
+        const int slot = spawn_slot(e["spawn_id"].integer());
         if (slot < 0) return;
         if (what == "moby_kill") {
             g_api->moby_kill(g_mod, slot);
+            p.mobys_forced.erase(slot);
+            std::erase(p.mobys_shown, slot);
             std::erase(p.mobys_hidden, slot);
         } else {
             const bool on = e["on"].boolean(true);
+            const openrac_moby* before = moby_at(slot);
+            const bool was_hidden = before != nullptr && (before->flags & OPENRAC_MOBY_HIDDEN) != 0;
             if (g_api->moby_hide(g_mod, slot, on ? 1 : 0) != OPENRAC_HOOK_OK) return;
-            // Not persistent: shown again when the scene ends.
-            std::erase(p.mobys_hidden, slot);
-            if (on && !e["persistent"].boolean()) p.mobys_hidden.push_back(slot);
+            p.mobys_forced[slot] = on;
+            // Not persistent: as it was when the scene ends.
+            const bool restore = !e["persistent"].boolean();
+            if (!std::count(p.mobys_hidden.begin(), p.mobys_hidden.end(), slot)
+                && !std::count(p.mobys_shown.begin(), p.mobys_shown.end(), slot) && restore) {
+                if (on && !was_hidden) p.mobys_hidden.push_back(slot);
+                if (!on && was_hidden) p.mobys_shown.push_back(slot);
+            } else if (!restore) {
+                std::erase(p.mobys_hidden, slot);
+                std::erase(p.mobys_shown, slot);
+            }
         }
     } else if (what == "mission_flag") {
         std::uint8_t flags[OPENRAC_MISSION_STATE_SIZE] = {};
@@ -1562,6 +1602,7 @@ void finish(bool level_gone) {
     if (!level_gone) {
         for (int tie : p.ties_hidden) g_api->tie_hide(g_mod, tie, 0);
         for (int slot : p.mobys_hidden) g_api->moby_hide(g_mod, slot, 0);
+        for (int slot : p.mobys_shown) g_api->moby_hide(g_mod, slot, 1);
     }
     g_api->camera_set(g_mod, nullptr);
     g_api->hero_release(g_mod);
@@ -1622,6 +1663,11 @@ void finish(bool level_gone) {
 void play_tick() {
     Play& p = *g_play;
     read_mobys();
+    // What the scene's events set wins over the class's code while the scene plays.
+    for (const auto& [slot, hidden] : p.mobys_forced) {
+        const openrac_moby* m = moby_at(slot);
+        if (m != nullptr && ((m->flags & OPENRAC_MOBY_HIDDEN) != 0) != hidden) g_api->moby_hide(g_mod, slot, hidden ? 1 : 0);
+    }
     if (!p.started) {
         // The first tick: the hero hidden if asked, the actors taken or made.
         p.started = true;
@@ -1747,7 +1793,7 @@ void triggers_tick(const openrac_play_status& s) {
             now = in && !c.inside;
             c.inside = in;
         } else if (kind == "talk") {
-            const int slot = g_api->moby_slot(tr["spawn_id"].integer(-1));
+            const int slot = spawn_slot(tr["spawn_id"].integer(-1));
             if (!mobys_read) read_mobys(), mobys_read = true;
             if (const openrac_moby* m = moby_at(slot); m && has_hero) {
                 const V3 mp{m->position[0], m->position[1], m->position[2]};
@@ -1757,7 +1803,7 @@ void triggers_tick(const openrac_play_status& s) {
                 }
             }
         } else if (kind == "pickup") {
-            const bool here = g_api->moby_slot(tr["spawn_id"].integer(-1)) >= 0;
+            const bool here = spawn_slot(tr["spawn_id"].integer(-1)) >= 0;
             now = c.present && !here;
             c.present = here;
         } else if (kind == "flag") {
@@ -1797,7 +1843,7 @@ void frame() {
         for (Cutscene& c : g_level.scenes) {
             c.inside = false;
             c.pending = false;
-            c.present = g_api->moby_slot(c.doc["trigger"]["spawn_id"].integer(-1)) >= 0;
+            c.present = spawn_slot(c.doc["trigger"]["spawn_id"].integer(-1)) >= 0;
             c.flag_was = flag_holds(c.doc["trigger"]["flag"]);
         }
         char code[8] = "en";

@@ -321,8 +321,13 @@ uses. `game_sound` is an entry of the actor's class's sound table (the hero's wh
 ```
 
 `persistent` events are the ones a skip must still apply. A `moby_hide` or `tie_hide` that is
-not `persistent` lasts only for the scene: what it hid shows again when the scene ends, so a skip
-leaves the level as watching does. A `moby_kill` and a `mission_flag` always last.
+not `persistent` lasts only for the scene: what it hid shows again, and what it showed hides
+again, when the scene ends, so a skip leaves the level as watching does. While the scene plays, a
+`moby_hide` holds: the player sets it again each tick, so a class whose own code hides or shows
+the moby (an amoeboid until Ratchet comes near) does not undo it. `spawn_id` is the record's uid
+(the editor's `rc1_spawn_id`), not its place in the level; the player maps one to the other with
+the port's `moby_uid` (SDK 1.14.9; an older port takes it as the place). A `moby_kill` and a
+`mission_flag` always last.
 
 A `fade` goes from the colour before it (none at first) to `to`, `[r, g, b]` or `[r, g, b, a]`
 from 0 to 1, over `length` ticks (30 if not given, 0 at once). `to` as `null` or with `a` 0 clears
