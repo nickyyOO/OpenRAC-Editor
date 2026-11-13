@@ -52,10 +52,6 @@ when its trigger happens: the level starting, walking into an area, talking to s
 something up, a mission flag, or another cutscene ending. Start skips it, and a skip leaves the
 world just as watching does.
 
-<p align="center">
-  <img src="docs/assets/cutscene-in-game.gif" alt="The cutscene playing in OpenRAC: Ratchet stands while a second Ratchet walks up, with letterbox, subtitles, a camera move and a cut" width="80%">
-</p>
-
 ### Characters that stand on the ground
 
 Actors are the level's own characters, new ones of any class the level has, a figure in the hero's
