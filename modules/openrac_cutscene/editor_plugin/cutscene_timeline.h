@@ -37,6 +37,7 @@ private:
 	double length = 1.0;
 	double zoom = 120.0; // pixels a second
 	double scroll = 0.0; // seconds at the left edge
+	bool fit = false; // zoom to the whole cutscene at the next draw
 	// A drag in progress: seeking, or moving an item's start.
 	bool seeking = false;
 	ObjectID dragged;
@@ -64,6 +65,10 @@ public:
 	void seek(double p_seconds);
 	double get_length() const { return length; }
 	void set_zoom(double p_zoom);
+	double get_zoom() const { return zoom; }
+	// Zooms so the whole cutscene fits the view.
+	void fit_to_length();
+	CursorShape get_cursor_shape(const Point2 &p_pos = Point2i()) const override;
 	void set_scroll(double p_seconds);
 	double get_scroll() const { return scroll; }
 	double visible_seconds() const;
@@ -79,6 +84,9 @@ class CutsceneTimeline : public EditorDock {
 	HScrollBar *scroll = nullptr;
 	Button *play = nullptr;
 	Button *rewind = nullptr;
+	Button *zoom_out = nullptr;
+	Button *zoom_fit = nullptr;
+	Button *zoom_in = nullptr;
 	Label *time = nullptr;
 	double last_position = -1.0;
 	bool updating_scroll = false;
@@ -86,6 +94,8 @@ class CutsceneTimeline : public EditorDock {
 
 	void _play_pressed();
 	void _rewind_pressed();
+	void _zoom_by(double p_factor);
+	void _zoom_fit();
 	void _scrolled(double p_value);
 	void _update_scroll();
 

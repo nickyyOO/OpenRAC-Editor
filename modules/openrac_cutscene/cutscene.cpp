@@ -396,6 +396,56 @@ void Cutscene::set_length(double p_seconds) { length = MAX(0.0, p_seconds); }
 double Cutscene::get_length() const { return length; }
 void Cutscene::set_languages(const PackedStringArray &p_languages) { languages = p_languages; }
 PackedStringArray Cutscene::get_languages() const { return languages; }
+
+String Cutscene::language_name(const String &p_code) {
+	for (size_t i = 0; i < std::size(LANGUAGE_CODES); i++) {
+		if (p_code == LANGUAGE_CODES[i]) {
+			return LANGUAGE_NAMES[i];
+		}
+	}
+	return p_code;
+}
+
+String Cutscene::language_code(const String &p_name) {
+	for (size_t i = 0; i < std::size(LANGUAGE_NAMES); i++) {
+		if (p_name == LANGUAGE_NAMES[i]) {
+			return LANGUAGE_CODES[i];
+		}
+	}
+	return p_name;
+}
+
+void Cutscene::set_translations(int p_bits) {
+	PackedStringArray codes;
+	for (size_t i = 0; i < std::size(LANGUAGE_CODES); i++) {
+		if (p_bits & (1 << i)) {
+			codes.push_back(LANGUAGE_CODES[i]);
+		}
+	}
+	set_languages(codes);
+	notify_property_list_changed();
+}
+
+int Cutscene::get_translations() const {
+	int bits = 0;
+	for (size_t i = 0; i < std::size(LANGUAGE_CODES); i++) {
+		if (languages.has(LANGUAGE_CODES[i])) {
+			bits |= 1 << i;
+		}
+	}
+	return bits;
+}
+
+PackedStringArray Cutscene::text_languages() const {
+	if (!languages.is_empty()) {
+		return languages;
+	}
+	PackedStringArray codes;
+	for (const String &code : cutscene_math::disc_languages(level_json(scene_dir_of(this)).get("version", ""))) {
+		codes.push_back(code);
+	}
+	return codes;
+}
 void Cutscene::set_trigger_kind(TriggerKind p_kind) {
 	trigger_kind = p_kind;
 	notify_property_list_changed();
@@ -1076,7 +1126,16 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 			if (sound->get_game_sound() >= 0) {
 				s["game_sound"] = sound->get_game_sound();
 			} else if (!sound->get_files().is_empty()) {
-				s["file"] = sound->get_files();
+				// A language with no file of its own takes `file`.
+				Dictionary by_language = sound->get_files().duplicate();
+				if (!sound->get_file().is_empty()) {
+					for (const String &code : text_languages()) {
+						if (!by_language.has(code)) {
+							by_language[code] = sound->get_file();
+						}
+					}
+				}
+				s["file"] = by_language;
 			} else if (!sound->get_file().is_empty()) {
 				s["file"] = sound->get_file();
 			} else {
@@ -1951,6 +2010,21 @@ void Cutscene::_validate_property(PropertyInfo &p_property) const {
 			(name == "trigger_flag" && !trigger_flag_enabled && trigger_kind != TRIGGER_FLAG)) {
 		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 	}
+	if (name == "languages") {
+		p_property.usage = PROPERTY_USAGE_STORAGE; // shown as the Translations tick boxes
+	}
+	if (name == "translations") {
+		// Only the languages the disc has (per region), and any already set.
+		const Dictionary info = level_json(scene_dir_of(this));
+		const Vector<String> disc = info.has("version") ? cutscene_math::disc_languages(info["version"]) : Vector<String>();
+		PackedStringArray choices;
+		for (size_t i = 0; i < std::size(LANGUAGE_CODES); i++) {
+			if (disc.is_empty() || disc.has(LANGUAGE_CODES[i]) || languages.has(LANGUAGE_CODES[i])) {
+				choices.push_back(vformat("%s:%d", LANGUAGE_NAMES[i], 1 << i));
+			}
+		}
+		p_property.hint_string = String(",").join(choices);
+	}
 }
 
 void Cutscene::_bind_methods() {
@@ -1964,6 +2038,9 @@ void Cutscene::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_length"), &Cutscene::get_length);
 	ClassDB::bind_method(D_METHOD("set_languages", "languages"), &Cutscene::set_languages);
 	ClassDB::bind_method(D_METHOD("get_languages"), &Cutscene::get_languages);
+	ClassDB::bind_method(D_METHOD("set_translations", "bits"), &Cutscene::set_translations);
+	ClassDB::bind_method(D_METHOD("get_translations"), &Cutscene::get_translations);
+	ClassDB::bind_method(D_METHOD("text_languages"), &Cutscene::text_languages);
 	ClassDB::bind_method(D_METHOD("set_trigger_kind", "kind"), &Cutscene::set_trigger_kind);
 	ClassDB::bind_method(D_METHOD("get_trigger_kind"), &Cutscene::get_trigger_kind);
 	ClassDB::bind_method(D_METHOD("set_trigger_once", "once"), &Cutscene::set_trigger_once);
@@ -2018,6 +2095,8 @@ void Cutscene::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "game"), "set_game", "get_game");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "length", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_length", "get_length");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_STRING_ARRAY, "languages"), "set_languages", "get_languages");
+	// None ticked: the disc's own languages.
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "translations", PROPERTY_HINT_FLAGS, "English,French,German,Spanish,Italian,Japanese", PROPERTY_USAGE_EDITOR), "set_translations", "get_translations");
 
 	ADD_GROUP("Trigger", "trigger_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "trigger_kind", PROPERTY_HINT_ENUM, "Level Start,Area,Talk,Pickup,After,Flag,Manual"), "set_trigger_kind", "get_trigger_kind");
@@ -2097,6 +2176,17 @@ void CutsceneCamera::set_ride_on(const NodePath &p_actor) { ride_on = p_actor; }
 NodePath CutsceneCamera::get_ride_on() const { return ride_on; }
 bool CutsceneCamera::get_export_fov() const { return export_fov; }
 
+void CutsceneCamera::_validate_property(PropertyInfo &p_property) const {
+	// The game's camera has a place, a turn and a field of view: the rest of Camera3D is not exported.
+	static const char *const unused[] = { "keep_aspect", "cull_mask", "environment", "attributes", "compositor", "h_offset", "v_offset", "doppler_tracking", "projection", "size", "frustum_offset", "near", "far" };
+	for (const char *name : unused) {
+		if (p_property.name == name) {
+			p_property.usage &= ~PROPERTY_USAGE_EDITOR;
+			return;
+		}
+	}
+}
+
 void CutsceneCamera::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_cuts", "seconds"), &CutsceneCamera::set_cuts);
 	ClassDB::bind_method(D_METHOD("get_cuts"), &CutsceneCamera::get_cuts);
@@ -2106,7 +2196,6 @@ void CutsceneCamera::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_ride_on", "actor"), &CutsceneCamera::set_ride_on);
 	ClassDB::bind_method(D_METHOD("get_ride_on"), &CutsceneCamera::get_ride_on);
 	ClassDB::bind_method(D_METHOD("get_export_fov"), &CutsceneCamera::get_export_fov);
-	ADD_GROUP("Cutscene", "");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT32_ARRAY, "cuts"), "set_cuts", "get_cuts");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ease_back"), "set_ease_back", "get_ease_back");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "export_fov"), "set_export_fov", "get_export_fov");
@@ -2356,6 +2445,70 @@ void CutsceneSubtitle::set_text(const Dictionary &p_text) { text = p_text; }
 Dictionary CutsceneSubtitle::get_text() const { return text; }
 void CutsceneSubtitle::set_speaker(const NodePath &p_actor) { speaker = p_actor; }
 NodePath CutsceneSubtitle::get_speaker() const { return speaker; }
+
+static Cutscene *cutscene_above(const Node *p_node);
+
+// One field a language, flat so none is folded away: "english" for the "en" line. The disc's languages (or the cutscene's own)
+// come first; a line in another language stays, under its code.
+static PackedStringArray language_fields(const Node *p_node, const Dictionary &p_have) {
+	const Cutscene *cs = cutscene_above(p_node);
+	PackedStringArray codes = cs != nullptr ? cs->text_languages() : PackedStringArray({ "en" });
+	for (const Variant &code : p_have.keys()) {
+		if (!codes.has(code)) {
+			codes.push_back(code);
+		}
+	}
+	return codes;
+}
+
+// The language of a field's name ("french" + suffix), or "" for any other property. A code that
+// has no name ("pt") is its own name, when `p_have` has it.
+static String field_language(const String &p_name, const String &p_suffix, const Dictionary &p_have) {
+	if (!p_name.ends_with(p_suffix)) {
+		return String();
+	}
+	const String word = p_name.left(p_name.length() - p_suffix.length());
+	for (size_t i = 0; i < std::size(Cutscene::LANGUAGE_NAMES); i++) {
+		if (word == String(Cutscene::LANGUAGE_NAMES[i]).to_lower()) {
+			return Cutscene::LANGUAGE_CODES[i];
+		}
+	}
+	return p_have.has(word) ? word : String();
+}
+
+void CutsceneSubtitle::_validate_property(PropertyInfo &p_property) const {
+	if (p_property.name == "text") {
+		p_property.usage = PROPERTY_USAGE_STORAGE; // shown one field a language
+	}
+}
+
+bool CutsceneSubtitle::_set(const StringName &p_name, const Variant &p_value) {
+	const String code = field_language(p_name, "", text);
+	if (code.is_empty()) {
+		return false;
+	}
+	if (String(p_value).strip_edges().is_empty()) {
+		text.erase(code);
+	} else {
+		text[code] = p_value;
+	}
+	return true;
+}
+
+bool CutsceneSubtitle::_get(const StringName &p_name, Variant &r_ret) const {
+	const String code = field_language(p_name, "", text);
+	if (code.is_empty()) {
+		return false;
+	}
+	r_ret = text.get(code, String());
+	return true;
+}
+
+void CutsceneSubtitle::_get_property_list(List<PropertyInfo> *p_list) const {
+	for (const String &code : language_fields(this, text)) {
+		p_list->push_back(PropertyInfo(Variant::STRING, Cutscene::language_name(code).to_lower(), PROPERTY_HINT_MULTILINE_TEXT, "", PROPERTY_USAGE_EDITOR));
+	}
+}
 
 void CutsceneSubtitle::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_start", "seconds"), &CutsceneSubtitle::set_start);
@@ -2866,6 +3019,53 @@ double CutsceneSound::get_fade_out() const { return fade_out; }
 void CutsceneSound::set_stop(double p_seconds) { stop = MAX(0.0, p_seconds); }
 double CutsceneSound::get_stop() const { return stop; }
 
+void CutsceneSound::_validate_property(PropertyInfo &p_property) const {
+	const String &name = p_property.name;
+	const bool game = game_sound >= 0;
+	if (name == "files" || (name == "file" && game) || (name == "game_sound" && !game && kind != KIND_SFX)) {
+		p_property.usage &= ~PROPERTY_USAGE_EDITOR;
+	}
+	if (name == "kind" || name == "game_sound") {
+		p_property.usage |= PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED;
+	}
+}
+
+// A voice in more than one language: a file a language ("french_file"), empty for `file`.
+bool CutsceneSound::_set(const StringName &p_name, const Variant &p_value) {
+	const String code = field_language(p_name, "_file", files);
+	if (code.is_empty()) {
+		return false;
+	}
+	if (String(p_value).strip_edges().is_empty()) {
+		files.erase(code);
+	} else {
+		files[code] = p_value;
+	}
+	return true;
+}
+
+bool CutsceneSound::_get(const StringName &p_name, Variant &r_ret) const {
+	const String code = field_language(p_name, "_file", files);
+	if (code.is_empty()) {
+		return false;
+	}
+	r_ret = files.get(code, String());
+	return true;
+}
+
+void CutsceneSound::_get_property_list(List<PropertyInfo> *p_list) const {
+	if (game_sound >= 0 || (kind != KIND_VOICE && files.is_empty())) {
+		return;
+	}
+	const PackedStringArray codes = language_fields(this, files);
+	if (codes.size() < 2 && files.is_empty()) {
+		return; // one language: File is its file
+	}
+	for (const String &code : codes) {
+		p_list->push_back(PropertyInfo(Variant::STRING, Cutscene::language_name(code).to_lower() + "_file", PROPERTY_HINT_PLACEHOLDER_TEXT, "the File above", PROPERTY_USAGE_EDITOR));
+	}
+}
+
 void CutsceneSound::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_start", "seconds"), &CutsceneSound::set_start);
 	ClassDB::bind_method(D_METHOD("get_start"), &CutsceneSound::get_start);
@@ -2891,7 +3091,7 @@ void CutsceneSound::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "kind", PROPERTY_HINT_ENUM, "Voice,Music,Sfx"), "set_kind", "get_kind");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "file", PROPERTY_HINT_PLACEHOLDER_TEXT, "audio/line.ogg, beside the .cutscene"), "set_file", "get_file");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "files", PROPERTY_HINT_DICTIONARY_TYPE, "String;String"), "set_files", "get_files");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "game_sound", PROPERTY_HINT_RANGE, "-1,255,1"), "set_game_sound", "get_game_sound");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "game_sound", PROPERTY_HINT_RANGE, "-1,255,1"), "set_game_sound", "get_game_sound"); // -1: a file
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "source", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "CutsceneActor"), "set_source", "get_source");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "volume", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_volume", "get_volume");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fade_in", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:s"), "set_fade_in", "get_fade_in");

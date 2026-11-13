@@ -81,7 +81,7 @@ EditorInspectorActionButton::EditorInspectorActionButton(const String &p_text, c
 	icon_name = p_icon_name;
 	set_text(p_text);
 	set_theme_type_variation(SNAME("InspectorActionButton"));
-	set_h_size_flags(SIZE_SHRINK_CENTER);
+	set_h_size_flags(SIZE_FILL); // OpenRAC Editor: full width, so buttons one above another match.
 }
 
 bool EditorInspector::_property_path_matches(const String &p_property_path, const String &p_filter, EditorPropertyNameProcessor::Style p_style) {

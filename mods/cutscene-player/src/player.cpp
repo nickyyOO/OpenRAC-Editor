@@ -1213,7 +1213,7 @@ void subtitles_tick(Play& p, int t) {
             line.x = 0.5f;
             line.y = 0.80f + 0.055f * static_cast<float>(r) - 0.0275f * static_cast<float>(rows.size() - 1);
             line.scale = 0.75f;
-            line.rgba[0] = line.rgba[1] = line.rgba[2] = 128;
+            line.rgba[0] = line.rgba[1] = line.rgba[2] = 190; // white, as the picture lines (the font is grey at 128)
             line.rgba[3] = 255;
             line.flags = OPENRAC_HUD_SHADOW;
             lines.push_back(line);

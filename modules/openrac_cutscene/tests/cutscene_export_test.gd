@@ -963,6 +963,57 @@ func test_odd_numbers() -> void:
 	root.queue_free()
 
 
+func names_of(node: Object) -> Array:
+	var out := []
+	for p in node.get_property_list():
+		if p["usage"] & PROPERTY_USAGE_EDITOR:
+			out.append(p["name"])
+	return out
+
+
+func test_inspector_fields() -> void:
+	# What the inspector shows: a field a language of the disc, and only the fields that count.
+	var root := make_level("user://t/level_13", {"level": 13, "version": "pal"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Fields"
+	check(cs.text_languages() == PackedStringArray(["en", "fr", "de", "es", "it"]), "the PAL disc's languages: %s" % [cs.text_languages()])
+	var shown := names_of(cs)
+	check(not shown.has("languages") and shown.has("translations"), "languages as tick boxes")
+	var hint := ""
+	for p in cs.get_property_list():
+		if p["name"] == "translations":
+			hint = p["hint_string"]
+	check(not hint.contains("Japanese") and hint.contains("Italian:16"), "only the disc's languages to tick: %s" % [hint])
+	cs.translations = 1 | 2
+	check(cs.languages == PackedStringArray(["en", "fr"]) and cs.translations == 3, "ticked: %s" % [cs.languages])
+	cs.translations = 0
+	check(cs.languages.is_empty(), "none ticked: the disc's own")
+	var line = add(cs, CutsceneSubtitle.new(), root)
+	shown = names_of(line)
+	check(not shown.has("text") and shown.has("english") and shown.has("italian") and not shown.has("japanese"), "a field a language: %s" % [shown])
+	line.set("french", "Salut")
+	line.set("english", "Hi")
+	line.set("english", "  ")
+	check(line.text == {"fr": "Salut"} and line.get("french") == "Salut", "a field sets its language, empty drops it: %s" % [line.text])
+	var cam = add(cs, CutsceneCamera.new(), root)
+	shown = names_of(cam)
+	check(shown.has("fov") and shown.has("current") and shown.has("cuts") and not shown.has("near") and not shown.has("environment") and not shown.has("h_offset"), "the camera's own fields only")
+	var sound = add(cs, CutsceneSound.new(), root)
+	sound.file = "audio/hi.ogg"
+	shown = names_of(sound)
+	check(not shown.has("files") and not shown.has("game_sound") and shown.has("german_file"), "a voice: a file and one a language: %s" % [shown])
+	sound.set("german_file", "audio/hallo.ogg")
+	var d: Dictionary = cs.to_cutscene()
+	check(d["sounds"][0]["file"] == {"de": "audio/hallo.ogg", "en": "audio/hi.ogg", "fr": "audio/hi.ogg", "es": "audio/hi.ogg", "it": "audio/hi.ogg"}, "the other languages take File: %s" % [d["sounds"][0]["file"]])
+	sound.kind = CutsceneSound.KIND_SFX
+	sound.files = {}
+	shown = names_of(sound)
+	check(shown.has("game_sound") and shown.has("file") and not shown.has("german_file"), "an effect: a file or the game's own: %s" % [shown])
+	sound.game_sound = 3
+	check(not names_of(sound).has("file"), "the game's own: no file")
+	root.queue_free()
+
+
 # Run on the first frame: before it the root is not in the tree yet, so neither are the levels.
 func _process(_delta: float) -> bool:
 	test_full_cutscene()
@@ -979,6 +1030,7 @@ func _process(_delta: float) -> bool:
 	test_game_view()
 	test_layers()
 	test_retarget()
+	test_inspector_fields()
 	print("cutscene export: ", "%d check(s) failed" % failures if failures else "all checks passed")
 	quit(1 if failures else 0)
 	return true

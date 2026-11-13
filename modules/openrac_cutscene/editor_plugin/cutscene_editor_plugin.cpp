@@ -112,7 +112,7 @@ void CutsceneEditorPlugin::forward_3d_force_draw_over_viewport(Control *p_overla
 		p_overlay->draw_rect(title, Color(1, 0.8, 0.2, 0.6), false, 1.0);
 		const Rect2 band(hud_rect.position.x + hud_rect.size.x * 0.1f, hud_rect.position.y + hud_rect.size.y * (0.80f - 0.0825f - 0.03f),
 				hud_rect.size.x * 0.8f, hud_rect.size.y * (0.165f + 0.06f));
-		p_overlay->draw_rect(band, Color(0.4, 0.8, 1, 0.5), false, 1.0);
+		p_overlay->draw_rect(band, Color(1, 1, 1, 0.35), false, 1.0);
 	}
 	if (subtitles && cutscene != nullptr) {
 		const PackedStringArray rows = cutscene->subtitles_at(cutscene->get_timeline_position());

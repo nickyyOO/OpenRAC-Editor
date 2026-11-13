@@ -98,6 +98,15 @@ public:
 	double get_length() const;
 	void set_languages(const PackedStringArray &p_languages);
 	PackedStringArray get_languages() const;
+	// The languages as the inspector's tick boxes (bits of LANGUAGE_CODES); none: the disc's own.
+	void set_translations(int p_bits);
+	int get_translations() const;
+	// The languages the lines are written in: the set ones, else the disc's (from level.json).
+	PackedStringArray text_languages() const;
+	static constexpr const char *LANGUAGE_CODES[] = { "en", "fr", "de", "es", "it", "ja" };
+	static constexpr const char *LANGUAGE_NAMES[] = { "English", "French", "German", "Spanish", "Italian", "Japanese" };
+	static String language_name(const String &p_code);
+	static String language_code(const String &p_name);
 	void set_trigger_kind(TriggerKind p_kind);
 	TriggerKind get_trigger_kind() const;
 	void set_trigger_once(bool p_once);
@@ -173,6 +182,7 @@ class CutsceneCamera : public Camera3D {
 
 protected:
 	static void _bind_methods();
+	void _validate_property(PropertyInfo &p_property) const;
 
 public:
 	// The game's own vertical field of view, about (the player's kGameFov), so a new camera sees
@@ -435,6 +445,10 @@ class CutsceneSubtitle : public Node {
 
 protected:
 	static void _bind_methods();
+	void _validate_property(PropertyInfo &p_property) const;
+	bool _set(const StringName &p_name, const Variant &p_value);
+	bool _get(const StringName &p_name, Variant &r_ret) const;
+	void _get_property_list(List<PropertyInfo> *p_list) const;
 
 public:
 	void set_start(double p_seconds);
@@ -473,6 +487,10 @@ private:
 
 protected:
 	static void _bind_methods();
+	void _validate_property(PropertyInfo &p_property) const;
+	bool _set(const StringName &p_name, const Variant &p_value);
+	bool _get(const StringName &p_name, Variant &r_ret) const;
+	void _get_property_list(List<PropertyInfo> *p_list) const;
 
 public:
 	void set_start(double p_seconds);

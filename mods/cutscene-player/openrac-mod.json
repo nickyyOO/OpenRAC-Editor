@@ -6,7 +6,7 @@
   "author": "OpenRAC",
   "description": "Plays the cutscenes made in OpenRAC Editor: camera, characters, subtitles in the disc's language, voices and music. Start skips one.",
   "license": "MIT",
-  "api": "1.0",
+  "api": "1.14",
   "games": {
     "rac1": [
       "pal",

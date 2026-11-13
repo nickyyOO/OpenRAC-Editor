@@ -41,6 +41,7 @@ These are deleted from the source:
   (#f5c040). Themes: OpenRAC and Black (OLED). Fonts: Inter and JetBrains Mono.
 - **Rendering:** Vulkan on Windows and Linux, Metal on macOS. One renderer, so no renderer switch.
 - **About window:** says what the editor is; Godot's authors and licenses stay.
+- **Inspector buttons** (tool buttons) take the inspector's full width, so a row of them lines up.
 
 ## Added
 

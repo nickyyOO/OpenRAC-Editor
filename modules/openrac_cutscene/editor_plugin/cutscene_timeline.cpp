@@ -58,11 +58,31 @@ Cutscene *CutsceneTimelineView::get_cutscene() const {
 
 void CutsceneTimelineView::set_cutscene(Cutscene *p_cutscene) {
 	const ObjectID id = p_cutscene != nullptr ? p_cutscene->get_instance_id() : ObjectID();
-	if (id != cutscene) {
-		cutscene = id;
-		scroll = 0.0;
-	}
+	const bool other = id != cutscene;
+	cutscene = id;
 	refresh();
+	if (other) {
+		scroll = 0.0;
+		fit = true; // a new cutscene opens whole, once the view has its width
+		queue_redraw();
+	}
+}
+
+void CutsceneTimelineView::fit_to_length() {
+	const double room = double(get_size().x - _label_width()) - 40.0 * EDSCALE; // room for "End" past it
+	if (room <= 0.0) {
+		return;
+	}
+	scroll = 0.0;
+	set_zoom(room / MAX(length, 0.5));
+}
+
+Control::CursorShape CutsceneTimelineView::get_cursor_shape(const Point2 &p_pos) const {
+	const Item *item = _item_at(p_pos);
+	if (dragged.is_valid() || (item != nullptr && item->movable && p_pos.x >= _label_width())) {
+		return CURSOR_HSIZE;
+	}
+	return Control::get_cursor_shape(p_pos);
 }
 
 void CutsceneTimelineView::refresh() {
@@ -337,6 +357,10 @@ void CutsceneTimelineView::_notification(int p_what) {
 	if (p_what != NOTIFICATION_DRAW) {
 		return;
 	}
+	if (fit && get_size().x > _label_width()) {
+		fit = false;
+		fit_to_length();
+	}
 	const Ref<Font> font = get_theme_font(SceneStringName(font), SNAME("Label"));
 	const int font_size = get_theme_font_size(SceneStringName(font_size), SNAME("Label"));
 	const Color text = get_theme_color(SceneStringName(font_color), SNAME("Label"));
@@ -351,9 +375,9 @@ void CutsceneTimelineView::_notification(int p_what) {
 		draw_string(font, Point2(8 * EDSCALE, ruler), TTR("Select a Cutscene, or a node in one, to see its timeline."), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, dim);
 		return;
 	}
-	// Past the end: shaded.
+	// Past the end: shaded, with a line where it ends.
 	if (end_x < size.x) {
-		draw_rect(Rect2(MAX(lw, end_x), 0, size.x - MAX(lw, end_x), size.y), Color(0, 0, 0, 0.25));
+		draw_rect(Rect2(MAX(lw, end_x), 0, size.x - MAX(lw, end_x), size.y), Color(0, 0, 0, 0.45));
 	}
 	// The ruler: seconds, and tenths when there is room.
 	const double step = zoom >= 300.0 ? 0.1 : (zoom >= 60.0 ? 0.5 : (zoom >= 20.0 ? 1.0 : 5.0));
@@ -406,6 +430,13 @@ void CutsceneTimelineView::_notification(int p_what) {
 		}
 	}
 	draw_line(Point2(lw, 0), Point2(lw, size.y), dim);
+	if (end_x >= lw && end_x <= size.x) {
+		draw_line(Point2(end_x, 0), Point2(end_x, size.y), text * Color(1, 1, 1, 0.7), 1.0);
+		const String end_text = TTR("End");
+		const real_t w = font->get_string_size(end_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size * 0.85).x;
+		const real_t at = end_x + 3 * EDSCALE + w <= size.x ? end_x + 3 * EDSCALE : end_x - 3 * EDSCALE - w;
+		draw_string(font, Point2(at, ruler - 6 * EDSCALE), end_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size * 0.85, text);
+	}
 	// Where the timeline is.
 	const real_t now = _x_of(get_cutscene()->get_timeline_position());
 	if (now >= lw && now <= size.x) {
@@ -439,6 +470,24 @@ void CutsceneTimeline::_play_pressed() {
 	player->play(player->get_assigned_animation());
 }
 
+void CutsceneTimeline::_zoom_by(double p_factor) {
+	// About the time where the timeline is when it is in sight, else the left edge.
+	const double now = get_cutscene() != nullptr ? get_cutscene()->get_timeline_position() : 0.0;
+	const double seen = view->visible_seconds();
+	const bool in_sight = now >= view->get_scroll() && now <= view->get_scroll() + seen;
+	const double anchor = in_sight ? now : view->get_scroll();
+	const double offset = anchor - view->get_scroll();
+	const double before = view->get_zoom();
+	view->set_zoom(before * p_factor);
+	view->set_scroll(anchor - offset * before / view->get_zoom());
+	_update_scroll();
+}
+
+void CutsceneTimeline::_zoom_fit() {
+	view->fit_to_length();
+	_update_scroll();
+}
+
 void CutsceneTimeline::_rewind_pressed() {
 	view->seek(0.0);
 }
@@ -462,6 +511,9 @@ void CutsceneTimeline::_notification(int p_what) {
 		case NOTIFICATION_THEME_CHANGED: {
 			play->set_button_icon(get_editor_theme_icon(SNAME("Play")));
 			rewind->set_button_icon(get_editor_theme_icon(SNAME("PlayStartBackwards")));
+			zoom_out->set_button_icon(get_editor_theme_icon(SNAME("ZoomLess")));
+			zoom_fit->set_button_icon(get_editor_theme_icon(SNAME("AnimationAutoFit")));
+			zoom_in->set_button_icon(get_editor_theme_icon(SNAME("ZoomMore")));
 		} break;
 		case NOTIFICATION_PROCESS: {
 			Cutscene *cs = get_cutscene();
@@ -511,11 +563,21 @@ CutsceneTimeline::CutsceneTimeline() {
 	time = memnew(Label);
 	time->set_h_size_flags(SIZE_EXPAND_FILL);
 	bar->add_child(time);
-	Label *help = memnew(Label);
-	help->set_text(TTRC("Click: go there or pick  |  Drag: move a start  |  Ctrl+wheel: zoom  |  Shift+wheel: scroll"));
-	help->set_theme_type_variation("HeaderSmall");
-	help->set_modulate(Color(1, 1, 1, 0.6));
-	bar->add_child(help);
+	zoom_out = memnew(Button);
+	zoom_out->set_flat(true);
+	zoom_out->set_tooltip_text(TTRC("Zoom out (Ctrl+wheel)"));
+	zoom_out->connect(SceneStringName(pressed), callable_mp(this, &CutsceneTimeline::_zoom_by).bind(1.0 / 1.5));
+	bar->add_child(zoom_out);
+	zoom_fit = memnew(Button);
+	zoom_fit->set_flat(true);
+	zoom_fit->set_tooltip_text(TTRC("Show the whole cutscene"));
+	zoom_fit->connect(SceneStringName(pressed), callable_mp(this, &CutsceneTimeline::_zoom_fit));
+	bar->add_child(zoom_fit);
+	zoom_in = memnew(Button);
+	zoom_in->set_flat(true);
+	zoom_in->set_tooltip_text(TTRC("Zoom in (Ctrl+wheel)"));
+	zoom_in->connect(SceneStringName(pressed), callable_mp(this, &CutsceneTimeline::_zoom_by).bind(1.5));
+	bar->add_child(zoom_in);
 
 	ScrollContainer *rows = memnew(ScrollContainer);
 	rows->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
@@ -525,6 +587,7 @@ CutsceneTimeline::CutsceneTimeline() {
 	view = memnew(CutsceneTimelineView);
 	view->set_h_size_flags(SIZE_EXPAND_FILL);
 	view->set_v_size_flags(SIZE_EXPAND_FILL);
+	view->set_tooltip_text(TTRC("Click: go to that time, or pick what is there.\nDrag a highlighted start to move it.\nCtrl+wheel: zoom.  Shift+wheel: scroll."));
 	rows->add_child(view);
 	scroll = memnew(HScrollBar);
 	scroll->set_step(0);
