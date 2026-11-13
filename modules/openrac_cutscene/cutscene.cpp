@@ -4,12 +4,14 @@
 #include "cutscene.h"
 
 #include "cutscene_math.h"
+#include "cutscene_rigs.h"
 
 #include "core/config/project_settings.h"
 #include "core/crypto/crypto_core.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/io/json.h"
+#include "core/io/marshalls.h"
 #include "core/math/math_funcs.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
@@ -502,6 +504,45 @@ AnimationPlayer *Cutscene::get_timeline() const {
 	return nullptr;
 }
 
+Rect2 Cutscene::game_frame(const Vector2 &p_size, bool p_wide) {
+	const real_t aspect = p_wide ? real_t(16.0 / 9.0) : real_t(4.0 / 3.0);
+	Vector2 size = p_size;
+	if (size.x > size.y * aspect) {
+		size.x = size.y * aspect;
+	} else {
+		size.y = size.x / aspect;
+	}
+	return Rect2((p_size - size) / 2, size);
+}
+
+double Cutscene::get_timeline_position() const {
+	AnimationPlayer *player = get_timeline();
+	if (player == nullptr || player->get_assigned_animation() == StringName() || !player->has_animation(player->get_assigned_animation())) {
+		return 0.0;
+	}
+	return player->get_current_animation_position();
+}
+
+PackedStringArray Cutscene::subtitles_at(double p_seconds, const String &p_language) const {
+	PackedStringArray rows;
+	const String language = !p_language.is_empty() ? p_language : (languages.is_empty() ? String("en") : languages[0]);
+	for (int i = 0; i < get_child_count(); i++) {
+		const CutsceneSubtitle *line = Object::cast_to<CutsceneSubtitle>(get_child(i));
+		if (line == nullptr || p_seconds < line->get_start() || p_seconds >= line->get_start() + line->get_duration()) {
+			continue;
+		}
+		const Dictionary text = line->get_text();
+		String said = text.get(language, String());
+		if (said.is_empty() && !text.is_empty()) {
+			said = text.values()[0];
+		}
+		for (const String &row : cutscene_math::wrap_subtitle(said)) {
+			rows.push_back(row);
+		}
+	}
+	return rows;
+}
+
 Ref<Animation> Cutscene::get_timeline_animation() const {
 	AnimationPlayer *player = get_timeline();
 	if (player == nullptr) {
@@ -521,7 +562,7 @@ Ref<Animation> Cutscene::get_timeline_animation() const {
 	return Ref<Animation>();
 }
 
-Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems) const {
+Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_files) const {
 	PackedStringArray problems;
 	Timeline tl;
 	tl.anim = get_timeline_animation();
@@ -645,13 +686,30 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems) const {
 			}
 			cuts = cutscene_math::sorted_unique(cuts);
 			Array keys;
+			const CutsceneActor *carrier = Object::cast_to<CutsceneActor>(cam->get_node_or_null(cam->get_ride_on()));
+			if (!cam->get_ride_on().is_empty() && carrier == nullptr) {
+				problems.push_back(vformat("%s rides on %s, which is not an actor: it does not ride", cam->get_name(), String(cam->get_ride_on())));
+			}
 			for (int t : sample_ticks(tl, cam, length_ticks, cuts)) {
 				const double time = t / cutscene_math::TICK_RATE;
 				const Transform3D at = game_at(tl, cam, time);
-				const Vector3 rot = cutscene_math::camera_rotation(-at.basis.get_column(2), at.basis.get_column(1));
+				Vector3 rot = cutscene_math::camera_rotation(-at.basis.get_column(2), at.basis.get_column(1));
 				Dictionary key;
 				key["t"] = t;
-				key["eye"] = vec3(at.origin);
+				if (carrier != nullptr) {
+					// Against the carrier: its place and turn now, the eye in its axes.
+					const Transform3D on = game_at(tl, carrier, time);
+					const Vector3 facing = on.basis.get_column(0);
+					const double yaw = Math::atan2(double(facing.y), double(facing.x));
+					Dictionary eye;
+					eye["actor"] = carrier->get_effective_id();
+					eye["offset"] = vec3((at.origin - on.origin).rotated(Vector3(0, 0, 1), -yaw));
+					eye["turn"] = true;
+					key["eye"] = eye;
+					rot.z = Math::wrapf(double(rot.z) - yaw, -Math::PI, Math::PI);
+				} else {
+					key["eye"] = vec3(at.origin);
+				}
 				key["rotation"] = vec3(rot);
 				key["ease"] = "linear";
 				if (cuts.has(t)) {
@@ -756,6 +814,131 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems) const {
 			for (const char *part : { "look_at", "held", "layers" }) {
 				if (advanced.has(part)) {
 					a[part] = advanced[part];
+				}
+			}
+			// Its layers: each joint's turn baked per tick, up to the last key.
+			Array layers = Array(a.get("layers", Array())).duplicate();
+			for (int c = 0; c < actor->get_child_count(); c++) {
+				const CutsceneLayer *l = Object::cast_to<CutsceneLayer>(actor->get_child(c));
+				if (l == nullptr) {
+					continue;
+				}
+				const PackedInt32Array joints = l->get_joints();
+				if (joints.is_empty()) {
+					problems.push_back(vformat("actor \"%s\": layer %s turns no joint and is left out", id, l->get_name()));
+					continue;
+				}
+				int last = 0;
+				for (int j : joints) {
+					const int k = tl.find(l, Animation::TYPE_VALUE, vformat("joint_%d", j));
+					if (k >= 0 && tl.anim->track_get_key_count(k) > 0) {
+						last = MAX(last, ticks(tl.anim->track_get_key_time(k, tl.anim->track_get_key_count(k) - 1)));
+					}
+				}
+				last = MIN(last, length_ticks);
+				PackedByteArray bytes;
+				bytes.resize((last + 1) * joints.size() * 16);
+				uint8_t *w = bytes.ptrw();
+				for (int t = 0; t <= last; t++) {
+					for (int j : joints) {
+						const Vector3 degrees = value_at(tl, l, vformat("joint_%d", j), t / cutscene_math::TICK_RATE);
+						const Quaternion q = Basis::from_euler(degrees * (Math::PI / 180.0)).get_rotation_quaternion();
+						for (real_t v : { q.x, q.y, q.z, q.w }) {
+							w += encode_float(float(v), w);
+						}
+					}
+				}
+				const String file = vformat("layers/%s_%s_%s.bin", get_cutscene_id(), id, String(l->get_name()).to_snake_case());
+				Dictionary layer;
+				layer["name"] = String(l->get_name()).to_snake_case();
+				Array joint_list;
+				for (int j : joints) {
+					joint_list.push_back(j);
+				}
+				layer["joints"] = joint_list;
+				const int wk = tl.find(l, Animation::TYPE_VALUE, "weight");
+				Array weight;
+				if (wk >= 0 && tl.anim->track_get_key_count(wk) > 0) {
+					for (int i = 0; i < tl.anim->track_get_key_count(wk); i++) {
+						Dictionary key;
+						key["t"] = ticks(tl.anim->track_get_key_time(wk, i));
+						key["w"] = tidy(CLAMP(double(tl.anim->track_get_key_value(wk, i)), 0.0, 1.0));
+						weight.push_back(key);
+					}
+				} else if (l->get_weight() < 1.0) {
+					Dictionary key;
+					key["t"] = 0;
+					key["w"] = tidy(l->get_weight());
+					weight.push_back(key);
+				}
+				if (!weight.is_empty()) {
+					layer["weight"] = weight;
+				}
+				layer["frames"] = file;
+				layers.push_back(layer);
+				if (r_files != nullptr) {
+					(*r_files)[file] = bytes;
+				}
+			}
+			if (!layers.is_empty()) {
+				a["layers"] = layers;
+			}
+			// The face: the rig without its gaits (they go with the walk), the blink, the moods.
+			Dictionary rig = actor->get_rig().duplicate(true);
+			const Variant gaits = rig.get("gaits", Variant());
+			rig.erase("gaits");
+			rig.erase("parts");  // the editor's, for layers' masks
+			if (a.has("path") && gaits.get_type() == Variant::ARRAY && !Array(gaits).is_empty()) {
+				Dictionary path = a["path"];
+				path["gaits"] = gaits;
+			}
+			Array moods;
+			for (int c = 0; c < actor->get_child_count(); c++) {
+				const CutsceneMood *m = Object::cast_to<CutsceneMood>(actor->get_child(c));
+				if (m == nullptr) {
+					continue;
+				}
+				Dictionary key;
+				key["t"] = ticks(m->get_start());
+				if (!m->get_mood().is_empty()) {
+					key["mood"] = m->get_mood();
+					if (!Dictionary(rig.get("moods", Dictionary())).has(m->get_mood())) {
+						problems.push_back(vformat("actor \"%s\": its rig has no mood \"%s\"", id, m->get_mood()));
+					}
+				}
+				key["weight"] = tidy(m->get_weight());
+				key["blend"] = ticks(m->get_blend());
+				moods.push_back(key);
+			}
+			if (!rig.is_empty() || !moods.is_empty()) {
+				Dictionary face;
+				if (!rig.is_empty()) {
+					face["rig"] = rig;
+				}
+				if (!actor->get_blink()) {
+					face["blink"] = false;
+				}
+				if (!moods.is_empty()) {
+					face["moods"] = moods;
+				}
+				a["face"] = face;
+			}
+			if (!actor->get_ride_on().is_empty()) {
+				const String carrier = actor_id_of(actor, actor->get_ride_on());
+				if (carrier.is_empty() || carrier == id) {
+					problems.push_back(vformat("actor \"%s\" rides on %s, which is not another actor: it does not ride", id, String(actor->get_ride_on())));
+				} else {
+					Array ride;
+					Dictionary on;
+					on["t"] = ticks(actor->get_ride_start());
+					on["actor"] = carrier;
+					ride.push_back(on);
+					if (actor->get_ride_end() > actor->get_ride_start()) {
+						Dictionary off;
+						off["t"] = ticks(actor->get_ride_end());
+						ride.push_back(off);
+					}
+					a["ride"] = ride;
 				}
 			}
 			Array anims;
@@ -891,6 +1074,54 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems) const {
 		}
 	}
 	out["camera"] = camera;
+	// Talking: each voice line on an actor whose rig has a jaw opens its mouth as loud as the line,
+	// in each language the line has a WAV for.
+	for (int i = 0; i < actors.size(); i++) {
+		Dictionary a = actors[i];
+		Dictionary face = a.get("face", Dictionary());
+		if (!Dictionary(face.get("rig", Dictionary())).has("jaw")) {
+			continue;
+		}
+		Array talk;
+		for (const Variant &item : sounds) {
+			const Dictionary s = item;
+			if (String(s.get("kind", "")) != "voice" || s.get("actor", "") != a.get("id", "") || !s.has("file")) {
+				continue;
+			}
+			Dictionary by_language;
+			Dictionary files;
+			if (s["file"].get_type() == Variant::DICTIONARY) {
+				files = s["file"];
+			} else {
+				files[""] = s["file"];
+			}
+			for (const Variant &code : files.keys()) {
+				const String file = files[code];
+				if (file.get_extension().nocasecmp_to("wav") != 0) {
+					problems.push_back(vformat("actor \"%s\": %s is not a WAV, so the mouth does not move with it", a.get("id", ""), file));
+					continue;
+				}
+				const String path = dir.path_join("cutscenes").path_join(file);
+				String problem;
+				const Vector<uint8_t> envelope = cutscene_math::mouth_envelope(FileAccess::get_file_as_bytes(path), problem);
+				if (envelope.is_empty()) {
+					problems.push_back(vformat("actor \"%s\": %s: %s, so the mouth does not move with it", a.get("id", ""), file, problem.is_empty() ? String("cannot read it") : problem));
+					continue;
+				}
+				by_language[code] = CryptoCore::b64_encode_str(envelope.ptr(), envelope.size());
+			}
+			if (by_language.is_empty()) {
+				continue;
+			}
+			Dictionary one;
+			one["t"] = s.get("t", 0);
+			one["envelope"] = by_language.has("") ? by_language[""] : Variant(by_language);
+			talk.push_back(one);
+		}
+		if (!talk.is_empty()) {
+			face["talk"] = talk;
+		}
+	}
 	out["actors"] = actors;
 	out["subtitles"] = subtitles;
 	out["sounds"] = sounds;
@@ -911,7 +1142,8 @@ Error Cutscene::export_cutscene(String *r_path) const {
 	const String dir = scene_dir_of(this);
 	ERR_FAIL_COND_V_MSG(dir.is_empty(), ERR_UNCONFIGURED, "Save the level first: the cutscene is written beside its scene.");
 	PackedStringArray problems;
-	const Dictionary cutscene_data = to_cutscene(&problems);
+	Dictionary files;
+	const Dictionary cutscene_data = to_cutscene(&problems, &files);
 	for (const String &problem : problems) {
 		WARN_PRINT(vformat("Cutscene \"%s\": %s", get_cutscene_id(), problem));
 	}
@@ -923,6 +1155,13 @@ Error Cutscene::export_cutscene(String *r_path) const {
 	Ref<FileAccess> file = FileAccess::open(path, FileAccess::WRITE, &err);
 	ERR_FAIL_COND_V_MSG(file.is_null(), err, "Cannot write " + path);
 	file->store_string(JSON::stringify(cutscene_data, "  ", false) + "\n");
+	for (const KeyValue<Variant, Variant> &side : files) {
+		const String side_path = folder.path_join(String(side.key));
+		DirAccess::make_dir_recursive_absolute(ProjectSettings::get_singleton()->globalize_path(side_path.get_base_dir()));
+		Ref<FileAccess> out = FileAccess::open(side_path, FileAccess::WRITE, &err);
+		ERR_FAIL_COND_V_MSG(out.is_null(), err, "Cannot write " + side_path);
+		out->store_buffer(PackedByteArray(side.value));
+	}
 	if (r_path != nullptr) {
 		*r_path = path;
 	}
@@ -1047,7 +1286,9 @@ Error Cutscene::import_cutscene(const String &p_path, PackedStringArray *r_probl
 	if (file_name.is_empty()) {
 		set_file_name(p_path.get_file().get_basename());
 	}
+	import_from = p_path.get_base_dir();
 	const PackedStringArray problems = from_cutscene(read);
+	import_from = String();
 	if (r_problems != nullptr) {
 		*r_problems = problems;
 	}
@@ -1166,6 +1407,11 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 	};
 	auto seconds = [](const Variant &p_ticks) { return int(p_ticks) / cutscene_math::TICK_RATE; };
 	HashMap<String, String> actor_nodes; // actor id -> node name
+	struct RideWanted {
+		CutsceneActor *actor = nullptr;
+		String carrier;
+	};
+	Vector<RideWanted> ride_wanted; // set once every actor is made
 
 	// The actors first, so the camera, lines and sounds can name them.
 	for (const Variant &item : Array(p_data.get("actors", Array()))) {
@@ -1265,12 +1511,110 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 			problems.push_back(vformat("actor \"%s\": its path has fewer than two points and is not kept", id));
 		}
 		Dictionary advanced;
-		for (const char *part : { "look_at", "held", "layers" }) {
+		for (const char *part : { "look_at", "held" }) {
 			if (a.has(part)) {
 				advanced[part] = a[part];
 			}
 		}
+		// Layers whose frames are beside the file become layer nodes with a key every other tick
+		// (the game's 30 Hz); the rest are kept as written.
+		Array kept_layers;
+		const String files_from = !import_from.is_empty() ? import_from : scene_dir_of(this).path_join("cutscenes");
+		for (const Variant &item : Array(a.get("layers", Array()))) {
+			const Dictionary def = item;
+			const Array joint_list = def.get("joints", Array());
+			const String frames_path = def.get("frames", "");
+			const PackedByteArray bytes = frames_path.is_empty() || files_from.is_empty() ? PackedByteArray() : FileAccess::get_file_as_bytes(files_from.path_join(frames_path));
+			const int stride = joint_list.size() * 16;
+			if (stride == 0 || bytes.is_empty() || bytes.size() % stride != 0) {
+				kept_layers.push_back(def);
+				continue;
+			}
+			CutsceneLayer *layer = memnew(CutsceneLayer);
+			layer->set_name(String(def.get("name", "layer")).to_pascal_case());
+			actor->add_child(layer, true);
+			layer->set_owner(owner);
+			PackedInt32Array joints;
+			for (const Variant &j : joint_list) {
+				joints.push_back(j);
+			}
+			layer->set_joints(joints);
+			const NodePath layer_path = root->get_path_to(layer);
+			const int count = bytes.size() / stride;
+			const uint8_t *r = bytes.ptr();
+			for (int t = 0; t < count; t++) {
+				if (t % 2 != 0 && t != count - 1) {
+					continue;
+				}
+				for (int j = 0; j < joints.size(); j++) {
+					const uint8_t *q = r + t * stride + j * 16;
+					const Quaternion turn(decode_float(q), decode_float(q + 4), decode_float(q + 8), decode_float(q + 12));
+					const Vector3 degrees = Basis(turn.normalized()).get_euler() * (180.0 / Math::PI);
+					const String property = vformat("joint_%d", joints[j]);
+					if (t == 0) {
+						layer->set(property, degrees);
+					}
+					if (count > 1) {
+						anim->track_insert_key(track_for(anim, NodePath(String(layer_path) + ":" + property), Animation::TYPE_VALUE), t / cutscene_math::TICK_RATE, degrees);
+					}
+				}
+			}
+			const Array weight = def.get("weight", Array());
+			if (weight.size() == 1) {
+				layer->set_weight(Dictionary(weight[0]).get("w", 1.0));
+			} else {
+				for (const Variant &key : weight) {
+					anim->track_insert_key(track_for(anim, NodePath(String(layer_path) + ":weight"), Animation::TYPE_VALUE), seconds(Dictionary(key).get("t", 0)), double(Dictionary(key).get("w", 1.0)));
+				}
+			}
+		}
+		if (!kept_layers.is_empty()) {
+			advanced["layers"] = kept_layers;
+		}
 		actor->set_advanced(advanced);
+		const Dictionary face = a.get("face", Dictionary());
+		Dictionary rig = Dictionary(face.get("rig", Dictionary())).duplicate(true);
+		const Variant gaits = Dictionary(a.get("path", Dictionary())).get("gaits", Variant());
+		if (gaits.get_type() == Variant::ARRAY && !rig.has("gaits")) {
+			rig["gaits"] = gaits;
+		}
+		actor->set_rig(rig);
+		actor->set_blink(face.get("blink", true));
+		const Array rides = a.get("ride", Array());
+		for (int r = 0; r < rides.size(); r++) {
+			const Dictionary on = rides[r];
+			if (!on.has("actor")) {
+				continue;
+			}
+			ride_wanted.push_back(RideWanted{ actor, String(on["actor"]) });
+			actor->set_ride_start(seconds(on.get("t", 0)));
+			if (r + 1 < rides.size() && !Dictionary(rides[r + 1]).has("actor")) {
+				actor->set_ride_end(seconds(Dictionary(rides[r + 1]).get("t", 0)));
+			}
+			if (rides.size() > 2) {
+				problems.push_back(vformat("actor \"%s\": only its first ride is kept", id));
+			}
+			break;
+		}
+		for (const Variant &item : Array(face.get("moods", Array()))) {
+			const Dictionary e = item;
+			CutsceneMood *m = memnew(CutsceneMood);
+			m->set_name("Mood");
+			actor->add_child(m, true);
+			m->set_owner(owner);
+			m->set_start(seconds(e.get("t", 0)));
+			m->set_mood(e.get("mood", ""));
+			m->set_weight(e.get("weight", 1.0));
+			m->set_blend(seconds(e.get("blend", 10)));
+		}
+	}
+
+	for (const RideWanted &ride : ride_wanted) {
+		if (actor_nodes.has(ride.carrier)) {
+			ride.actor->set_ride_on(NodePath("../" + actor_nodes[ride.carrier]));
+		} else {
+			problems.push_back(vformat("actor \"%s\" rides on \"%s\", who is not an actor here: not kept", ride.actor->get_effective_id(), ride.carrier));
+		}
 	}
 
 	// The camera: its keys as its place and turn on the timeline, its cuts.
@@ -1292,13 +1636,46 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 		for (int k = 0; k < keys.size(); k++) {
 			const Dictionary key = keys[k];
 			const int t = key.get("t", 0);
-			eye = vec3_of(key.get("eye", Variant()), eye);
+			// An eye on an actor: placed against where the file's track has the actor at that tick.
+			double carried_yaw = 0.0;
+			const Variant eye_value = key.get("eye", Variant());
+			if (eye_value.get_type() == Variant::DICTIONARY) {
+				const Dictionary on = eye_value;
+				const String id = on.get("actor", "");
+				Vector3 place;
+				double yaw = 0.0;
+				for (const Variant &item : Array(p_data.get("actors", Array()))) {
+					const Dictionary other = item;
+					if (String(other.get("id", "")) != id) {
+						continue;
+					}
+					for (const Variant &k : Array(other.get("track", Array()))) {
+						const Dictionary tk = k;
+						if (int(tk.get("t", 0)) <= t) {
+							place = vec3_of(tk.get("position", Variant()), place);
+							yaw = vec3_of(tk.get("rotation", Variant()), Vector3(0, 0, float(yaw))).z;
+						}
+					}
+				}
+				const bool turn = on.get("turn", false);
+				const Vector3 offset = vec3_of(on.get("offset", Variant()), Vector3(0, 0, 1));
+				eye = place + (turn ? offset.rotated(Vector3(0, 0, 1), yaw) : offset);
+				carried_yaw = turn ? yaw : 0.0;
+				if (actor_nodes.has(id)) {
+					cam->set_ride_on(NodePath("../" + actor_nodes[id]));
+				} else {
+					problems.push_back(vformat("camera key at %d: its eye is on \"%s\", who is not an actor here", t, id));
+				}
+			} else {
+				eye = vec3_of(eye_value, eye);
+			}
 			const Variant look = key.get("look_at", Variant());
 			if (look.get_type() == Variant::ARRAY) {
 				const Vector3 at = vec3_of(look);
 				forward = (at - eye).length() > 1e-6 ? (at - eye).normalized() : forward;
 			} else if (key.has("rotation")) {
-				const Vector3 rot = vec3_of(key["rotation"]);
+				Vector3 rot = vec3_of(key["rotation"]);
+				rot.z += carried_yaw;
 				forward = forward_of(rot);
 				roll = rot.x;
 			}
@@ -1425,6 +1802,30 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 			event->set_cutscene(e.get("cutscene", ""));
 		} else if (what == "travel") {
 			event->set_action(CutsceneEvent::ACTION_TRAVEL);
+		} else if (what == "air") {
+			event->set_action(CutsceneEvent::ACTION_AIR);
+			const Dictionary fog = e.get("fog", Variant());
+			event->set_air_fog(!fog.is_empty());
+			if (!fog.is_empty()) {
+				const Array c = fog.get("colour", Array());
+				event->set_colour(c.size() >= 3 ? Color(c[0], c[1], c[2]) : Color(0, 0, 0));
+				event->set_fog_near(fog.get("near", 0.0));
+				event->set_fog_far(fog.get("far", 100.0));
+				event->set_fog_thickness(fog.get("thickness", 1.0));
+			}
+			const Array back = e.get("background", Array());
+			event->set_air_background(back.size() >= 3);
+			if (back.size() >= 3) {
+				event->set_background(Color(back[0], back[1], back[2]));
+			}
+			event->set_length(seconds(e.get("length", 30)));
+		} else if (what == "slow") {
+			event->set_action(CutsceneEvent::ACTION_SLOW);
+			event->set_stretch(e.get("stretch", 1.0));
+			event->set_length(seconds(e.get("length", 0)));
+		} else if (what == "tie_hide") {
+			event->set_action(bool(e.get("on", true)) ? CutsceneEvent::ACTION_TIE_HIDE : CutsceneEvent::ACTION_TIE_SHOW);
+			event->set_tie(e.get("tie", 0));
 		} else {
 			problems.push_back(vformat("the event \"%s\" is not kept", what));
 			memdelete(event);
@@ -1529,7 +1930,12 @@ void Cutscene::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_cutscene_id"), &Cutscene::get_cutscene_id);
 	ClassDB::bind_method(D_METHOD("get_timeline"), &Cutscene::get_timeline);
 	ClassDB::bind_method(D_METHOD("get_timeline_animation"), &Cutscene::get_timeline_animation);
+	ClassDB::bind_static_method("Cutscene", D_METHOD("game_frame", "size", "wide"), &Cutscene::game_frame);
+	ClassDB::bind_method(D_METHOD("get_timeline_position"), &Cutscene::get_timeline_position);
+	ClassDB::bind_method(D_METHOD("subtitles_at", "seconds", "language"), &Cutscene::subtitles_at, DEFVAL(String()));
 	ClassDB::bind_method(D_METHOD("to_cutscene"), &Cutscene::_to_cutscene_bind);
+	ClassDB::bind_method(D_METHOD("export_problems"), &Cutscene::export_problems);
+	ClassDB::bind_method(D_METHOD("export_files"), &Cutscene::export_files);
 	ClassDB::bind_method(D_METHOD("export_cutscene"), &Cutscene::_export_cutscene_bind);
 	ClassDB::bind_method(D_METHOD("get_import_action"), &Cutscene::get_import_action);
 	ClassDB::bind_method(D_METHOD("from_cutscene", "data"), &Cutscene::from_cutscene);
@@ -1584,6 +1990,18 @@ Dictionary Cutscene::_to_cutscene_bind() const {
 	return to_cutscene();
 }
 
+Dictionary Cutscene::export_files() const {
+	Dictionary files;
+	to_cutscene(nullptr, &files);
+	return files;
+}
+
+PackedStringArray Cutscene::export_problems() const {
+	PackedStringArray problems;
+	to_cutscene(&problems);
+	return problems;
+}
+
 Error Cutscene::_import_cutscene_bind(const String &p_path) {
 	PackedStringArray problems;
 	const Error err = import_cutscene(p_path, &problems);
@@ -1606,6 +2024,8 @@ PackedFloat32Array CutsceneCamera::get_cuts() const { return cuts; }
 void CutsceneCamera::set_ease_back(bool p_ease) { ease_back = p_ease; }
 bool CutsceneCamera::get_ease_back() const { return ease_back; }
 void CutsceneCamera::set_export_fov(bool p_export) { export_fov = p_export; }
+void CutsceneCamera::set_ride_on(const NodePath &p_actor) { ride_on = p_actor; }
+NodePath CutsceneCamera::get_ride_on() const { return ride_on; }
 bool CutsceneCamera::get_export_fov() const { return export_fov; }
 
 void CutsceneCamera::_bind_methods() {
@@ -1614,11 +2034,14 @@ void CutsceneCamera::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_ease_back", "ease"), &CutsceneCamera::set_ease_back);
 	ClassDB::bind_method(D_METHOD("get_ease_back"), &CutsceneCamera::get_ease_back);
 	ClassDB::bind_method(D_METHOD("set_export_fov", "export"), &CutsceneCamera::set_export_fov);
+	ClassDB::bind_method(D_METHOD("set_ride_on", "actor"), &CutsceneCamera::set_ride_on);
+	ClassDB::bind_method(D_METHOD("get_ride_on"), &CutsceneCamera::get_ride_on);
 	ClassDB::bind_method(D_METHOD("get_export_fov"), &CutsceneCamera::get_export_fov);
 	ADD_GROUP("Cutscene", "");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT32_ARRAY, "cuts"), "set_cuts", "get_cuts");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ease_back"), "set_ease_back", "get_ease_back");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "export_fov"), "set_export_fov", "get_export_fov");
+	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "ride_on", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "CutsceneActor"), "set_ride_on", "get_ride_on");
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -1666,6 +2089,25 @@ Callable CutsceneActor::get_take_selected_action() {
 	return callable_mp(this, &CutsceneActor::_take_selected_moby);
 }
 
+Callable CutsceneActor::get_use_known_rig_action() {
+	return callable_mp(this, &CutsceneActor::_use_known_rig);
+}
+
+// The rig the editor knows for the actor's class (the hero's for a hero figure), in place of its own.
+void CutsceneActor::_use_known_rig() {
+	const Cutscene *cutscene = Object::cast_to<Cutscene>(get_parent());
+	const String game = cutscene != nullptr ? cutscene->get_game() : String("rac1");
+	const int cls = source == SOURCE_HERO_FIGURE ? -1 : moby_class;
+	const Dictionary known = known_rig(game, cls);
+	if (known.is_empty()) {
+		WARN_PRINT(vformat("No rig is known for %s: add one to res://cutscene_rigs.json as \"%s/%s\".", cls < 0 ? String("the hero") : vformat("class %d", cls), game, cls < 0 ? String("hero") : itos(cls)));
+		return;
+	}
+	set_rig(known);
+	notify_property_list_changed();
+	print_line(vformat("Actor \"%s\" has the known rig of %s.", get_effective_id(), cls < 0 ? String("the hero") : vformat("class %d", cls)));
+}
+
 // Makes the actor the moby selected in the scene beside it: its spawn id, its class and its place.
 void CutsceneActor::_take_selected_moby() {
 #ifdef TOOLS_ENABLED
@@ -1682,6 +2124,10 @@ void CutsceneActor::_take_selected_moby() {
 			set_actor_id(String(moby->get_name()).to_snake_case());
 		}
 		set_global_transform(moby->get_global_transform());
+		if (rig.is_empty()) {
+			const Cutscene *owner_cutscene = Object::cast_to<Cutscene>(get_parent());
+			set_rig(known_rig(owner_cutscene != nullptr ? owner_cutscene->get_game() : String("rac1"), moby_class));
+		}
 		print_line(vformat("Actor \"%s\" is %s (spawn id %d).", get_effective_id(), moby->get_name(), spawn_id));
 		return;
 	}
@@ -1690,6 +2136,35 @@ void CutsceneActor::_take_selected_moby() {
 }
 
 void CutsceneActor::set_advanced(const Dictionary &p_advanced) { advanced = p_advanced; }
+void CutsceneActor::set_rig(const Dictionary &p_rig) { rig = p_rig; }
+void CutsceneActor::set_ride_on(const NodePath &p_actor) { ride_on = p_actor; }
+NodePath CutsceneActor::get_ride_on() const { return ride_on; }
+void CutsceneActor::set_ride_start(double p_seconds) { ride_start = MAX(0.0, p_seconds); }
+double CutsceneActor::get_ride_start() const { return ride_start; }
+void CutsceneActor::set_ride_end(double p_seconds) { ride_end = MAX(0.0, p_seconds); }
+double CutsceneActor::get_ride_end() const { return ride_end; }
+Dictionary CutsceneActor::get_rig() const { return rig; }
+void CutsceneActor::set_blink(bool p_blink) { blink = p_blink; }
+bool CutsceneActor::get_blink() const { return blink; }
+
+Dictionary CutsceneActor::known_rig(const String &p_game, int p_class) {
+	const String key = vformat("%s/%s", p_game, p_class < 0 ? String("hero") : itos(p_class));
+	// A project's own rigs first, then the editor's.
+	for (const String &text : { FileAccess::exists("res://cutscene_rigs.json") ? FileAccess::get_file_as_string("res://cutscene_rigs.json") : String(), String::utf8(cutscene_rigs::BUILT_IN) }) {
+		if (text.is_empty()) {
+			continue;
+		}
+		const Variant parsed = JSON::parse_string(text);
+		if (parsed.get_type() != Variant::DICTIONARY) {
+			continue;
+		}
+		const Dictionary rigs = parsed;
+		if (rigs.has(key) && rigs[key].get_type() == Variant::DICTIONARY) {
+			return Dictionary(rigs[key]).duplicate(true);
+		}
+	}
+	return Dictionary();
+}
 Dictionary CutsceneActor::get_advanced() const { return advanced; }
 
 PackedStringArray CutsceneActor::get_configuration_warnings() const {
@@ -1743,6 +2218,18 @@ void CutsceneActor::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_take_selected_action"), &CutsceneActor::get_take_selected_action);
 	ClassDB::bind_method(D_METHOD("set_advanced", "advanced"), &CutsceneActor::set_advanced);
 	ClassDB::bind_method(D_METHOD("get_advanced"), &CutsceneActor::get_advanced);
+	ClassDB::bind_method(D_METHOD("get_use_known_rig_action"), &CutsceneActor::get_use_known_rig_action);
+	ClassDB::bind_method(D_METHOD("set_rig", "rig"), &CutsceneActor::set_rig);
+	ClassDB::bind_method(D_METHOD("set_ride_on", "actor"), &CutsceneActor::set_ride_on);
+	ClassDB::bind_method(D_METHOD("get_ride_on"), &CutsceneActor::get_ride_on);
+	ClassDB::bind_method(D_METHOD("set_ride_start", "seconds"), &CutsceneActor::set_ride_start);
+	ClassDB::bind_method(D_METHOD("get_ride_start"), &CutsceneActor::get_ride_start);
+	ClassDB::bind_method(D_METHOD("set_ride_end", "seconds"), &CutsceneActor::set_ride_end);
+	ClassDB::bind_method(D_METHOD("get_ride_end"), &CutsceneActor::get_ride_end);
+	ClassDB::bind_method(D_METHOD("get_rig"), &CutsceneActor::get_rig);
+	ClassDB::bind_method(D_METHOD("set_blink", "blink"), &CutsceneActor::set_blink);
+	ClassDB::bind_method(D_METHOD("get_blink"), &CutsceneActor::get_blink);
+	ClassDB::bind_static_method("CutsceneActor", D_METHOD("known_rig", "game", "moby_class"), &CutsceneActor::known_rig);
 
 	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "take_selected_moby", PROPERTY_HINT_TOOL_BUTTON, "Take Selected Moby,Node3D", PROPERTY_USAGE_EDITOR), "", "get_take_selected_action");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "actor_id", PROPERTY_HINT_PLACEHOLDER_TEXT, "the node's name"), "set_actor_id", "get_actor_id");
@@ -1756,6 +2243,14 @@ void CutsceneActor::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "sequence", PROPERTY_HINT_RANGE, "-1,255,1"), "set_sequence", "get_sequence");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "anim_speed", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_anim_speed", "get_anim_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "blend", PROPERTY_HINT_RANGE, "0,60,1,suffix:ticks"), "set_blend", "get_blend");
+	ADD_GROUP("Ride", "ride_");
+	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "ride_on", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "CutsceneActor"), "set_ride_on", "get_ride_on");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ride_start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_ride_start", "get_ride_start");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ride_end", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_ride_end", "get_ride_end");
+	ADD_GROUP("Face", "");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "use_known_rig", PROPERTY_HINT_TOOL_BUTTON, "Use Known Rig,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_use_known_rig_action");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "rig", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_rig", "get_rig");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "blink"), "set_blink", "get_blink");
 	ADD_GROUP("Advanced", "");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "advanced", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_advanced", "get_advanced");
 
@@ -1863,6 +2358,145 @@ void CutsceneShake::_bind_methods() {
 }
 
 // ------------------------------------------------------------------------------------------------
+// CutsceneMood
+
+void CutsceneLayer::set_joints(const PackedInt32Array &p_joints) {
+	PackedInt32Array kept;
+	for (int j : p_joints) {
+		if (j >= 0 && j < 256 && !kept.has(j)) {
+			kept.push_back(j);
+		}
+	}
+	joints = kept;
+	notify_property_list_changed();
+	update_configuration_warnings();
+}
+PackedInt32Array CutsceneLayer::get_joints() const { return joints; }
+void CutsceneLayer::set_weight(double p_weight) { weight = CLAMP(p_weight, 0.0, 1.0); }
+double CutsceneLayer::get_weight() const { return weight; }
+void CutsceneLayer::set_turn(int p_joint, const Vector3 &p_degrees) { turns[p_joint] = p_degrees; }
+Vector3 CutsceneLayer::get_turn(int p_joint) const {
+	const Vector3 *found = turns.getptr(p_joint);
+	return found != nullptr ? *found : Vector3();
+}
+
+void CutsceneLayer::use_part(const String &p_part) {
+	const CutsceneActor *actor = Object::cast_to<CutsceneActor>(get_parent());
+	ERR_FAIL_NULL_MSG(actor, "A layer takes a part of its actor's rig: put it under a CutsceneActor.");
+	const Array range = Dictionary(actor->get_rig().get("parts", Dictionary())).get(p_part, Array());
+	ERR_FAIL_COND_MSG(range.size() != 2, vformat("The actor's rig has no part \"%s\".", p_part));
+	PackedInt32Array part;
+	for (int j = int(range[0]); j <= int(range[1]); j++) {
+		part.push_back(j);
+	}
+	set_joints(part);
+}
+
+bool CutsceneLayer::_set(const StringName &p_name, const Variant &p_value) {
+	const String name = p_name;
+	if (name.begins_with("joint_") && name.substr(6).is_valid_int()) {
+		turns[name.substr(6).to_int()] = p_value;
+		return true;
+	}
+	if (name == "use_part" && !String(p_value).is_empty()) {
+		use_part(p_value);
+		return true;
+	}
+	return false;
+}
+
+bool CutsceneLayer::_get(const StringName &p_name, Variant &r_ret) const {
+	const String name = p_name;
+	if (name.begins_with("joint_") && name.substr(6).is_valid_int()) {
+		r_ret = get_turn(name.substr(6).to_int());
+		return true;
+	}
+	if (name == "use_part") {
+		r_ret = String();
+		return true;
+	}
+	return false;
+}
+
+void CutsceneLayer::_get_property_list(List<PropertyInfo> *p_list) const {
+	// A part of the actor's rig to take as the mask (editor only, not stored).
+	if (const CutsceneActor *actor = Object::cast_to<CutsceneActor>(get_parent())) {
+		const Dictionary parts = actor->get_rig().get("parts", Dictionary());
+		if (!parts.is_empty()) {
+			p_list->push_back(PropertyInfo(Variant::STRING, "use_part", PROPERTY_HINT_ENUM, String(",").join(PackedStringArray(Variant(parts.keys()))), PROPERTY_USAGE_EDITOR));
+		}
+	}
+	// Each joint of the mask, keyable on the timeline (the key icon beside it).
+	p_list->push_back(PropertyInfo(Variant::NIL, "Joints", PROPERTY_HINT_NONE, "joint_", PROPERTY_USAGE_GROUP));
+	for (int j : joints) {
+		p_list->push_back(PropertyInfo(Variant::VECTOR3, vformat("joint_%d", j), PROPERTY_HINT_RANGE, "-180,180,0.1,suffix:°"));
+	}
+}
+
+PackedStringArray CutsceneLayer::get_configuration_warnings() const {
+	PackedStringArray warnings = Node::get_configuration_warnings();
+	if (Object::cast_to<CutsceneActor>(get_parent()) == nullptr) {
+		warnings.push_back(RTR("A layer turns joints only as a child of a CutsceneActor."));
+	}
+	if (joints.is_empty()) {
+		warnings.push_back(RTR("List the joints this layer turns (its mask), or pick a Use Part."));
+	}
+	return warnings;
+}
+
+void CutsceneLayer::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_joints", "joints"), &CutsceneLayer::set_joints);
+	ClassDB::bind_method(D_METHOD("get_joints"), &CutsceneLayer::get_joints);
+	ClassDB::bind_method(D_METHOD("set_weight", "weight"), &CutsceneLayer::set_weight);
+	ClassDB::bind_method(D_METHOD("get_weight"), &CutsceneLayer::get_weight);
+	ClassDB::bind_method(D_METHOD("set_turn", "joint", "degrees"), &CutsceneLayer::set_turn);
+	ClassDB::bind_method(D_METHOD("get_turn", "joint"), &CutsceneLayer::get_turn);
+	ClassDB::bind_method(D_METHOD("use_part", "part"), &CutsceneLayer::use_part);
+	ClassDB::bind_method(D_METHOD("get_warnings"), &CutsceneLayer::get_configuration_warnings);
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_INT32_ARRAY, "joints"), "set_joints", "get_joints");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "weight", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_weight", "get_weight");
+}
+
+void CutsceneMood::set_start(double p_seconds) { start = MAX(0.0, p_seconds); }
+double CutsceneMood::get_start() const { return start; }
+void CutsceneMood::set_mood(const String &p_mood) {
+	mood = p_mood;
+	update_configuration_warnings();
+}
+String CutsceneMood::get_mood() const { return mood; }
+void CutsceneMood::set_weight(double p_weight) { weight = CLAMP(p_weight, 0.0, 1.0); }
+double CutsceneMood::get_weight() const { return weight; }
+void CutsceneMood::set_blend(double p_seconds) { blend = MAX(0.0, p_seconds); }
+double CutsceneMood::get_blend() const { return blend; }
+
+PackedStringArray CutsceneMood::get_configuration_warnings() const {
+	PackedStringArray warnings = Node::get_configuration_warnings();
+	const CutsceneActor *actor = Object::cast_to<CutsceneActor>(get_parent());
+	if (actor == nullptr) {
+		warnings.push_back(RTR("A mood shows only as a child of a CutsceneActor."));
+	} else if (!mood.is_empty() && !Dictionary(actor->get_rig().get("moods", Dictionary())).has(mood)) {
+		warnings.push_back(RTR("The actor's rig has no such mood: add its joints to the rig's \"moods\"."));
+	}
+	return warnings;
+}
+
+void CutsceneMood::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("get_warnings"), &CutsceneMood::get_configuration_warnings);
+	ClassDB::bind_method(D_METHOD("set_start", "seconds"), &CutsceneMood::set_start);
+	ClassDB::bind_method(D_METHOD("get_start"), &CutsceneMood::get_start);
+	ClassDB::bind_method(D_METHOD("set_mood", "mood"), &CutsceneMood::set_mood);
+	ClassDB::bind_method(D_METHOD("get_mood"), &CutsceneMood::get_mood);
+	ClassDB::bind_method(D_METHOD("set_weight", "weight"), &CutsceneMood::set_weight);
+	ClassDB::bind_method(D_METHOD("get_weight"), &CutsceneMood::get_weight);
+	ClassDB::bind_method(D_METHOD("set_blend", "seconds"), &CutsceneMood::set_blend);
+	ClassDB::bind_method(D_METHOD("get_blend"), &CutsceneMood::get_blend);
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_start", "get_start");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "mood", PROPERTY_HINT_PLACEHOLDER_TEXT, "happy, angry, ... (empty: the face's own)"), "set_mood", "get_mood");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "weight", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_weight", "get_weight");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "blend", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater,suffix:s"), "set_blend", "get_blend");
+}
+
+// ------------------------------------------------------------------------------------------------
 // CutsceneSound
 
 void CutsceneSound::set_start(double p_seconds) { start = MAX(0.0, p_seconds); }
@@ -1955,6 +2589,22 @@ void CutsceneEvent::set_colour(const Color &p_colour) { colour = p_colour; }
 Color CutsceneEvent::get_colour() const { return colour; }
 void CutsceneEvent::set_cutscene(const String &p_name) { cutscene = p_name; }
 String CutsceneEvent::get_cutscene() const { return cutscene; }
+void CutsceneEvent::set_air_fog(bool p_on) { air_fog = p_on; }
+bool CutsceneEvent::get_air_fog() const { return air_fog; }
+void CutsceneEvent::set_fog_near(float p_near) { fog_near = MAX(0.0f, p_near); }
+float CutsceneEvent::get_fog_near() const { return fog_near; }
+void CutsceneEvent::set_fog_far(float p_far) { fog_far = MAX(0.0f, p_far); }
+float CutsceneEvent::get_fog_far() const { return fog_far; }
+void CutsceneEvent::set_fog_thickness(float p_thickness) { fog_thickness = CLAMP(p_thickness, 0.0f, 1.0f); }
+float CutsceneEvent::get_fog_thickness() const { return fog_thickness; }
+void CutsceneEvent::set_air_background(bool p_on) { air_background = p_on; }
+bool CutsceneEvent::get_air_background() const { return air_background; }
+void CutsceneEvent::set_background(const Color &p_colour) { background = p_colour; }
+Color CutsceneEvent::get_background() const { return background; }
+void CutsceneEvent::set_stretch(float p_stretch) { stretch = CLAMP(p_stretch, 1.0f, 8.0f); }
+float CutsceneEvent::get_stretch() const { return stretch; }
+void CutsceneEvent::set_tie(int p_tie) { tie = CLAMP(p_tie, 0, 0xFFFF); }
+int CutsceneEvent::get_tie() const { return tie; }
 
 Dictionary CutsceneEvent::to_event() const {
 	Dictionary e;
@@ -2003,6 +2653,41 @@ Dictionary CutsceneEvent::to_event() const {
 			e["do"] = "travel";
 			e["level"] = level;
 			break;
+		case ACTION_AIR: {
+			// Neither fog nor background: back to the game's.
+			e["do"] = "air";
+			if (air_fog) {
+				Dictionary fog;
+				Array c;
+				c.push_back(tidy(colour.r));
+				c.push_back(tidy(colour.g));
+				c.push_back(tidy(colour.b));
+				fog["colour"] = c;
+				fog["near"] = tidy(fog_near);
+				fog["far"] = tidy(MAX(fog_far, fog_near + 0.01f));
+				fog["thickness"] = tidy(fog_thickness);
+				e["fog"] = fog;
+			}
+			if (air_background) {
+				Array b;
+				b.push_back(tidy(background.r));
+				b.push_back(tidy(background.g));
+				b.push_back(tidy(background.b));
+				e["background"] = b;
+			}
+			e["length"] = ticks(length);
+		} break;
+		case ACTION_SLOW:
+			e["do"] = "slow";
+			e["stretch"] = tidy(stretch);
+			e["length"] = ticks(length);
+			break;
+		case ACTION_TIE_HIDE:
+		case ACTION_TIE_SHOW:
+			e["do"] = "tie_hide";
+			e["tie"] = tie;
+			e["on"] = action == ACTION_TIE_HIDE;
+			break;
 	}
 	if (persistent) {
 		e["persistent"] = true;
@@ -2013,11 +2698,22 @@ Dictionary CutsceneEvent::to_event() const {
 void CutsceneEvent::_validate_property(PropertyInfo &p_property) const {
 	const String &name = p_property.name;
 	const bool moby = action == ACTION_MOBY_HIDE || action == ACTION_MOBY_SHOW || action == ACTION_MOBY_KILL;
-	const bool timed = action == ACTION_HAZE || action == ACTION_FADE;
+	const bool timed = action == ACTION_HAZE || action == ACTION_FADE || action == ACTION_AIR || action == ACTION_SLOW;
+	const bool fog = action == ACTION_AIR && air_fog;
+	if ((name == "air_fog" || name == "air_background") && action != ACTION_AIR) {
+		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+	}
+	if ((name == "fog_near" || name == "fog_far" || name == "fog_thickness") && !fog) {
+		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+	}
+	if ((name == "background" && !(action == ACTION_AIR && air_background)) || (name == "stretch" && action != ACTION_SLOW) ||
+			(name == "tie" && action != ACTION_TIE_HIDE && action != ACTION_TIE_SHOW)) {
+		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+	}
 	if ((name == "spawn_id" && !moby) || (name == "level" && action != ACTION_MISSION_FLAG && action != ACTION_TRAVEL) ||
 			((name == "flag_byte" || name == "flag_value") && action != ACTION_MISSION_FLAG) ||
 			((name == "position" || name == "radius" || name == "strength") && action != ACTION_HAZE) ||
-			(name == "length" && !timed) || (name == "colour" && action != ACTION_FADE) ||
+			(name == "length" && !timed) || (name == "colour" && action != ACTION_FADE && !fog) ||
 			(name == "cutscene" && action != ACTION_PLAY)) {
 		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 	}
@@ -2050,9 +2746,25 @@ void CutsceneEvent::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_colour"), &CutsceneEvent::get_colour);
 	ClassDB::bind_method(D_METHOD("set_cutscene", "name"), &CutsceneEvent::set_cutscene);
 	ClassDB::bind_method(D_METHOD("get_cutscene"), &CutsceneEvent::get_cutscene);
+	ClassDB::bind_method(D_METHOD("set_air_fog", "on"), &CutsceneEvent::set_air_fog);
+	ClassDB::bind_method(D_METHOD("get_air_fog"), &CutsceneEvent::get_air_fog);
+	ClassDB::bind_method(D_METHOD("set_fog_near", "near"), &CutsceneEvent::set_fog_near);
+	ClassDB::bind_method(D_METHOD("get_fog_near"), &CutsceneEvent::get_fog_near);
+	ClassDB::bind_method(D_METHOD("set_fog_far", "far"), &CutsceneEvent::set_fog_far);
+	ClassDB::bind_method(D_METHOD("get_fog_far"), &CutsceneEvent::get_fog_far);
+	ClassDB::bind_method(D_METHOD("set_fog_thickness", "thickness"), &CutsceneEvent::set_fog_thickness);
+	ClassDB::bind_method(D_METHOD("get_fog_thickness"), &CutsceneEvent::get_fog_thickness);
+	ClassDB::bind_method(D_METHOD("set_air_background", "on"), &CutsceneEvent::set_air_background);
+	ClassDB::bind_method(D_METHOD("get_air_background"), &CutsceneEvent::get_air_background);
+	ClassDB::bind_method(D_METHOD("set_background", "colour"), &CutsceneEvent::set_background);
+	ClassDB::bind_method(D_METHOD("get_background"), &CutsceneEvent::get_background);
+	ClassDB::bind_method(D_METHOD("set_stretch", "stretch"), &CutsceneEvent::set_stretch);
+	ClassDB::bind_method(D_METHOD("get_stretch"), &CutsceneEvent::get_stretch);
+	ClassDB::bind_method(D_METHOD("set_tie", "tie"), &CutsceneEvent::set_tie);
+	ClassDB::bind_method(D_METHOD("get_tie"), &CutsceneEvent::get_tie);
 	ClassDB::bind_method(D_METHOD("to_event"), &CutsceneEvent::to_event);
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_start", "get_start");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "action", PROPERTY_HINT_ENUM, "Hide Moby,Show Moby,Delete Moby,Mission Flag,Heat Haze,Fade,Play Cutscene,Travel"), "set_action", "get_action");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "action", PROPERTY_HINT_ENUM, "Hide Moby,Show Moby,Delete Moby,Mission Flag,Heat Haze,Fade,Play Cutscene,Travel,Fog and Background,Slow Motion,Hide Tie,Show Tie"), "set_action", "get_action");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "persistent"), "set_persistent", "get_persistent");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "spawn_id"), "set_spawn_id", "get_spawn_id");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "level", PROPERTY_HINT_RANGE, "-1,255,1"), "set_level", "get_level");
@@ -2064,6 +2776,14 @@ void CutsceneEvent::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "length", PROPERTY_HINT_RANGE, "0,60,0.01,suffix:s"), "set_length", "get_length");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "colour"), "set_colour", "get_colour");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "cutscene"), "set_cutscene", "get_cutscene");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "air_fog", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED), "set_air_fog", "get_air_fog");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fog_near", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater"), "set_fog_near", "get_fog_near");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fog_far", PROPERTY_HINT_RANGE, "0,1000,0.1,or_greater"), "set_fog_far", "get_fog_far");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fog_thickness", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_fog_thickness", "get_fog_thickness");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "air_background", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED), "set_air_background", "get_air_background");
+	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "background", PROPERTY_HINT_COLOR_NO_ALPHA), "set_background", "get_background");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "stretch", PROPERTY_HINT_RANGE, "1,8,0.1"), "set_stretch", "get_stretch");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "tie", PROPERTY_HINT_RANGE, "0,65535,1"), "set_tie", "get_tie");
 
 	BIND_ENUM_CONSTANT(ACTION_MOBY_HIDE);
 	BIND_ENUM_CONSTANT(ACTION_MOBY_SHOW);
@@ -2073,4 +2793,8 @@ void CutsceneEvent::_bind_methods() {
 	BIND_ENUM_CONSTANT(ACTION_FADE);
 	BIND_ENUM_CONSTANT(ACTION_PLAY);
 	BIND_ENUM_CONSTANT(ACTION_TRAVEL);
+	BIND_ENUM_CONSTANT(ACTION_AIR);
+	BIND_ENUM_CONSTANT(ACTION_SLOW);
+	BIND_ENUM_CONSTANT(ACTION_TIE_HIDE);
+	BIND_ENUM_CONSTANT(ACTION_TIE_SHOW);
 }

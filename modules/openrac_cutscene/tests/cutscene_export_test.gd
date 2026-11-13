@@ -476,6 +476,371 @@ func test_walk_shake_and_pictures() -> void:
 	root.queue_free()
 
 
+# A WAV of 16-bit mono at 8000 Hz: `parts` of [seconds, loudness 0 to 1] one after the other.
+func wav(path: String, parts: Array) -> void:
+	var samples := PackedByteArray()
+	for part in parts:
+		var n := int(part[0] * 8000.0)
+		for i in n:
+			var v := int(sin(i * 0.3) * 30000.0 * part[1])
+			samples.append(v & 0xFF)
+			samples.append((v >> 8) & 0xFF)
+	var head := PackedByteArray()
+	head.append_array("RIFF".to_ascii_buffer())
+	head.resize(head.size() + 4)
+	head.encode_u32(4, 36 + samples.size())
+	head.append_array("WAVEfmt ".to_ascii_buffer())
+	var fmt := PackedByteArray()
+	fmt.resize(20)
+	fmt.encode_u32(0, 16)
+	fmt.encode_u16(4, 1)
+	fmt.encode_u16(6, 1)
+	fmt.encode_u32(8, 8000)
+	fmt.encode_u32(12, 16000)
+	fmt.encode_u16(16, 2)
+	fmt.encode_u16(18, 16)
+	head.append_array(fmt)
+	head.append_array("data".to_ascii_buffer())
+	var size := PackedByteArray()
+	size.resize(4)
+	size.encode_u32(0, samples.size())
+	head.append_array(size)
+	head.append_array(samples)
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_buffer(head)
+	f.close()
+
+
+func test_faces() -> void:
+	var root := make_level("user://t/level_09", {"level": 9, "version": "pal"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Faces"
+	timeline(cs, 3.0)
+	var talker = add(cs, CutsceneActor.new(), root)
+	talker.name = "Talker"
+	talker.source = CutsceneActor.SOURCE_HERO_FIGURE
+	var rig := {
+		"jaw": {"joint": 10, "axis": [1, 0, 0], "open": 20},
+		"lids": {"joints": [22, 23], "axis": [1, 0, 0], "close": 35},
+		"head": {"joint": 8, "axis": [0, 0, 1], "limit": 50},
+		"moods": {"happy": [{"joint": 25, "rotation": [0.1, 0, 0, 0.995]}]},
+		"gaits": [{"seq": 0, "speed": 0}, {"seq": 2, "speed": 2}],
+	}
+	talker.rig = rig
+	talker.blink = false
+	var walk = add(talker, CutscenePath.new(), root)
+	walk.name = "Path"
+	var curve := Curve3D.new()
+	curve.add_point(Vector3(0, 0, 0))
+	curve.add_point(Vector3(3, 0, 0))
+	walk.curve = curve
+	var happy = add(talker, CutsceneMood.new(), root)
+	happy.name = "Happy"
+	happy.start = 0.5
+	happy.blend = 0.25
+	var grumpy = add(talker, CutsceneMood.new(), root)
+	grumpy.name = "Grumpy"
+	grumpy.start = 1.0
+	grumpy.mood = "grumpy"
+	grumpy.weight = 0.5
+	happy.mood = "happy"
+	check(happy.get_warnings().is_empty(), "a mood the rig has: no warning")
+	check(not grumpy.get_warnings().is_empty(), "a mood the rig lacks is warned of")
+	# A line: quiet, loud, quiet (0.1 s, 0.2 s, 0.1 s): three bytes shut, six open, three shut.
+	wav("user://t/level_09/cutscenes/audio/hi_en.wav", [[0.1, 0.0], [0.2, 1.0], [0.1, 0.0]])
+	write("user://t/level_09/cutscenes/audio/hi_fr.ogg", "not a wav")
+	var line = add(cs, CutsceneSound.new(), root)
+	line.name = "Line"
+	line.start = 1.0
+	line.files = {"en": "audio/hi_en.wav", "fr": "audio/hi_fr.ogg"}
+	line.source = NodePath("../Talker")
+	var other = add(cs, CutsceneSound.new(), root)
+	other.name = "Music"
+	other.kind = CutsceneSound.KIND_MUSIC
+	other.file = "audio/hi_en.wav"
+	other.source = NodePath("../Talker")
+
+	var d: Dictionary = cs.to_cutscene()
+	var a: Dictionary = d["actors"][0]
+	check(a.has("face"), "a face is written: %s" % [a.keys()])
+	var face: Dictionary = a.get("face", {})
+	var want_rig := rig.duplicate(true)
+	want_rig.erase("gaits")
+	check(same(face.get("rig"), want_rig), "the rig without its gaits: %s" % [face.get("rig")])
+	check(same(a["path"].get("gaits"), rig["gaits"]), "the gaits go with the walk: %s" % [a["path"]])
+	check(face.get("blink") == false, "no blink, said")
+	check(same(face.get("moods"), [{"t": 30, "mood": "happy", "weight": 1, "blend": 15}, {"t": 60, "mood": "grumpy", "weight": 0.5, "blend": 10}]), "the moods: %s" % [face.get("moods")])
+	var talk: Array = face.get("talk", [])
+	check(talk.size() == 1, "one talk, the voice line's (music is no talk): %s" % [talk])
+	if talk.size() == 1:
+		check(talk[0]["t"] == 60, "at the line's start")
+		var env = talk[0]["envelope"]
+		check(env is Dictionary and env.keys() == ["en"], "by language, only the WAV's: %s" % [env])
+		if env is Dictionary and env.has("en"):
+			var bytes := Marshalls.base64_to_raw(env["en"])
+			check(bytes.size() == 12, "a byte a thirtieth of a second: %d" % bytes.size())
+			if bytes.size() == 12:
+				check(bytes[0] < 10 and bytes[1] < 10 and bytes[11] < 10, "shut while quiet: %s" % [bytes])
+				check(bytes[4] > 200 and bytes[5] > 200 and bytes[6] > 200, "open while loud: %s" % [bytes])
+	var problems: PackedStringArray = cs.export_problems()
+	var said := "\n".join(problems)
+	check(said.contains("grumpy"), "a mood the rig lacks is said: %s" % said)
+	check(said.contains("hi_fr.ogg") and said.contains("not a WAV"), "a line that is no WAV is said: %s" % said)
+
+	# One file, not by language: the envelope is one string.
+	line.files = {}
+	line.file = "audio/hi_en.wav"
+	var one = cs.to_cutscene()["actors"][0]["face"]["talk"][0]["envelope"]
+	check(one is String and Marshalls.base64_to_raw(one).size() == 12, "one file, one envelope: %s" % [one])
+	# A broken WAV is said, not written.
+	write("user://t/level_09/cutscenes/audio/bad.wav", "RIFF....WAVEjunk")
+	line.file = "audio/bad.wav"
+	check(not cs.to_cutscene()["actors"][0]["face"].has("talk"), "a broken WAV gives no talk")
+	check("\n".join(cs.export_problems()).contains("bad.wav"), "and is said")
+	line.file = "audio/hi_en.wav"
+
+	# No jaw: no talk; no rig and no moods: no face.
+	var no_jaw := rig.duplicate(true)
+	no_jaw.erase("jaw")
+	talker.rig = no_jaw
+	check(not cs.to_cutscene()["actors"][0]["face"].has("talk"), "no jaw, no talk")
+	talker.rig = {}
+	happy.free()
+	grumpy.free()
+	check(not cs.to_cutscene()["actors"][0].has("face"), "no rig and no moods: no face")
+	talker.rig = rig
+
+	# Imported back: the rig with its gaits, the blink, the moods.
+	var mood2 = add(talker, CutsceneMood.new(), root)
+	mood2.name = "Happy"
+	mood2.mood = "happy"
+	var path := "user://t/faces.cutscene"
+	write(path, JSON.stringify(cs.to_cutscene()))
+	var copy = add(root.get_node("Game"), Cutscene.new(), root)
+	copy.name = "FacesCopy"
+	copy.from_cutscene(JSON.parse_string(FileAccess.get_file_as_string(path)))
+	var back = copy.get_node_or_null("Talker")
+	check(back is CutsceneActor, "the actor comes back")
+	if back is CutsceneActor:
+		check(same(back.rig, rig), "its rig, gaits too: %s" % [back.rig])
+		check(back.blink == false, "its blink")
+		var moods := back.get_children().filter(func(n): return n is CutsceneMood)
+		check(moods.size() == 1 and moods[0].mood == "happy", "its mood: %s" % [moods])
+	# The rigs the editor knows: none for a class it has no rig for, a project's own first.
+	check(CutsceneActor.known_rig("rac1", 99999).is_empty(), "no rig for an unknown class")
+	var ratchet := CutsceneActor.known_rig("rac1", -1)
+	check(ratchet.get("jaw", {}).get("joint") == 10 and ratchet.get("head", {}).get("joint") == 8, "Ratchet's rig: %s" % [ratchet.keys()])
+	check(ratchet.has("moods") and ratchet["moods"].has("happy") and ratchet.has("gaits"), "with moods and gaits")
+	var figure = add(cs, CutsceneActor.new(), root)
+	figure.name = "Figure"
+	figure.source = CutsceneActor.SOURCE_HERO_FIGURE
+	figure.get_use_known_rig_action().call()
+	check(same(figure.rig, ratchet), "Use Known Rig gives a hero figure Ratchet's rig")
+	write("res://cutscene_rigs.json", JSON.stringify({"rac1/77": {"jaw": {"joint": 3}}}))
+	check(same(CutsceneActor.known_rig("rac1", 77), {"jaw": {"joint": 3}}), "a project's own rig")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://cutscene_rigs.json"))
+	root.queue_free()
+
+
+func test_rides() -> void:
+	var root := make_level("user://t/level_10", {"level": 10, "version": "pal"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Rides"
+	timeline(cs, 2.0)
+	var ship = add(cs, CutsceneActor.new(), root)
+	ship.name = "Ship"
+	ship.source = CutsceneActor.SOURCE_NEW_MOBY
+	ship.moby_class = 500
+	ship.position = Vector3(10, 0, 0)  # the game's (10, 0, 0)
+	ship.rotation = Vector3(0, 0, PI / 2)  # under Game: turned about the game's z, facing its +y
+	var rider = add(cs, CutsceneActor.new(), root)
+	rider.name = "Rider"
+	rider.source = CutsceneActor.SOURCE_HERO_FIGURE
+	rider.ride_on = NodePath("../Ship")
+	rider.ride_start = 0.5
+	rider.ride_end = 1.5
+	var cam = add(cs, CutsceneCamera.new(), root)
+	cam.name = "Camera"
+	cam.position = Vector3(10, -2, 1)  # under Game: the game's own units
+	cam.ride_on = NodePath("../Ship")
+	cam.rotation = Vector3(PI / 2, 0, 0)  # looking along the game's +y, not straight down
+
+	var d: Dictionary = cs.to_cutscene()
+	var r: Dictionary = d["actors"][1]
+	check(same(r.get("ride"), [{"t": 30, "actor": "ship"}, {"t": 90}]), "the ride: %s" % [r.get("ride")])
+	var key: Dictionary = d["camera"]["keys"][0]
+	var eye = key["eye"]
+	check(eye is Dictionary and eye.get("actor") == "ship" and eye.get("turn") == true, "the eye on the ship: %s" % [eye])
+	if eye is Dictionary:
+		check(near3(eye["offset"], Vector3(-2, 0, 1), 0.01), "in the ship's axes: %s" % [eye["offset"]])
+	# Imported back: the camera rides again, where it was.
+	var path := "user://t/rides.cutscene"
+	write(path, JSON.stringify(d))
+	var copy = add(root.get_node("Game"), Cutscene.new(), root)
+	copy.name = "RidesCopy"
+	var problems: PackedStringArray = copy.from_cutscene(JSON.parse_string(FileAccess.get_file_as_string(path)))
+	check(problems.is_empty(), "nothing lost: %s" % [problems])
+	var back_rider = copy.get_node_or_null("Rider")
+	check(back_rider != null and back_rider.ride_on == NodePath("../Ship") and near(back_rider.ride_start, 0.5) and near(back_rider.ride_end, 1.5), "the rider rides again")
+	var again: Dictionary = copy.to_cutscene()
+	check(same(again["camera"]["keys"][0]["eye"], eye, 0.01), "the camera's eye again: %s" % [again["camera"]["keys"][0]["eye"]])
+	check(same(again["camera"]["keys"][0]["rotation"], key["rotation"], 0.01), "and its turn: %s vs %s" % [again["camera"]["keys"][0]["rotation"], key["rotation"]])
+	# Riding on itself, or on nothing that is an actor: said, not written.
+	rider.ride_on = NodePath(".")
+	check(not cs.to_cutscene()["actors"][1].has("ride"), "no ride on itself")
+	check("\n".join(cs.export_problems()).contains("rides on"), "and said")
+	root.queue_free()
+
+
+func test_air_slow_ties() -> void:
+	var root := make_level("user://t/level_11", {"level": 11, "version": "pal"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Air"
+	timeline(cs, 3.0)
+	var air = add(cs, CutsceneEvent.new(), root)
+	air.name = "Air"
+	air.action = CutsceneEvent.ACTION_AIR
+	air.persistent = false
+	air.colour = Color(1, 0.5, 0)
+	air.fog_near = 5
+	air.fog_far = 40
+	air.fog_thickness = 0.5
+	air.air_background = true
+	air.background = Color(0, 0, 1)
+	air.length = 0.5
+	var back = add(cs, CutsceneEvent.new(), root)
+	back.name = "Back"
+	back.action = CutsceneEvent.ACTION_AIR
+	back.persistent = false
+	back.start = 2.0
+	back.air_fog = false
+	var slow = add(cs, CutsceneEvent.new(), root)
+	slow.name = "Slow"
+	slow.action = CutsceneEvent.ACTION_SLOW
+	slow.persistent = false
+	slow.start = 1.0
+	slow.stretch = 20  # up to 8
+	slow.length = 0.25
+	var tie = add(cs, CutsceneEvent.new(), root)
+	tie.name = "Tie"
+	tie.action = CutsceneEvent.ACTION_TIE_HIDE
+	tie.tie = 42
+
+	var d: Dictionary = cs.to_cutscene()
+	var ev: Array = d["events"]
+	var by := {}
+	for e in ev:
+		by[e["do"] + str(e["t"])] = e
+	check(same(by.get("air0"), {"t": 0, "do": "air", "fog": {"colour": [1, 0.5, 0], "near": 5, "far": 40, "thickness": 0.5}, "background": [0, 0, 1], "length": 30}), "the air: %s" % [by.get("air0")])
+	check(same(by.get("air120"), {"t": 120, "do": "air", "length": 60}), "back to the game's: %s" % [by.get("air120")])
+	check(same(by.get("slow60"), {"t": 60, "do": "slow", "stretch": 8, "length": 15}), "slow: %s" % [by.get("slow60")])
+	check(same(by.get("tie_hide0"), {"t": 0, "do": "tie_hide", "tie": 42, "on": true, "persistent": true}), "tie: %s" % [by.get("tie_hide0")])
+	var copy = add(root.get_node("Game"), Cutscene.new(), root)
+	copy.name = "AirCopy"
+	var problems: PackedStringArray = copy.from_cutscene(d)
+	check(problems.is_empty(), "nothing lost: %s" % [problems])
+	check(same(copy.to_cutscene()["events"], ev), "the same again: %s" % [copy.to_cutscene()["events"]])
+	root.queue_free()
+
+
+func test_layers() -> void:
+	var root := make_level("user://t/level_13", {"level": 13, "version": "pal"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Wave"
+	var anim := timeline(cs, 1.0)
+	var actor = add(cs, CutsceneActor.new(), root)
+	actor.name = "Waver"
+	actor.source = CutsceneActor.SOURCE_HERO_FIGURE
+	actor.rig = {"parts": {"head": [8, 10]}}
+	var layer = add(actor, CutsceneLayer.new(), root)
+	layer.name = "Arm Wave"
+	check(not layer.get_warnings().is_empty(), "no joints: warned")
+	layer.set("use_part", "head")
+	check(layer.joints == PackedInt32Array([8, 9, 10]), "a part as the mask: %s" % [layer.joints])
+	layer.joints = PackedInt32Array([52, 53, 52, -1])
+	check(layer.joints == PackedInt32Array([52, 53]), "kept once each, in range: %s" % [layer.joints])
+	check(layer.get_warnings().is_empty(), "joints: no warning")
+	# Joint 52 turns 90 degrees about x over the first half second; 53 stays at 10 about y.
+	var path := String(cs.get_path_to(layer))
+	var k := anim.add_track(Animation.TYPE_VALUE)
+	anim.track_set_path(k, NodePath(path + ":joint_52"))
+	anim.track_insert_key(k, 0.0, Vector3.ZERO)
+	anim.track_insert_key(k, 0.5, Vector3(90, 0, 0))
+	layer.set("joint_53", Vector3(0, 10, 0))
+	var w := anim.add_track(Animation.TYPE_VALUE)
+	anim.track_set_path(w, NodePath(path + ":weight"))
+	anim.track_insert_key(w, 0.0, 0.0)
+	anim.track_insert_key(w, 0.25, 1.0)
+	var d: Dictionary = cs.to_cutscene()
+	var l: Dictionary = d["actors"][0]["layers"][0]
+	check(l["name"] == "arm_wave" and same(l["joints"], [52, 53]), "the layer: %s" % [l])
+	check(same(l["weight"], [{"t": 0, "w": 0}, {"t": 15, "w": 1}]), "its weight: %s" % [l.get("weight")])
+	check(l["frames"] == "layers/wave_waver_arm_wave.bin", "its frames: %s" % [l["frames"]])
+	var files: Dictionary = cs.export_files()
+	var bytes: PackedByteArray = files.get(l["frames"], PackedByteArray())
+	check(bytes.size() == 31 * 2 * 16, "a turn per joint per tick up to the last key: %d" % bytes.size())
+	if bytes.size() == 31 * 2 * 16:
+		var last := Quaternion(bytes.decode_float(30 * 32), bytes.decode_float(30 * 32 + 4), bytes.decode_float(30 * 32 + 8), bytes.decode_float(30 * 32 + 12))
+		check(last.is_equal_approx(Quaternion(Vector3(1, 0, 0), PI / 2)), "52 at the end: %s" % [last])
+		var half := Quaternion(bytes.decode_float(15 * 32), bytes.decode_float(15 * 32 + 4), bytes.decode_float(15 * 32 + 8), bytes.decode_float(15 * 32 + 12))
+		check(half.is_equal_approx(Quaternion(Vector3(1, 0, 0), PI / 4)), "and halfway: %s" % [half])
+		var other := Quaternion(bytes.decode_float(16), bytes.decode_float(20), bytes.decode_float(24), bytes.decode_float(28))
+		check(other.is_equal_approx(Quaternion(Vector3(0, 1, 0), deg_to_rad(10))), "53 held: %s" % [other])
+	# Written beside the .cutscene and read back as a layer with keys.
+	root.scene_file_path = "user://t/level_13/level.tscn"
+	check(cs.export_cutscene() != "", "exported")
+	check(FileAccess.file_exists("user://t/level_13/cutscenes/layers/wave_waver_arm_wave.bin"), "the frames written")
+	var copy = add(root.get_node("Game"), Cutscene.new(), root)
+	copy.name = "WaveCopy"
+	timeline(copy, 1.0)
+	var problems: PackedStringArray = copy.from_cutscene(d)
+	check(problems.is_empty(), "nothing lost: %s" % [problems])
+	var back = copy.get_node_or_null("Waver/ArmWave")
+	check(back != null and back.joints == PackedInt32Array([52, 53]), "the layer again")
+	if back != null:
+		var again: Dictionary = copy.to_cutscene()
+		var l2: Dictionary = again["actors"][0]["layers"][0]
+		check(same(l2["weight"], l["weight"]), "its weight again: %s" % [l2.get("weight")])
+		var bytes2: PackedByteArray = copy.export_files().get(l2["frames"], PackedByteArray())
+		check(bytes2.size() == bytes.size(), "as many frames again: %d" % bytes2.size())
+		var off := 0.0
+		for i in range(0, mini(bytes.size(), bytes2.size()), 4):
+			off = maxf(off, absf(bytes.decode_float(i) - bytes2.decode_float(i)))
+		check(off < 0.01, "the same turns, within the 30 Hz keys: %f" % off)
+	root.queue_free()
+
+
+func test_game_view() -> void:
+	# The game's picture in a view: as large as fits, centred.
+	check(Cutscene.game_frame(Vector2(1600, 900), false) == Rect2(200, 0, 1200, 900), "4:3 in a wide view")
+	check(Cutscene.game_frame(Vector2(1600, 900), true) == Rect2(0, 0, 1600, 900), "16:9 fills it")
+	check(Cutscene.game_frame(Vector2(800, 900), true) == Rect2(0, 225, 800, 450), "16:9 in a tall view")
+	var root := make_level("user://t/level_12", {"level": 12, "version": "pal"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "View"
+	cs.languages = PackedStringArray(["en", "fr"])
+	timeline(cs, 4.0)
+	check(cs.get_timeline_position() == 0.0, "no place on the timeline before one is chosen")
+	var line = add(cs, CutsceneSubtitle.new(), root)
+	line.start = 1.0
+	line.duration = 1.0
+	line.text = {"en": "This line is long enough that the game's font must break it in two", "fr": "Bonjour"}
+	check(cs.subtitles_at(0.5).is_empty(), "nothing before the line")
+	var rows: PackedStringArray = cs.subtitles_at(1.5)
+	check(rows.size() == 2 and rows[0].length() <= 40, "wrapped as the player does: %s" % [rows])
+	check(cs.subtitles_at(1.5, "fr") == PackedStringArray(["Bonjour"]), "by language")
+	check(cs.subtitles_at(2.0).is_empty(), "gone at its end")
+	var player: AnimationPlayer = cs.get_timeline()
+	player.assigned_animation = cs.get_cutscene_id()
+	player.seek(1.5, true)
+	check(near(cs.get_timeline_position(), 1.5), "the timeline's place: %s" % [cs.get_timeline_position()])
+	var fresh := CutsceneCamera.new()
+	check(near(fresh.fov, 51.0), "a new camera sees as the game's")
+	fresh.free()
+	root.queue_free()
+
+
 # Run on the first frame: before it the root is not in the tree yet, so neither are the levels.
 func _process(_delta: float) -> bool:
 	test_full_cutscene()
@@ -485,6 +850,11 @@ func _process(_delta: float) -> bool:
 	test_import_by_hand()
 	test_import_errors()
 	test_walk_shake_and_pictures()
+	test_faces()
+	test_rides()
+	test_air_slow_ties()
+	test_game_view()
+	test_layers()
 	print("cutscene export: ", "%d check(s) failed" % failures if failures else "all checks passed")
 	quit(1 if failures else 0)
 	return true

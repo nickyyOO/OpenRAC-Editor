@@ -9,6 +9,7 @@
 
 #ifdef TOOLS_ENABLED
 #include "editor_plugin/cutscene_editor_plugin.h"
+#include "editor_plugin/cutscene_timeline.h"
 #include "editor/plugins/editor_plugin.h"
 #endif
 
@@ -19,12 +20,16 @@ void initialize_openrac_cutscene_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(CutsceneActor);
 		GDREGISTER_CLASS(CutscenePath);
 		GDREGISTER_CLASS(CutsceneShake);
+		GDREGISTER_CLASS(CutsceneMood);
+		GDREGISTER_CLASS(CutsceneLayer);
 		GDREGISTER_CLASS(CutsceneSubtitle);
 		GDREGISTER_CLASS(CutsceneSound);
 		GDREGISTER_CLASS(CutsceneEvent);
 	}
 #ifdef TOOLS_ENABLED
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
+		GDREGISTER_INTERNAL_CLASS(CutsceneTimelineView);
+		GDREGISTER_INTERNAL_CLASS(CutsceneTimeline);
 		EditorPlugins::add_by_type<CutsceneEditorPlugin>();
 	}
 #endif

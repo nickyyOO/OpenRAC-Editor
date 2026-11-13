@@ -71,6 +71,15 @@ private:
 	void _import_pressed();
 	void _set_up_timeline();
 	Dictionary _to_cutscene_bind() const;
+	String import_from;  // the folder of the .cutscene being imported, for the files it names
+
+public:
+	// What an export leaves out or cannot do, said in words (an export prints them too).
+	PackedStringArray export_problems() const;
+	// The files an export writes beside the .cutscene besides it, by path.
+	Dictionary export_files() const;
+
+private:
 	String _export_cutscene_bind() const;
 	Error _import_cutscene_bind(const String &p_path);
 
@@ -131,7 +140,9 @@ public:
 	Ref<Animation> get_timeline_animation() const;
 	// The .cutscene as a Dictionary (docs/CUTSCENE_FORMAT.md), and written beside the level's
 	// scene, in cutscenes/. `r_problems` gets what could not be exported, in words.
-	Dictionary to_cutscene(PackedStringArray *r_problems = nullptr) const;
+	// `r_files` gets the files the .cutscene names that the editor makes (a layer's frames), by
+	// their path beside it.
+	Dictionary to_cutscene(PackedStringArray *r_problems = nullptr, Dictionary *r_files = nullptr) const;
 	Error export_cutscene(String *r_path = nullptr) const;
 	// The other way: a .cutscene's camera, actors, lines, sounds and events as children and timeline
 	// tracks of this cutscene, which must have none yet. Returns what could not be kept, in words.
@@ -139,6 +150,15 @@ public:
 	Error import_cutscene(const String &p_path, PackedStringArray *r_problems = nullptr);
 
 	PackedStringArray get_configuration_warnings() const override;
+
+	// The game's picture in an editor view of `p_size` looking through the cutscene's camera: 4:3,
+	// or 16:9 with `p_wide`, as large as fits, centred (the field of view is vertical both ways).
+	static Rect2 game_frame(const Vector2 &p_size, bool p_wide);
+	// Where the timeline is now, in seconds (0 with none).
+	double get_timeline_position() const;
+	// The subtitle rows shown at `p_seconds`, in `p_language` (empty: the cutscene's first), as the
+	// player wraps them for the game's font.
+	PackedStringArray subtitles_at(double p_seconds, const String &p_language = String()) const;
 };
 
 // The camera of the cutscene: its place, turn and roll are keyed on the timeline as any Camera3D's.
@@ -149,17 +169,27 @@ class CutsceneCamera : public Camera3D {
 	PackedFloat32Array cuts;
 	bool ease_back = true;
 	bool export_fov = false;
+	NodePath ride_on;
 
 protected:
 	static void _bind_methods();
 
 public:
+	// The game's own vertical field of view, about (the player's kGameFov), so a new camera sees
+	// what the game's would.
+	static constexpr float GAME_FOV = 51.0f;
+	CutsceneCamera() { set_fov(GAME_FOV); }
+
 	void set_cuts(const PackedFloat32Array &p_cuts);
 	PackedFloat32Array get_cuts() const;
 	void set_ease_back(bool p_ease);
 	bool get_ease_back() const;
 	void set_export_fov(bool p_export);
 	bool get_export_fov() const;
+	// An actor the camera rides on: its keys are written against the actor's place and turn, so in
+	// the game the camera goes where the actor goes.
+	void set_ride_on(const NodePath &p_actor);
+	NodePath get_ride_on() const;
 };
 
 // One character or object of the cutscene: a moby of the level (by its spawn id), a new moby of a
@@ -193,8 +223,14 @@ private:
 	float anim_speed = 1.0f;
 	int blend = 4;
 	Dictionary advanced;
+	Dictionary rig;
+	bool blink = true;
+	NodePath ride_on;
+	double ride_start = 0.0;
+	double ride_end = 0.0;
 
 	void _take_selected_moby();
+	void _use_known_rig();
 
 protected:
 	static void _bind_methods();
@@ -224,6 +260,24 @@ public:
 	void set_blend(int p_ticks);
 	int get_blend() const;
 	Callable get_take_selected_action();
+	Callable get_use_known_rig_action();
+	// The actor's rig (docs/CUTSCENE_FORMAT.md, `face.rig`): its jaw, eyelids, head, moods and
+	// gaits. Take Selected Moby fills it from the rigs the editor knows (cutscene_rigs.h, and a
+	// project's res://cutscene_rigs.json) when it is empty.
+	void set_rig(const Dictionary &p_rig);
+	Dictionary get_rig() const;
+	void set_blink(bool p_blink);
+	bool get_blink() const;
+	// Another actor (or the hero's figure) this one rides on from `ride_start` to `ride_end` (0: to the
+	// end): in the game it keeps its place against the carrier from then on.
+	void set_ride_on(const NodePath &p_actor);
+	NodePath get_ride_on() const;
+	void set_ride_start(double p_seconds);
+	double get_ride_start() const;
+	void set_ride_end(double p_seconds);
+	double get_ride_end() const;
+	// The rig the editor knows for a moby class of `p_game` (-1 for the hero), empty for none.
+	static Dictionary known_rig(const String &p_game, int p_class);
 	// "look_at", "held" and "layers" as the file writes them (docs/CUTSCENE_FORMAT.md), kept as
 	// they are: what the editor has no node for yet.
 	void set_advanced(const Dictionary &p_advanced);
@@ -276,6 +330,63 @@ public:
 	double get_duration() const;
 	void set_strength(double p_strength);
 	double get_strength() const;
+
+	PackedStringArray get_configuration_warnings() const override;
+};
+
+// A mood on an actor's face from `start`, faded in over `blend` (a child of a CutsceneActor whose
+// rig has the mood; an empty mood fades back to the face's own).
+class CutsceneMood : public Node {
+	GDCLASS(CutsceneMood, Node);
+
+	double start = 0.0;
+	String mood;
+	double weight = 1.0;
+	double blend = 1.0 / 6.0;
+
+protected:
+	static void _bind_methods();
+
+public:
+	void set_start(double p_seconds);
+	double get_start() const;
+	void set_mood(const String &p_mood);
+	String get_mood() const;
+	void set_weight(double p_weight);
+	double get_weight() const;
+	void set_blend(double p_seconds);
+	double get_blend() const;
+
+	PackedStringArray get_configuration_warnings() const override;
+};
+
+// Hand-set joint turns over the actor's animation (a child of a CutsceneActor): `joints` is its
+// mask, each listed joint a keyable `joint_<n>` turn (degrees about the joint's own axes, Godot's
+// YXZ order), `weight` a keyable blend from none (0) to all (1). Exported as the file's `layers`,
+// one turn per joint per tick in a .bin beside the .cutscene.
+class CutsceneLayer : public Node {
+	GDCLASS(CutsceneLayer, Node);
+
+	PackedInt32Array joints;
+	double weight = 1.0;
+	HashMap<int, Vector3> turns;
+
+protected:
+	static void _bind_methods();
+	bool _set(const StringName &p_name, const Variant &p_value);
+	bool _get(const StringName &p_name, Variant &r_ret) const;
+	void _get_property_list(List<PropertyInfo> *p_list) const;
+
+public:
+	void set_joints(const PackedInt32Array &p_joints);
+	PackedInt32Array get_joints() const;
+	void set_weight(double p_weight);
+	double get_weight() const;
+	void set_turn(int p_joint, const Vector3 &p_degrees);
+	Vector3 get_turn(int p_joint) const;
+	// The joints of a part of the actor's rig ("head", "left_arm", ... as the rig's "parts" list
+	// them), set as the mask.
+	void use_part(const String &p_part);
 
 	PackedStringArray get_configuration_warnings() const override;
 };
@@ -368,6 +479,10 @@ public:
 		ACTION_FADE,
 		ACTION_PLAY,
 		ACTION_TRAVEL,
+		ACTION_AIR,
+		ACTION_SLOW,
+		ACTION_TIE_HIDE,
+		ACTION_TIE_SHOW,
 	};
 
 private:
@@ -384,6 +499,14 @@ private:
 	double length = 1.0;
 	Color colour = Color(0, 0, 0);
 	String cutscene;
+	bool air_fog = true;
+	float fog_near = 10.0f;
+	float fog_far = 80.0f;
+	float fog_thickness = 1.0f;
+	bool air_background = false;
+	Color background = Color(0, 0, 0);
+	float stretch = 2.0f;
+	int tie = 0;
 
 protected:
 	static void _bind_methods();
@@ -416,6 +539,22 @@ public:
 	Color get_colour() const;
 	void set_cutscene(const String &p_name);
 	String get_cutscene() const;
+	void set_air_fog(bool p_on);
+	bool get_air_fog() const;
+	void set_fog_near(float p_near);
+	float get_fog_near() const;
+	void set_fog_far(float p_far);
+	float get_fog_far() const;
+	void set_fog_thickness(float p_thickness);
+	float get_fog_thickness() const;
+	void set_air_background(bool p_on);
+	bool get_air_background() const;
+	void set_background(const Color &p_colour);
+	Color get_background() const;
+	void set_stretch(float p_stretch);
+	float get_stretch() const;
+	void set_tie(int p_tie);
+	int get_tie() const;
 
 	// The event as the file has it (`{"t": ..., "do": ...}`), at its tick.
 	Dictionary to_event() const;

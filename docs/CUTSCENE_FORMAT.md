@@ -52,6 +52,11 @@ it through the game's `openrac_api`.
 | `once` | Play once per save (default true); remembered in the mod's save data |
 | `flag` | Optional condition: `{ "level": 3, "byte": 4, "is": 1 }` on the mission state |
 
+A `once` cutscene counts as seen when it ends or is skipped, so a game closed in the middle of one
+plays it again. The player's **Play cutscenes** setting off skips each one as it starts (what it leaves
+in the world still happens, as with a skip); in a party the host's setting counts for every game,
+and each game plays the party's cutscenes on its own triggers.
+
 The player starts a cutscene only when the game would start one of its own: the player in
 control, on foot, alive, with no menu and no game scene playing. Until then it waits.
 
@@ -97,6 +102,12 @@ game's logic sees. `{ "actor": "vendor", "joint": 4 }` is that joint where the p
 `shake` keys wobble the eye from `t` for `length` ticks (30 if not given), fading out, by
 `strength` units (0.3 if not given).
 
+An `eye` can be on an actor too: `{ "actor": "ship", "joint": 4, "offset": [-2, 0, 1], "turn": true }`
+puts the camera where that actor (or its joint, or the hero) is, plus `offset`; with `turn` the offset
+is in the actor's own axes (x ahead) and the key's `rotation` turns with the actor, so the camera
+rides on it. A `look_at` point takes `turn` the same way. The editor writes such keys for a
+CutsceneCamera whose **Ride On** is an actor.
+
 ## `actors`
 
 ```jsonc
@@ -132,6 +143,12 @@ with `joint` and `offset` as the camera's), by `weight` (0 to 1, 1 if not given)
 over `blend` ticks (10 if not given) from the key before. A key with `"target": null` eases the
 turn out. A new target turns the body round at most 0.2 radians a tick.
 
+`ride` keys put the actor on another: `[{ "t": 30, "actor": "ship" }, { "t": 90 }]` from tick 30 it
+keeps its own place and turn as they were against `ship` (an actor, the hero, or with `joint` a joint
+of one) when the key began, so it goes and turns with it; a key with no `actor` gets off. A rider moves
+after every carrier each tick. The editor writes it from an actor's **Ride On**, **Ride Start** and
+**Ride End**.
+
 `held` keys say what the actor holds from `t` on: `{ "from": "hero" }` what the hero holds now (a
 figure only), `{ "class": 1088, "joint": 56 }` a moby of that class on that joint (`item` and
 `slot`, the game's, for a figure), or `{}` nothing. On an actor that is not a figure the held moby
@@ -151,8 +168,53 @@ tick for the listed joints; the player turns the actor's joints by them, on top 
 (the port's joint offsets, as a mod turns the hero's). `frames` is a file beside the .cutscene
 file: for each tick from 0, for each joint in `joints`' order, a quaternion (x, y, z, w) as four
 little-endian float32s; after its last tick the last holds. `weight` keys (`w` from 0 to 1, linear
-between them, 1 if none) blend each rotation in from none. The editor does not write layers yet:
-they come from a tool or by hand, and the editor keeps them as written (the actor's `advanced`).
+between them, 1 if none) blend each rotation in from none. In the editor a layer is a
+**CutsceneLayer** under the actor: `joints` is its mask (**Use Part** takes a part of the actor's
+rig, such as `head` or `left_arm`), each joint a keyable `joint_<n>` turn in degrees, and `weight`
+keyable too. The export bakes them to `layers/<cutscene>_<actor>_<layer>.bin`, one turn per tick up
+to the last key; an import turns such a file back into a layer with a key every other tick (the
+game's 30 Hz). A layer whose frames are not beside the file is kept as written (the actor's
+`advanced`).
+
+### Face and gaits (version 1.2)
+
+```jsonc
+"face": {
+  "rig": {
+    "jaw":  { "joint": 11, "axis": [1, 0, 0], "open": 20 },            // degrees wide open
+    "lids": { "joints": [26, 27], "axis": [1, 0, 0], "close": 35 },    // degrees shut
+    "head": { "joint": 8, "axis": [0, 0, 1], "limit": 60 },            // degrees it turns at most
+    "moods": { "happy": [ { "joint": 12, "rotation": [0, 0, 0.13, 0.99] } ] }
+  },
+  "talk":  [ { "t": 30, "envelope": { "en": "AAA0f/+A..." } } ],       // written by the editor
+  "blink": true,
+  "moods": [ { "t": 0, "mood": "happy", "weight": 1, "blend": 10 } ]
+}
+"path": { "points": [...], "speed": 3, "t": 300,
+          "gaits": [ { "seq": 0, "speed": 0 }, { "seq": 2, "speed": 2 }, { "seq": 4, "speed": 6 } ] }
+```
+
+The `rig` says which of the actor's joints are its jaw, eyelids and head, and the joint turns of its
+moods (quaternions, x y z w, on top of its animation). The editor fills it from the rigs it knows
+for the actor's class (`modules/openrac_cutscene/cutscene_rigs.h`, and a project's
+`res://cutscene_rigs.json`, an object by `"<game>/<class>"` or `"<game>/hero"`), and it can be set
+by hand on the actor. A known rig may also list `parts` (a name and its first and last joint, such
+as `"head": [8, 51]`) for layers' masks: the editor keeps them and does not write them.
+
+- `talk`: the jaw opens by `open` degrees about `axis` as loud as the line: `envelope` is a byte a
+  thirtieth of a second (0 shut, 255 wide), in base64, by language like the line's files (one string
+  when the line has one file). The editor writes it on export from each voice line's WAV on an actor
+  whose rig has a jaw.
+- `blink` (true if not given, when the rig has `lids`): the lids shut by `close` degrees every two
+  to six seconds, the same way each time the cutscene plays.
+- `moods` keys fade a mood's pose in over `blend` ticks (10 if not given) while the one before
+  fades out; a key with no `mood` fades back to the face's own.
+- `head`: `look_at` turns the head first, up to `limit` degrees (60 if not given), and the body
+  only for the rest.
+
+On a walk, `gaits` pick the actor's sequence by the walk's speed: the gait with the highest `speed`
+not above it while walking, the slowest once it has arrived. An `anims` entry that starts after the
+walk did plays instead. The editor writes the rig's `gaits` on the walk.
 
 ## `subtitles`
 
@@ -199,6 +261,12 @@ uses. `game_sound` is an entry of the actor's class's sound table (the hero's wh
 { "t": 0,   "do": "haze", "position": [260, 150, 52], "radius": 4, "strength": 0.1, "length": 120 }
 { "t": 700, "do": "play", "cutscene": "vendor_part2" }
 { "t": 710, "do": "travel", "level": 4 }
+{ "t": 0,   "do": "air", "fog": { "colour": [0.6, 0.7, 0.8], "near": 10, "far": 80, "thickness": 0.8 },
+  "background": [0.2, 0.3, 0.5], "length": 60 }                  // version 1.3
+{ "t": 400, "do": "air", "length": 60 }                        // back to the game's
+{ "t": 100, "do": "slow", "stretch": 3, "length": 15 }         // a third of the speed
+{ "t": 160, "do": "slow", "stretch": 1, "length": 15 }
+{ "t": 0,   "do": "tie_hide", "tie": 42, "on": true }
 ```
 
 `persistent` events are the ones a skip must still apply.
@@ -206,6 +274,18 @@ uses. `game_sound` is an entry of the actor's class's sound table (the hero's wh
 A `fade` goes from the colour before it (none at first) to `to`, `[r, g, b]` or `[r, g, b, a]`
 from 0 to 1, over `length` ticks (30 if not given, 0 at once). `to` as `null` or with `a` 0 clears
 it. What a fade leaves goes with the way back to the game's camera.
+
+`air` (version 1.3) eases over `length` ticks (30 if not given) to its `fog` (`colour` 0 to 1,
+`near` and `far` in game units, `thickness` 0 to 1, 1 if not given) and `background` (`[r, g, b]`
+0 to 1, the colour behind the level). A key with only a background clears the scene's fog; one with
+neither goes back to the game's. It changes the picture only, and eases out with the camera.
+
+`slow` (version 1.3) eases over `length` ticks (0 if not given) to `stretch`, how many times longer
+a tick lasts (1 the game's speed, up to 8). The game runs the same ticks, only slower, so it plays
+out as it would at full speed. The scene's timeline is in ticks too, so it slows with it.
+
+`tie_hide` (version 1.3) hides (`on` true, the default) or shows a tie, by its index in the level's
+tie list, in the picture only. One that is not `persistent` shows again when the scene ends.
 
 ## `variants`
 
@@ -229,8 +309,21 @@ cutscene's timeline, and a **CutsceneCamera**. Its children are what the file li
 | CutsceneShake (a child of the camera) | `camera.shake`: `start`, `duration`, `strength` |
 | CutsceneSubtitle | `subtitles` |
 | CutsceneSound | `sounds` |
-| CutsceneEvent | `events` |
+| CutsceneEvent | `events` (also fog and background, slow motion, hiding ties) |
 | a Node3D called HeroEnd | `hero.end` |
+
+**Game View** in the 3D view's menu draws the game's picture over a view that looks through a
+CutsceneCamera (the camera's **Preview**): the frame at 4:3 or 16:9 (the field of view is vertical,
+so a wide picture shows more at the sides), the letterbox, the title-safe area and the subtitles'
+band, and the subtitles at the timeline's place, wrapped as the player wraps them. A new
+CutsceneCamera starts at the game's field of view (51 degrees).
+
+The **Cutscene** dock (beside Animation, at the bottom) shows the selected node's cutscene at a
+glance: a row for the camera and its shakes, each actor and its walk, moods and layers, the
+subtitles, the sounds and the events, with their keys and spans on one scale. A click goes to that
+time (on a tick) or picks the node; a drag moves what has a start; Play runs the timeline in the 3D
+view. Keys themselves are set as in any Godot animation, with the key icons in the inspector and
+the Animation dock.
 
 Saving the level writes every Cutscene to `cutscenes/<name>.cutscene` beside the scene, and the
 launcher packs them with the level. **Export .cutscene** writes one now; **Import .cutscene** reads
@@ -238,18 +331,19 @@ one back into a new, empty Cutscene (a camera looking at an actor becomes its tu
 a smooth curve, and events the editor has no node for are not kept: it says which). From a script, `to_cutscene()`,
 `export_cutscene()`, `from_cutscene(data)` and `import_cutscene(path)` do the same.
 
-## What the player does today (version 0.2)
+## What the player does today (version 0.3)
 
 The player is a mod on the port's mod interface (1.14, with `pack_folder` and `game_language`; SDK
 1.14.8 adds what a scene needs: `camera_fov`, `hud_hide`, `music_volume`, `moby_set_joints`,
-`moby_joint_position`, `moby_sound_play`). It plays all of this format: the triggers, `once` (per
+`moby_joint_position`, `moby_sound_play`, `scene_air`, `time_stretch`, `tie_hide`). It plays all of this format: the triggers, `once` (per
 save, in the mod's data folder), variants, the hero held, hidden or an actor, camera keys (linear,
 smooth, bezier, cuts, field of view, shake, the way back to the game's camera), actors of all four
-sources with `track`, `path`, `anims`, `visible`, `look_at`, `held` and `layers`, joints as
+sources with `track`, `path` (with `gaits`), `anims`, `visible`, `look_at`, `held`, `layers`, `face`
+(talk, blink, moods, the head's share of a look) and `ride`, cameras riding on actors, joints as
 look-at targets, subtitles (the game's font for ASCII, pictures for the rest, the disc's language),
 sounds with fades and game sounds on actors, the letterbox, fades, the hidden HUD, the held world,
-the lowered music, and the events `moby_hide`, `moby_kill`, `mission_flag`, `haze`, `fade`, `play`
-and `travel`. Start skips. The letterbox, fades and subtitle pictures need the port's overlay for
+the lowered music, and the events `moby_hide`, `moby_kill`, `mission_flag`, `haze`, `fade`, `play`,
+`travel`, `air`, `slow` and `tie_hide` (these three need `scene_air`, `time_stretch` and `tie_hide`). Start skips. The letterbox, fades and subtitle pictures need the port's overlay for
 mods (`on_overlay`); holding the world needs the moby update gate, which one mod has at a time.
 
 On a port without a call it needs, the player plays the rest and logs what it skipped, once a
