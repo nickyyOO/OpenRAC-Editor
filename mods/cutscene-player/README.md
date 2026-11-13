@@ -6,7 +6,8 @@ reads them when the level loads and starts each one when its trigger happens. Th
 [docs/CUTSCENE_FORMAT.md](../../docs/CUTSCENE_FORMAT.md).
 
 It uses only the port's mod interface (1.14; SDK 1.14.8 for the field of view, the hidden HUD, the
-music, joint layers, joints as targets and sounds on actors, which it skips on an older port), so
+music, joint layers, joints as targets, sounds on actors, the air, slow motion, hidden ties, animated
+props and feet on the ground, which it skips on an older port), so
 the game's own logic is not changed. Start skips a cutscene that allows it.
 
 ## Build
@@ -21,7 +22,7 @@ python3 .sdk/openrac-mod-sdk-*/tools/package_mod.py build/package/cutscene_playe
 ## Test
 
 The timeline's sums (tracks, paths, the camera and its field of view, look-at, joint layers, the
-music, subtitles and their pictures, fades, the letterbox, volumes) and the JSON reader are in `src/timeline.hpp` and `src/json.hpp`, apart from the port, with their tests:
+music, subtitles and their pictures, fades, the letterbox, volumes, the legs' IK) and the JSON reader are in `src/timeline.hpp` and `src/json.hpp`, apart from the port, with their tests:
 
 ```sh
 cmake -S tests -B build/tests -G Ninja && cmake --build build/tests && ctest --test-dir build/tests

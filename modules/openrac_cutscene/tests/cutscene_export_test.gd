@@ -841,6 +841,80 @@ func test_game_view() -> void:
 	root.queue_free()
 
 
+func test_retarget() -> void:
+	var root := make_level("user://t/level_14", {"level": 14, "version": "pal"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Mocap"
+	var anim := timeline(cs, 2.0)
+	var actor = add(cs, CutsceneActor.new(), root)
+	actor.name = "Dancer"
+	actor.source = CutsceneActor.SOURCE_HERO_FIGURE
+	var layer = add(actor, CutsceneLayer.new(), root)
+	layer.name = "Arms"
+	# A source skeleton: an upper arm resting turned 30 degrees about z, raised 90 about x in a second.
+	var skeleton := Skeleton3D.new()
+	skeleton.add_bone("UpperArm")
+	skeleton.add_bone("Hand")
+	var rest := Basis(Vector3(0, 0, 1), deg_to_rad(30))
+	skeleton.set_bone_rest(0, Transform3D(rest, Vector3.ZERO))
+	var source := Animation.new()
+	source.length = 1.0
+	var r := source.add_track(Animation.TYPE_ROTATION_3D)
+	source.track_set_path(r, NodePath("Skeleton3D:UpperArm"))
+	source.rotation_track_insert_key(r, 0.0, rest.get_rotation_quaternion())
+	source.rotation_track_insert_key(r, 1.0, (rest * Basis(Vector3(1, 0, 0), PI / 2)).get_rotation_quaternion())
+	var problems: String = layer.retarget(source, skeleton, {"UpperArm": 52, "Hand": {"joint": 60, "axes": Basis()}, "Tail": 3}, 0.5)
+	check(problems.contains("no bone \"Tail\"") and problems.contains("does not turn bone \"Hand\""), "what it could not do: %s" % problems)
+	check(layer.joints == PackedInt32Array([52, 60]), "the mapped joints in the mask: %s" % [layer.joints])
+	var k := anim.find_track(NodePath(String(cs.get_path_to(layer)) + ":joint_52"), Animation.TYPE_VALUE)
+	check(k >= 0 and anim.track_get_key_count(k) == 31, "a key each 30 Hz frame: %d" % (anim.track_get_key_count(k) if k >= 0 else -1))
+	if k >= 0:
+		check(near(anim.track_get_key_time(k, 0), 0.5), "from the start given")
+		var last: Vector3 = anim.track_get_key_value(k, anim.track_get_key_count(k) - 1)
+		check(last.is_equal_approx(Vector3(90, 0, 0)), "the turn from the rest, not the rest: %s" % [last])
+	# Axes: a bone whose x is the joint's y turns the joint about y.
+	var turned = add(actor, CutsceneLayer.new(), root)
+	turned.name = "Turned"
+	turned.retarget(source, skeleton, {"UpperArm": {"joint": 70, "axes": Basis(Vector3(0, 1, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1))}}, 0.0)
+	var k2 := anim.find_track(NodePath(String(cs.get_path_to(turned)) + ":joint_70"), Animation.TYPE_VALUE)
+	if k2 >= 0:
+		var end: Vector3 = anim.track_get_key_value(k2, anim.track_get_key_count(k2) - 1)
+		check(Basis.from_euler(end * PI / 180).is_equal_approx(Basis(Vector3(0, 1, 0), PI / 2)), "about the joint's own axis: %s" % [end])
+	else:
+		check(false, "the turned layer's track")
+	# Another actor of the same skeleton plays it too, a second later.
+	var other = add(cs, CutsceneActor.new(), root)
+	other.name = "Twin"
+	other.source = CutsceneActor.SOURCE_HERO_FIGURE
+	var copy = add(other, CutsceneLayer.new(), root)
+	copy.name = "Arms"
+	check(copy.copy_keys_from(layer, 1.0) == "", "copied")
+	check(copy.joints == layer.joints, "the same mask")
+	var k3 := anim.find_track(NodePath(String(cs.get_path_to(copy)) + ":joint_52"), Animation.TYPE_VALUE)
+	check(k3 >= 0 and near(anim.track_get_key_time(k3, 0), 1.5), "its keys a second later")
+	check(copy.copy_keys_from(copy, 0.0) != "", "not from itself")
+	# Feet on the ground: the hero's legs from the known rig; a moby with no legs is told.
+	actor.feet_on_ground = true
+	var mob = add(cs, CutsceneActor.new(), root)
+	mob.name = "Mob"
+	mob.source = CutsceneActor.SOURCE_NEW_MOBY
+	mob.moby_class = 500
+	mob.feet_on_ground = true
+	var problems2 := PackedStringArray()
+	var d: Dictionary = cs.to_cutscene()
+	var dancer: Dictionary = d["actors"][0]
+	check(same(dancer.get("feet", {}).get("legs", []), [[92, 93, 94], [98, 99, 100]]), "the hero's legs: %s" % [dancer.get("feet")])
+	check(not d["actors"][2].has("feet"), "no legs, no feet")
+	var back = add(root.get_node("Game"), Cutscene.new(), root)
+	back.name = "MocapBack"
+	timeline(back, 2.0)
+	back.from_cutscene(d)
+	var again = back.get_node_or_null("Dancer")
+	check(again != null and again.feet_on_ground, "feet on the ground again")
+	skeleton.free()
+	root.queue_free()
+
+
 # Run on the first frame: before it the root is not in the tree yet, so neither are the levels.
 func _process(_delta: float) -> bool:
 	test_full_cutscene()
@@ -855,6 +929,7 @@ func _process(_delta: float) -> bool:
 	test_air_slow_ties()
 	test_game_view()
 	test_layers()
+	test_retarget()
 	print("cutscene export: ", "%d check(s) failed" % failures if failures else "all checks passed")
 	quit(1 if failures else 0)
 	return true

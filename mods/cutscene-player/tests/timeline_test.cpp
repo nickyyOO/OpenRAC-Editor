@@ -701,6 +701,72 @@ void air_and_slow() {
     CHECK(stretch_at(ev, 30) == 8);  // up to 8
 }
 
+// A vector turned by a unit quaternion (x, y, z, w).
+static V3 turn_by(const float q[4], V3 v) {
+    const V3 u{q[0], q[1], q[2]};
+    return v + cross(u, cross(u, v) + v * q[3]) * 2.0f;
+}
+
+static void feet() {
+    // A leg standing a little bent (identity axes: its joints' turns are the level's), the ankle
+    // raised 0.2 onto a step.
+    const float id[12] = {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
+    float f[12];
+    std::copy(id, id + 12, f);
+    f[9] = 0, f[10] = 0, f[11] = 1;
+    const JointFrame hip = joint_frame(f);
+    f[9] = 0, f[10] = 0.1f, f[11] = 0.5f;
+    const JointFrame knee = joint_frame(f);
+    f[9] = 0, f[10] = 0, f[11] = 0;
+    const JointFrame ankle = joint_frame(f);
+    const V3 target{0, 0, 0.2f};
+    const LegTurns t = leg_ik(hip, knee, ankle, target);
+    const V3 k2 = hip.at + turn_by(t.hip, knee.at - hip.at);
+    float hk[4];
+    quat_mul(t.hip, t.knee, hk);
+    const V3 a2 = k2 + turn_by(hk, ankle.at - knee.at);
+    CHECK(length(a2 - target) < 1e-3f);
+    CHECK(std::fabs(length(k2 - hip.at) - length(knee.at - hip.at)) < 1e-4f);  // bones keep their length
+    CHECK(k2.y > 0.1f);  // the knee bends further the way it bent
+    float all[4];
+    quat_mul(hk, t.ankle, all);
+    CHECK(std::fabs(all[3]) > 0.9999f);  // the foot keeps its tilt
+    // Already there: no turns.
+    const LegTurns none = leg_ik(hip, knee, ankle, ankle.at);
+    CHECK(std::fabs(none.hip[3]) > 0.9999f && std::fabs(none.knee[3]) > 0.9999f);
+    // Too far: the leg straightens toward it, no further.
+    const LegTurns far = leg_ik(hip, knee, ankle, {0, 0, -1});
+    const V3 k3 = hip.at + turn_by(far.hip, knee.at - hip.at);
+    float hk3[4];
+    quat_mul(far.hip, far.knee, hk3);
+    const V3 a3 = k3 + turn_by(hk3, ankle.at - knee.at);
+    CHECK(a3.z < -0.015f && a3.z > -0.03f);
+    // The leg drawn with those turns, taken back to its animation.
+    std::array<JointFrame, 3> drawn{hip, knee, ankle};
+    const Axes3 rh = quat_axes(t.hip);
+    float hk2[4], hka[4];
+    quat_mul(t.hip, t.knee, hk2);
+    quat_mul(hk2, t.ankle, hka);
+    const Axes3 rk = quat_axes(hk2), ra = quat_axes(hka);
+    drawn[0].x = rh.x, drawn[0].y = rh.y, drawn[0].z = rh.z;
+    drawn[1].x = rk.x, drawn[1].y = rk.y, drawn[1].z = rk.z, drawn[1].at = k2;
+    drawn[2].x = ra.x, drawn[2].y = ra.y, drawn[2].z = ra.z, drawn[2].at = a2;
+    for (JointFrame& j : drawn) j.at.z -= 0.1f;  // and the body lowered
+    const std::array<std::array<float, 4>, 3> given{{{t.hip[0], t.hip[1], t.hip[2], t.hip[3]},
+                                                     {t.knee[0], t.knee[1], t.knee[2], t.knee[3]},
+                                                     {t.ankle[0], t.ankle[1], t.ankle[2], t.ankle[3]}}};
+    const auto back = leg_unturned(drawn, given, -0.1f);
+    CHECK(length(back[1].at - knee.at) < 1e-4f && length(back[2].at - ankle.at) < 1e-4f);
+    CHECK(length(back[2].x - V3{1, 0, 0}) < 1e-4f && length(back[1].z - V3{0, 0, 1}) < 1e-4f);
+    // A joint's own axes: a turn about the level's z is about the joint's y when its y is the
+    // level's z.
+    float g[12] = {1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0};
+    float q[4], local[4];
+    axis_radians({0, 0, 1}, 1.0f, q);
+    to_joint(joint_frame(g), q, local);
+    CHECK(std::fabs(local[1] - std::sin(0.5f)) < 1e-5f && std::fabs(local[0]) < 1e-6f && std::fabs(local[2]) < 1e-6f);
+}
+
 int main() {
     json_values();
     json_numbers();
@@ -724,6 +790,7 @@ int main() {
     walks_and_faces();
     rides_and_eyes();
     air_and_slow();
+    feet();
     std::printf("timeline: %d check(s), %d failed\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

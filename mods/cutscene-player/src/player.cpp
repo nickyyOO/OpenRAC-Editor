@@ -284,6 +284,16 @@ struct ActorRun {
     int ride = -1;
     V3 ride_from;
     float ride_yaw = 0;
+    // feet: each leg's hip, knee and ankle, how far its ankle is moved up or down (eased toward
+    // the ground under it) and its three turns; how far the body is lowered.
+    struct Leg {
+        int joints[3] = {0, 0, 0};
+        float shift = 0;
+        std::array<std::array<float, 4>, 3> turns{{{0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}}};
+    };
+    std::vector<Leg> legs;
+    float feet_drop = 0;
+    V3 feet_root;  // the lowering as joint 0's move, in its parent's frame and the model's units
     // The moby the actor is in the level (a figure's too), -1 for none.
     int moby_slot() const;
 };
@@ -569,8 +579,77 @@ void face_turns(const ActorRun& a, int t, JointTurns& out) {
 }
 
 // The actor's joints at t: its layers, then its face, as offsets on its moby.
+// The height of the level's ground under `p`, looked for from a little above it to well below.
+bool ground_below(V3 p, float& out) {
+    if (!API_HAS(level_line)) return false;
+    const float top[3] = {p.x, p.y, p.z + 0.6f};
+    float to[3] = {p.x, p.y, p.z - 1.5f};
+    int blocked = 0;
+    if (g_api->level_line(top, to, &blocked) != OPENRAC_HOOK_OK || !blocked) return false;
+    float hi = top[2], lo = to[2];
+    for (int i = 0; i < 12; ++i) {
+        to[2] = (hi + lo) / 2;
+        g_api->level_line(top, to, &blocked);
+        (blocked ? lo : hi) = to[2];
+    }
+    out = (hi + lo) / 2;
+    return true;
+}
+
+// Feet on the ground: each ankle moved by the ground under it against the height the actor stands
+// at (steps, slopes), the body lowered for the lower foot, the legs bent to reach. Read from the pose
+// last drawn, so it follows a tick behind the animation.
+void feet_tick(ActorRun& a) {
+    if (a.legs.empty() || !API_HAS(moby_joint_frame)) return;
+    const int slot = a.moby_slot();
+    if (slot < 0) return;
+    std::vector<std::array<JointFrame, 3>> frames(a.legs.size());
+    for (std::size_t l = 0; l < a.legs.size(); ++l) {
+        for (std::size_t i = 0; i < 3; ++i) {
+            float f[12];
+            if (g_api->moby_joint_frame(slot, a.legs[l].joints[i], f) != OPENRAC_HOOK_OK) return;
+            frames[l][i] = joint_frame(f);
+        }
+    }
+    // The animation's floor is where the actor stands: its place's height.
+    const float root = a.position.z;
+    float drop = 0;
+    for (std::size_t l = 0; l < a.legs.size(); ++l) {
+        ActorRun::Leg& leg = a.legs[l];
+        float under = 0;
+        const float want = ground_below(frames[l][2].at, under) ? std::clamp(under - root, -0.5f, 0.5f) : 0.0f;
+        leg.shift += (want - leg.shift) * 0.35f;
+        drop = std::min(drop, leg.shift);
+    }
+    const float lowered = a.feet_drop;  // as last drawn
+    a.feet_drop = drop;
+    // The body is lowered by its root joint (a figure stands where the game's ground puts it): the
+    // drop in the root's axes, over their length (the moby's scale).
+    float root_frame[12];
+    if (g_api->moby_joint_frame(slot, 0, root_frame) == OPENRAC_HOOK_OK) {
+        const JointFrame r = joint_frame(root_frame);
+        const float size = length(r.z);
+        if (size > 1e-6f) {
+            const V3 down{0, 0, drop};
+            a.feet_root = V3{dot(down, r.x), dot(down, r.y), dot(down, r.z)} * (1.0f / (size * size));
+        }
+    }
+    for (std::size_t l = 0; l < a.legs.size(); ++l) {
+        ActorRun::Leg& leg = a.legs[l];
+        // The leg as animated (the turns and lowering of last tick taken off), lowered now, and
+        // its ankle moved by its own shift.
+        std::array<JointFrame, 3> f = leg_unturned(frames[l], leg.turns, lowered);
+        V3 target = f[2].at;
+        target.z += leg.shift;
+        for (JointFrame& j : f) j.at.z += drop;
+        const LegTurns turns = leg_ik(f[0], f[1], f[2], target);
+        const float* fresh[3] = {turns.hip, turns.knee, turns.ankle};
+        for (std::size_t i = 0; i < 3; ++i) std::copy(fresh[i], fresh[i] + 4, leg.turns[i].begin());
+    }
+}
+
 void joints_tick(ActorRun& a, int t) {
-    if (a.layers.empty() && !(*a.def)["face"].is_object()) return;
+    if (a.layers.empty() && a.legs.empty() && !(*a.def)["face"].is_object()) return;
     if (!API_HAS(moby_set_joints)) return;
     const int slot = a.moby_slot();
     if (slot < 0) return;
@@ -584,10 +663,22 @@ void joints_tick(ActorRun& a, int t) {
         }
     }
     face_turns(a, t, turns);
+    for (const ActorRun::Leg& leg : a.legs) {
+        for (std::size_t i = 0; i < 3; ++i) turns.add(leg.joints[i], leg.turns[i].data());
+    }
+    if (!a.legs.empty()) {
+        const float none[4] = {0, 0, 0, 1};
+        turns.add(0, none);  // the root, moved below
+    }
     std::vector<openrac_joint_offset> offsets(turns.joints.size());
     for (std::size_t i = 0; i < offsets.size(); ++i) {
         offsets[i].joint = static_cast<std::uint32_t>(turns.joints[i]);
         std::copy(turns.turns[i].begin(), turns.turns[i].end(), offsets[i].rotation);
+        if (turns.joints[i] == 0 && !a.legs.empty()) {
+            offsets[i].translation[0] = a.feet_root.x;
+            offsets[i].translation[1] = a.feet_root.y;
+            offsets[i].translation[2] = a.feet_root.z;
+        }
     }
     if (offsets.empty() && !a.joints_set) return;
     a.joints_set = g_api->moby_set_joints(g_mod, slot, offsets.empty() ? nullptr : offsets.data(),
@@ -763,6 +854,12 @@ void actors_begin(Play& p) {
         if (def.has("layers") && a.kind != ActorRun::Kind::None && a.kind != ActorRun::Kind::Prop) {
             load_layers(p, a);
         }
+        for (const Value& leg : def["feet"]["legs"].items()) {
+            if (leg.size() != 3 || a.kind == ActorRun::Kind::None || a.kind == ActorRun::Kind::Prop) continue;
+            ActorRun::Leg l;
+            for (std::size_t i = 0; i < 3; ++i) l.joints[i] = static_cast<int>(leg[i].integer());
+            a.legs.push_back(l);
+        }
         if (def.has("face") && a.kind != ActorRun::Kind::None && a.kind != ActorRun::Kind::Prop) {
             load_face(p, a);
         }
@@ -780,6 +877,7 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     ride_tick(p, a, t);
     if (!a.looking) a.look_yaw = a.rotation.z;
     look_tick(p, a, t);
+    feet_tick(a);
 
     const int visible = visible_at(def["visible"], t) ? 1 : 0;
 
@@ -790,6 +888,21 @@ void actor_tick(Play& p, ActorRun& a, int t) {
         quaternion(a.rotation, pose.rotation);
         pose.scale = a.scale;
         g_api->prop_pose(g_mod, a.prop, &pose);
+        // A skinned .glb: its anims entry's animation (seq: its index in the file), from the
+        // entry's start at its speed, looped unless the entry says not.
+        const int anim = anim_at(def["anims"], t);
+        if (anim >= 0 && API_HAS(prop_animate)) {
+            const Value& e = def["anims"].items()[static_cast<std::size_t>(anim)];
+            const double seconds = (t - e["t"].integer()) / 60.0 * e["speed"].number(1)
+                                   + e["frame"].integer() / 30.0;
+            g_api->prop_animate(g_mod, a.prop, static_cast<int>(e["seq"].integer()), static_cast<float>(seconds),
+                                e["loop"].boolean(true) ? 1 : 0);
+        } else if (anim >= 0) {
+            warn_once(p, "an animated prop (needs a newer port)");
+        } else if (a.anim >= 0 && API_HAS(prop_animate)) {
+            g_api->prop_animate(g_mod, a.prop, -1, 0.0f, 0);
+        }
+        a.anim = anim;
         if (visible != a.visible) g_api->prop_hide(g_mod, a.prop, !visible);
         a.visible = visible;
         return;
@@ -843,12 +956,13 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     }
     a.anim = anim;
     a.gait = gait;
+    const V3 body = a.position;
 
     if (a.kind == ActorRun::Kind::Figure) {
         openrac_pose pose{};
         pose.size = sizeof(pose);
         pose.level = g_level.number;
-        std::memcpy(pose.position, &a.position, sizeof(float) * 3);
+        std::memcpy(pose.position, &body, sizeof(float) * 3);
         std::memcpy(pose.rotation, &a.rotation, sizeof(float) * 3);
         pose.scale = size;
         pose.item = -1;
@@ -860,7 +974,7 @@ void actor_tick(Play& p, ActorRun& a, int t) {
         openrac_moby pose{};
         pose.size = sizeof(pose);
         pose.slot = a.slot;
-        std::memcpy(pose.position, &a.position, sizeof(float) * 3);
+        std::memcpy(pose.position, &body, sizeof(float) * 3);
         std::memcpy(pose.rotation, &a.rotation, sizeof(float) * 3);
         pose.scale = size;
         pose.seq = seq, pose.frame = frame, pose.next_frame = next;

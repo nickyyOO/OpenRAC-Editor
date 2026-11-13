@@ -12,7 +12,8 @@ namespace cutscene_rigs {
 // mouth's corners. He has no eyelid joints (the game blinks him another way), so no "lids". Gaits:
 // sequence 0 stands, 4 runs (the decomp's set_hero_animation). Parts (first and last joint, for a
 // layer's mask): 1-7 the spine, 8-51 the head, 52-71 and 72-91 the arms, 92-103 the legs, 104-110
-// the tail.
+// the tail. Feet (hip, knee, ankle of each leg, for feet on the ground): 92-94 the right leg,
+// 98-100 the left.
 inline constexpr const char *BUILT_IN = R"RIGS({
  "rac1/hero": {
   "parts": {
@@ -23,6 +24,7 @@ inline constexpr const char *BUILT_IN = R"RIGS({
    "legs": [92, 103],
    "tail": [104, 110]
   },
+  "feet": [[92, 93, 94], [98, 99, 100]],
   "jaw": {
    "joint": 10,
    "axis": [

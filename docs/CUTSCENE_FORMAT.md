@@ -136,7 +136,16 @@ CutsceneCamera whose **Ride On** is an actor.
 
 `track` keys move it; `path` walks it along points on the ground at `speed` units a second (8 if
 not given) from tick `t` instead, facing the way it walks. `anims` start the game's sequences of the
-actor's class, blending over `blend` ticks.
+actor's class, blending over `blend` ticks. On a prop (a skinned `.glb`) `seq` is the file's
+animation (its index, 0 up), played from the entry's `t` at `speed` (and `frame`, a thirtieth of a
+second, into it), looped unless `"loop": false`; the mesh's joints are its skin's, numbered by their
+`joint_NNN` names or else their order (version 1.4).
+
+`"feet": { "legs": [[92, 93, 94], [98, 99, 100]] }` keeps the actor's feet on the level's ground
+(version 1.4): each leg's hip, knee and ankle. Each ankle goes up or down by how far the ground under
+it is from the height the actor stands at (half a unit at most, eased in), the body lowers for the
+lower foot, the legs bend to reach and each foot keeps its tilt. On steps and slopes, a scene made
+on flat ground then stands on them.
 
 `look_at` turns the actor's body (its yaw) towards a `target` (a point, or an actor or the hero,
 with `joint` and `offset` as the camera's), by `weight` (0 to 1, 1 if not given), easing to it
@@ -176,6 +185,19 @@ to the last key; an import turns such a file back into a layer with a key every 
 game's 30 Hz). A layer whose frames are not beside the file is kept as written (the actor's
 `advanced`).
 
+A layer's **Retarget** group bakes an animation made elsewhere (Blender, mocap) onto it: **Retarget
+Source** is a scene with a Skeleton3D and an AnimationPlayer (a `.glb`), **Retarget Animation** its
+animation (the first if empty), **Retarget Map** which bone turns which joint (`{"UpperArm.L": 52}`,
+or `{"joint": 52, "axes": Basis}` when the bone's axes are not the joint's: its x, y and z as the
+joint's), **Retarget Start** where it starts on the timeline. **Retarget** keys each mapped joint
+every 30 Hz frame with the bone's turn from its rest, adds the joints to the mask and says what it
+could not do (a bone not in the skeleton or not moved). Only turns go across, not the bones'
+lengths or the body's travel. From a script, `retarget(animation, skeleton, map, start)` does the
+same, and `copy_keys_from(layer, offset)` copies another layer's mask, weight and keys onto this one,
+later by `offset` seconds: a move made once, played by another actor of the same skeleton. The
+editor warns on a prop actor whose `.glb` moves its face by blend shapes (the game has none: a face
+is turned on bones, as the hero's rig does) or has no skeleton.
+
 ### Face and gaits (version 1.2)
 
 ```jsonc
@@ -199,7 +221,9 @@ moods (quaternions, x y z w, on top of its animation). The editor fills it from 
 for the actor's class (`modules/openrac_cutscene/cutscene_rigs.h`, and a project's
 `res://cutscene_rigs.json`, an object by `"<game>/<class>"` or `"<game>/hero"`), and it can be set
 by hand on the actor. A known rig may also list `parts` (a name and its first and last joint, such
-as `"head": [8, 51]`) for layers' masks: the editor keeps them and does not write them.
+as `"head": [8, 51]`) for layers' masks, and `feet` (each leg's hip, knee and ankle) for an actor's
+**Feet On Ground**: the editor keeps them, and writes `feet` as the actor's own (the hero's legs for a
+hero figure when its rig has none).
 
 - `talk`: the jaw opens by `open` degrees about `axis` as loud as the line: `envelope` is a byte a
   thirtieth of a second (0 shut, 255 wide), in base64, by language like the line's files (one string
@@ -345,11 +369,12 @@ Not kept: the actors' own joint animation, so they stand in their class's first 
 
 The player is a mod on the port's mod interface (1.14, with `pack_folder` and `game_language`; SDK
 1.14.8 adds what a scene needs: `camera_fov`, `hud_hide`, `music_volume`, `moby_set_joints`,
-`moby_joint_position`, `moby_sound_play`, `scene_air`, `time_stretch`, `tie_hide`). It plays all of this format: the triggers, `once` (per
+`moby_joint_position`, `moby_sound_play`, `scene_air`, `time_stretch`, `tie_hide`, `prop_animate`,
+`moby_joint_frame`). It plays all of this format: the triggers, `once` (per
 save, in the mod's data folder), variants, the hero held, hidden or an actor, camera keys (linear,
 smooth, bezier, cuts, field of view, shake, the way back to the game's camera), actors of all four
 sources with `track`, `path` (with `gaits`), `anims`, `visible`, `look_at`, `held`, `layers`, `face`
-(talk, blink, moods, the head's share of a look) and `ride`, cameras riding on actors, joints as
+(talk, blink, moods, the head's share of a look), `ride` and `feet`, animated props, cameras riding on actors, joints as
 look-at targets, subtitles (the game's font for ASCII, pictures for the rest, the disc's language),
 sounds with fades and game sounds on actors, the letterbox, fades, the hidden HUD, the held world,
 the lowered music, and the events `moby_hide`, `moby_kill`, `mission_flag`, `haze`, `fade`, `play`,

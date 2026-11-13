@@ -225,6 +225,7 @@ private:
 	Dictionary advanced;
 	Dictionary rig;
 	bool blink = true;
+	bool feet_on_ground = false;
 	NodePath ride_on;
 	double ride_start = 0.0;
 	double ride_end = 0.0;
@@ -268,6 +269,10 @@ public:
 	Dictionary get_rig() const;
 	void set_blink(bool p_blink);
 	bool get_blink() const;
+	// Keeps the feet on the level's ground in the game (steps, slopes): the legs the rig's "feet"
+	// names bend to reach it, and the body lowers for the lower foot.
+	void set_feet_on_ground(bool p_on);
+	bool get_feet_on_ground() const;
 	// Another actor (or the hero's figure) this one rides on from `ride_start` to `ride_end` (0: to the
 	// end): in the game it keeps its place against the carrier from then on.
 	void set_ride_on(const NodePath &p_actor);
@@ -370,6 +375,15 @@ class CutsceneLayer : public Node {
 	PackedInt32Array joints;
 	double weight = 1.0;
 	HashMap<int, Vector3> turns;
+	// Retarget (editor): a scene with a Skeleton3D and an animation (a .glb from Blender, mocap),
+	// its animation's name (empty: the first), which of its bones turns which joint, and when it
+	// starts on the timeline.
+	String retarget_source;
+	String retarget_animation;
+	Dictionary retarget_map;
+	double retarget_start = 0.0;
+
+	void _retarget_from_source();
 
 protected:
 	static void _bind_methods();
@@ -387,6 +401,25 @@ public:
 	// The joints of a part of the actor's rig ("head", "left_arm", ... as the rig's "parts" list
 	// them), set as the mask.
 	void use_part(const String &p_part);
+
+	// Bakes `p_source`'s turns of the skeleton's bones onto this layer's joints, a key every 30 Hz
+	// frame from `p_start` (seconds): each bone's turn from its rest, in the joint's own axes.
+	// `p_map` maps a bone's name to a joint (an int) or to {"joint": int, "axes": Basis} when the
+	// bone's axes are not the joint's (the bone's x, y, z as the joint's). The mapped joints join
+	// the mask. Returns what it could not do, one line each; empty when it did all.
+	String retarget(const Ref<Animation> &p_source, Node *p_skeleton, const Dictionary &p_map, double p_start);
+	// Copies another layer's joints, weight and keys (moved by `p_offset` seconds) onto this one:
+	// a pose or a move made once, played by another actor of the same skeleton.
+	String copy_keys_from(Node *p_layer, double p_offset);
+	void set_retarget_source(const String &p_path);
+	String get_retarget_source() const;
+	void set_retarget_animation(const String &p_name);
+	String get_retarget_animation() const;
+	void set_retarget_map(const Dictionary &p_map);
+	Dictionary get_retarget_map() const;
+	void set_retarget_start(double p_seconds);
+	double get_retarget_start() const;
+	Callable get_retarget_action();
 
 	PackedStringArray get_configuration_warnings() const override;
 };

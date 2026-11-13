@@ -5,6 +5,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -871,4 +872,115 @@ inline bool bitmap_runs(const Value& bitmap, std::vector<BitmapRun>& out) {
     return true;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Feet on the ground: a leg's two-bone IK
+
+// A joint's axes and place in the level (moby_joint_frame's 12 floats).
+struct JointFrame {
+    V3 x, y, z, at;
+};
+inline JointFrame joint_frame(const float f[12]) {
+    return {{f[0], f[1], f[2]}, {f[3], f[4], f[5]}, {f[6], f[7], f[8]}, {f[9], f[10], f[11]}};
+}
+
+// `v` turned `radians` about the unit `axis`.
+inline V3 rotate(V3 v, V3 axis, float radians) {
+    const float c = std::cos(radians), s = std::sin(radians);
+    return v * c + cross(axis, v) * s + axis * (dot(axis, v) * (1 - c));
+}
+
+// A turn in the level's axes (unit quaternion x, y, z, w) as the same turn in a joint's own axes:
+// a joint offset turns a joint in its own frame.
+inline void to_joint(const JointFrame& f, const float q[4], float out[4]) {
+    const V3 ax = normal(f.x, {1, 0, 0}), ay = normal(f.y, {0, 1, 0}), az = normal(f.z, {0, 0, 1});
+    const V3 v{q[0], q[1], q[2]};
+    out[0] = dot(v, ax), out[1] = dot(v, ay), out[2] = dot(v, az), out[3] = q[3];
+}
+
+inline void axis_radians(V3 unit_axis, float radians, float out[4]) {
+    const float s = std::sin(radians / 2);
+    out[0] = unit_axis.x * s, out[1] = unit_axis.y * s, out[2] = unit_axis.z * s, out[3] = std::cos(radians / 2);
+}
+
+// A leg as its animation has it, from the leg drawn with the turns a mod gave it (`turns`, each in
+// its joint's own axes, as leg_ik returns them) and the body lowered by `lowered`: the joints'
+// places and axes with those taken back off. Each turn is about its joint's own place, so the
+// bones keep their lengths and their places in their parents' axes.
+struct Axes3 {
+    V3 x, y, z;  // unit columns
+};
+inline Axes3 unit_axes(const JointFrame& f) {
+    return {normal(f.x, {1, 0, 0}), normal(f.y, {0, 1, 0}), normal(f.z, {0, 0, 1})};
+}
+inline V3 apply(const Axes3& m, V3 v) { return m.x * v.x + m.y * v.y + m.z * v.z; }
+inline V3 apply_t(const Axes3& m, V3 v) { return {dot(m.x, v), dot(m.y, v), dot(m.z, v)}; }
+inline Axes3 mul(const Axes3& a, const Axes3& b) { return {apply(a, b.x), apply(a, b.y), apply(a, b.z)}; }
+inline Axes3 transpose(const Axes3& m) { return {{m.x.x, m.y.x, m.z.x}, {m.x.y, m.y.y, m.z.y}, {m.x.z, m.y.z, m.z.z}}; }
+inline Axes3 quat_axes(const float q[4]) {
+    const float x = q[0], y = q[1], z = q[2], w = q[3];
+    return {{1 - 2 * (y * y + z * z), 2 * (x * y + z * w), 2 * (x * z - y * w)},
+            {2 * (x * y - z * w), 1 - 2 * (x * x + z * z), 2 * (y * z + x * w)},
+            {2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)}};
+}
+inline std::array<JointFrame, 3> leg_unturned(const std::array<JointFrame, 3>& drawn,
+                                              const std::array<std::array<float, 4>, 3>& turns, float lowered) {
+    std::array<Axes3, 3> w, a;
+    for (std::size_t i = 0; i < 3; ++i) w[i] = unit_axes(drawn[i]);
+    // Each joint's turn from its parent's axes as animated: drawn = parent * animated * turn.
+    a[0] = mul(w[0], transpose(quat_axes(turns[0].data())));
+    for (std::size_t i = 1; i < 3; ++i) {
+        const Axes3 local = mul(mul(transpose(w[i - 1]), w[i]), transpose(quat_axes(turns[i].data())));
+        a[i] = mul(a[i - 1], local);
+    }
+    std::array<JointFrame, 3> out = drawn;
+    out[0].at = drawn[0].at - V3{0, 0, lowered};
+    for (std::size_t i = 1; i < 3; ++i) {
+        const V3 bone = apply_t(w[i - 1], drawn[i].at - drawn[i - 1].at);
+        out[i].at = out[i - 1].at + apply(a[i - 1], bone);
+    }
+    for (std::size_t i = 0; i < 3; ++i) {
+        const float size = length(drawn[i].x);
+        out[i].x = a[i].x * size, out[i].y = a[i].y * size, out[i].z = a[i].z * size;
+    }
+    return out;
+}
+
+// The turns (each in its joint's own axes) that move a leg drawn as hip, knee, ankle so the ankle
+// reaches `target`: the knee bends to the hip-to-target length (as far as the leg reaches), the
+// hip swings the ankle onto the target, and the ankle turns back so the foot keeps its tilt in the
+// level. All three are identity when the ankle is there already.
+struct LegTurns {
+    float hip[4] = {0, 0, 0, 1}, knee[4] = {0, 0, 0, 1}, ankle[4] = {0, 0, 0, 1};
+};
+inline LegTurns leg_ik(const JointFrame& hip, const JointFrame& knee, const JointFrame& ankle, V3 target) {
+    LegTurns out;
+    const V3 h = hip.at, k = knee.at, a = ankle.at;
+    const V3 upper = k - h, lower = a - k;
+    const float l1 = length(upper), l2 = length(lower);
+    if (!(l1 > 1e-5f) || !(l2 > 1e-5f)) return out;
+    const float reach = std::clamp(length(target - h), std::fabs(l1 - l2) + 1e-4f, l1 + l2 - 1e-4f);
+    // The knee's bend axis: across the leg; a straight leg bends about the hip's x.
+    const V3 bend = normal(cross(upper, lower), normal(hip.x, {1, 0, 0}));
+    const float now = std::acos(std::clamp(dot(upper * -1.0f, lower) / (l1 * l2), -1.0f, 1.0f));
+    const float want = std::acos(std::clamp((l1 * l1 + l2 * l2 - reach * reach) / (2 * l1 * l2), -1.0f, 1.0f));
+    const float knee_turn = now - want;
+    float qk[4];
+    axis_radians(bend, knee_turn, qk);
+    const V3 ankle_after = k + rotate(lower, bend, knee_turn);
+    const V3 from = normal(ankle_after - h, {0, 0, -1}), to = normal(target - h, from);
+    const V3 swing_axis = cross(from, to);
+    const float swing = std::atan2(length(swing_axis), dot(from, to));
+    float qh[4] = {0, 0, 0, 1};
+    if (swing > 1e-6f) axis_radians(normal(swing_axis, bend), swing, qh);
+    // The level's turn of the ankle (the hip's after the knee's), undone at the ankle.
+    float both[4];
+    quat_mul(qh, qk, both);
+    const float back[4] = {-both[0], -both[1], -both[2], both[3]};
+    to_joint(hip, qh, out.hip);
+    to_joint(knee, qk, out.knee);
+    to_joint(ankle, back, out.ankle);
+    return out;
+}
+
 }  // namespace cutscene
+

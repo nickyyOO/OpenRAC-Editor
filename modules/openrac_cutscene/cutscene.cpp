@@ -15,7 +15,11 @@
 #include "core/math/math_funcs.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "core/io/resource_loader.h"
+#include "scene/3d/mesh_instance_3d.h"
+#include "scene/3d/skeleton_3d.h"
 #include "scene/animation/animation_player.h"
+#include "scene/resources/packed_scene.h"
 #include "scene/resources/font.h"
 #include "servers/text/text_server.h"
 #include "scene/resources/animation.h"
@@ -26,6 +30,8 @@
 #include "editor/editor_interface.h"
 #include "editor/gui/editor_file_dialog.h"
 #endif
+
+static String check_rig_scene(const Ref<PackedScene> &p_scene);
 
 namespace {
 
@@ -888,6 +894,20 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 			const Variant gaits = rig.get("gaits", Variant());
 			rig.erase("gaits");
 			rig.erase("parts");  // the editor's, for layers' masks
+			Array legs = rig.get("feet", Array());
+			rig.erase("feet");  // goes as "feet" below
+			if (legs.is_empty() && actor->get_source() == CutsceneActor::SOURCE_HERO_FIGURE) {
+				legs = CutsceneActor::known_rig(get_game(), -1).get("feet", Array());
+			}
+			if (actor->get_feet_on_ground()) {
+				if (legs.is_empty()) {
+					problems.push_back(vformat("actor \"%s\" keeps its feet on the ground, but its rig names no legs (\"feet\"): it does not", id));
+				} else {
+					Dictionary feet;
+					feet["legs"] = legs;
+					a["feet"] = feet;
+				}
+			}
 			if (a.has("path") && gaits.get_type() == Variant::ARRAY && !Array(gaits).is_empty()) {
 				Dictionary path = a["path"];
 				path["gaits"] = gaits;
@@ -1524,7 +1544,7 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 			const Dictionary def = item;
 			const Array joint_list = def.get("joints", Array());
 			const String frames_path = def.get("frames", "");
-			const PackedByteArray bytes = frames_path.is_empty() || files_from.is_empty() ? PackedByteArray() : FileAccess::get_file_as_bytes(files_from.path_join(frames_path));
+			const PackedByteArray bytes = frames_path.is_empty() || files_from.is_empty() || !FileAccess::exists(files_from.path_join(frames_path)) ? PackedByteArray() : FileAccess::get_file_as_bytes(files_from.path_join(frames_path));
 			const int stride = joint_list.size() * 16;
 			if (stride == 0 || bytes.is_empty() || bytes.size() % stride != 0) {
 				kept_layers.push_back(def);
@@ -1580,6 +1600,13 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 		}
 		actor->set_rig(rig);
 		actor->set_blink(face.get("blink", true));
+		const Array legs = Dictionary(a.get("feet", Dictionary())).get("legs", Array());
+		if (!legs.is_empty()) {
+			actor->set_feet_on_ground(true);
+			Dictionary with_feet = actor->get_rig();
+			with_feet["feet"] = legs;
+			actor->set_rig(with_feet);
+		}
 		const Array rides = a.get("ride", Array());
 		for (int r = 0; r < rides.size(); r++) {
 			const Dictionary on = rides[r];
@@ -2146,6 +2173,8 @@ double CutsceneActor::get_ride_end() const { return ride_end; }
 Dictionary CutsceneActor::get_rig() const { return rig; }
 void CutsceneActor::set_blink(bool p_blink) { blink = p_blink; }
 bool CutsceneActor::get_blink() const { return blink; }
+void CutsceneActor::set_feet_on_ground(bool p_on) { feet_on_ground = p_on; }
+bool CutsceneActor::get_feet_on_ground() const { return feet_on_ground; }
 
 Dictionary CutsceneActor::known_rig(const String &p_game, int p_class) {
 	const String key = vformat("%s/%s", p_game, p_class < 0 ? String("hero") : itos(p_class));
@@ -2177,6 +2206,14 @@ PackedStringArray CutsceneActor::get_configuration_warnings() const {
 	}
 	if (source == SOURCE_PROP && prop_path.is_empty()) {
 		warnings.push_back(RTR("Set the mesh (a .glb beside the cutscene file)."));
+	} else if (source == SOURCE_PROP && !scene_dir_of(this).is_empty()) {
+		const String mesh = scene_dir_of(this).path_join("cutscenes").path_join(prop_path);
+		if (ResourceLoader::exists(mesh)) {
+			const String note = check_rig_scene(ResourceLoader::load(mesh));
+			if (!note.is_empty()) {
+				warnings.push_back(note);
+			}
+		}
 	}
 	if (Object::cast_to<Cutscene>(get_parent()) == nullptr) {
 		warnings.push_back(RTR("An actor plays only as a child of a Cutscene."));
@@ -2251,6 +2288,9 @@ void CutsceneActor::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "use_known_rig", PROPERTY_HINT_TOOL_BUTTON, "Use Known Rig,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_use_known_rig_action");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "rig", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_rig", "get_rig");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "blink"), "set_blink", "get_blink");
+	ClassDB::bind_method(D_METHOD("set_feet_on_ground", "on"), &CutsceneActor::set_feet_on_ground);
+	ClassDB::bind_method(D_METHOD("get_feet_on_ground"), &CutsceneActor::get_feet_on_ground);
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "feet_on_ground"), "set_feet_on_ground", "get_feet_on_ground");
 	ADD_GROUP("Advanced", "");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "advanced", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_advanced", "get_advanced");
 
@@ -2444,6 +2484,233 @@ PackedStringArray CutsceneLayer::get_configuration_warnings() const {
 	return warnings;
 }
 
+// What a character's scene (.glb) has that the game cannot play: a face on blend shapes (the
+// game turns bones only). Empty when nothing.
+static String check_rig_scene(const Ref<PackedScene> &p_scene) {
+	if (p_scene.is_null()) {
+		return String();
+	}
+	Node *instance = p_scene->instantiate();
+	if (instance == nullptr) {
+		return String();
+	}
+	PackedStringArray shaped;
+	for (const Variant &item : instance->find_children("*", "MeshInstance3D", true, false)) {
+		const MeshInstance3D *mi = Object::cast_to<MeshInstance3D>(item);
+		if (mi != nullptr && mi->get_mesh().is_valid() && mi->get_mesh()->get_blend_shape_count() > 0) {
+			shaped.push_back(mi->get_name());
+		}
+	}
+	const bool skinned = !instance->find_children("*", "Skeleton3D", true, false).is_empty();
+	memdelete(instance);
+	String note;
+	if (!shaped.is_empty()) {
+		note = vformat("%s move by blend shapes, which the game does not have: put the face on bones (a jaw, lips, eyelids, brows), as the hero's rig does (joints 8 to 51).", String(", ").join(shaped));
+	}
+	if (!skinned) {
+		note += String(note.is_empty() ? "" : " ") + "It has no skeleton: it can only stand still.";
+	}
+	return note;
+}
+
+// The cutscene's timeline animation and the node its tracks' paths start from, for a node under
+// one of its actors.
+static Cutscene *cutscene_above(const Node *p_node) {
+	for (Node *n = p_node->get_parent(); n != nullptr; n = n->get_parent()) {
+		if (Cutscene *c = Object::cast_to<Cutscene>(n)) {
+			return c;
+		}
+	}
+	return nullptr;
+}
+
+static const Node *timeline_root(const Cutscene *p_cutscene) {
+	const AnimationPlayer *player = p_cutscene->get_timeline();
+	const Node *root = player != nullptr ? player->get_node_or_null(player->get_root_node()) : nullptr;
+	return root != nullptr ? root : p_cutscene;
+}
+
+String CutsceneLayer::retarget(const Ref<Animation> &p_source, Node *p_skeleton, const Dictionary &p_map, double p_start) {
+	const Skeleton3D *skeleton = Object::cast_to<Skeleton3D>(p_skeleton);
+	if (p_source.is_null() || skeleton == nullptr) {
+		return "Retarget needs an animation and the Skeleton3D it moves.";
+	}
+	Cutscene *cutscene = cutscene_above(this);
+	if (cutscene == nullptr || Object::cast_to<CutsceneActor>(get_parent()) == nullptr) {
+		return "Retarget needs this layer under a CutsceneActor of a Cutscene.";
+	}
+	Ref<Animation> anim = cutscene->get_timeline_animation();
+	if (anim.is_null()) {
+		return "The cutscene has no timeline yet.";
+	}
+	struct Link {
+		int bone = -1;
+		int track = -1;
+		int joint = 0;
+		Basis axes;
+	};
+	Vector<Link> links;
+	PackedStringArray problems;
+	for (const Variant *key = p_map.next(nullptr); key != nullptr; key = p_map.next(key)) {
+		Link link;
+		const String bone = *key;
+		link.bone = skeleton->find_bone(bone);
+		const Variant value = p_map[*key];
+		if (value.get_type() == Variant::DICTIONARY) {
+			const Dictionary d = value;
+			link.joint = d.get("joint", -1);
+			link.axes = d.get("axes", Basis());
+		} else {
+			link.joint = value;
+		}
+		if (link.bone < 0) {
+			problems.push_back(vformat("the skeleton has no bone \"%s\"", bone));
+			continue;
+		}
+		if (link.joint < 0 || link.joint > 255) {
+			problems.push_back(vformat("bone \"%s\": %s is not a joint", bone, String(value)));
+			continue;
+		}
+		// The bone's turns: the rotation track whose path ends in its name.
+		for (int t = 0; t < p_source->get_track_count(); t++) {
+			const NodePath path = p_source->track_get_path(t);
+			if (p_source->track_get_type(t) == Animation::TYPE_ROTATION_3D && path.get_subname_count() > 0 &&
+					String(path.get_subname(path.get_subname_count() - 1)) == bone) {
+				link.track = t;
+				break;
+			}
+		}
+		if (link.track < 0) {
+			problems.push_back(vformat("the animation does not turn bone \"%s\": joint %d is kept still", bone, link.joint));
+		}
+		links.push_back(link);
+	}
+	if (links.is_empty()) {
+		problems.push_back("no bone of the map turns a joint: nothing baked");
+		return String("\n").join(problems);
+	}
+	const NodePath self = timeline_root(cutscene)->get_path_to(this);
+	PackedInt32Array mask = joints;
+	const double frame = 1.0 / 30.0;
+	const double length = p_source->get_length();
+	for (const Link &link : links) {
+		if (!mask.has(link.joint)) {
+			mask.push_back(link.joint);
+		}
+		const String property = vformat("joint_%d", link.joint);
+		const int track = track_for(anim, NodePath(String(self) + ":" + property), Animation::TYPE_VALUE);
+		const Quaternion rest = skeleton->get_bone_rest(link.bone).basis.get_rotation_quaternion();
+		const Basis to_joint = link.axes.orthonormalized();
+		for (int f = 0; f * frame <= length + 1e-6; f++) {
+			const double time = MIN(f * frame, length);
+			const Quaternion pose = link.track >= 0 ? p_source->rotation_track_interpolate(link.track, time) : rest;
+			const Basis turn = to_joint * Basis(rest.inverse() * pose) * to_joint.inverse();
+			const Vector3 degrees = turn.get_euler() * (180.0 / Math::PI);
+			anim->track_insert_key(track, p_start + time, degrees);
+			if (f == 0) {
+				set_turn(link.joint, degrees);
+			}
+		}
+	}
+	set_joints(mask);
+	if (p_start + length > anim->get_length() + 1e-6) {
+		problems.push_back(vformat("the animation ends at %.2f s, after the cutscene's %.2f s: lengthen the cutscene to see the end", p_start + length, anim->get_length()));
+	}
+	notify_property_list_changed();
+	return String("\n").join(problems);
+}
+
+String CutsceneLayer::copy_keys_from(Node *p_layer, double p_offset) {
+	const CutsceneLayer *other = Object::cast_to<CutsceneLayer>(p_layer);
+	Cutscene *cutscene = cutscene_above(this);
+	if (other == nullptr || other == this || cutscene == nullptr || cutscene_above(other) != cutscene) {
+		return "Copy needs another CutsceneLayer of the same cutscene.";
+	}
+	Ref<Animation> anim = cutscene->get_timeline_animation();
+	if (anim.is_null()) {
+		return "The cutscene has no timeline yet.";
+	}
+	const Node *root = timeline_root(cutscene);
+	const String from = String(root->get_path_to(other));
+	const String to = String(root->get_path_to(this));
+	PackedInt32Array mask = joints;
+	for (int j : other->get_joints()) {
+		if (!mask.has(j)) {
+			mask.push_back(j);
+		}
+		set_turn(j, other->get_turn(j));
+	}
+	set_joints(mask);
+	set_weight(other->get_weight());
+	const int tracks = anim->get_track_count();
+	for (int t = 0; t < tracks; t++) {
+		const NodePath path = anim->track_get_path(t);
+		if (String(path.get_concatenated_names()) != from || path.get_subname_count() != 1) {
+			continue;
+		}
+		const String property = path.get_subname(0);
+		const int track = track_for(anim, NodePath(to + ":" + property), anim->track_get_type(t));
+		for (int k = 0; k < anim->track_get_key_count(t); k++) {
+			anim->track_insert_key(track, MAX(0.0, anim->track_get_key_time(t, k) + p_offset), anim->track_get_key_value(t, k), anim->track_get_key_transition(t, k));
+		}
+	}
+	notify_property_list_changed();
+	return String();
+}
+
+void CutsceneLayer::_retarget_from_source() {
+	ERR_FAIL_COND_MSG(retarget_source.is_empty(), "Set Retarget Source: a .glb or scene with a Skeleton3D and its animation.");
+	Ref<PackedScene> scene = ResourceLoader::load(retarget_source);
+	ERR_FAIL_COND_MSG(scene.is_null(), vformat("Cannot load %s as a scene.", retarget_source));
+	Node *instance = scene->instantiate();
+	ERR_FAIL_NULL(instance);
+	Skeleton3D *skeleton = nullptr;
+	AnimationPlayer *player = nullptr;
+	TypedArray<Node> found = instance->find_children("*", "Skeleton3D", true, false);
+	if (!found.is_empty()) {
+		skeleton = Object::cast_to<Skeleton3D>(found[0]);
+	}
+	found = instance->find_children("*", "AnimationPlayer", true, false);
+	if (!found.is_empty()) {
+		player = Object::cast_to<AnimationPlayer>(found[0]);
+	}
+	Ref<Animation> source;
+	if (player != nullptr) {
+		LocalVector<StringName> names;
+		player->get_animation_list(&names);
+		for (const StringName &name : names) {
+			if (retarget_animation.is_empty() || String(name) == retarget_animation || String(name).get_slice("/", 1) == retarget_animation) {
+				source = player->get_animation(name);
+				break;
+			}
+		}
+	}
+	if (skeleton == nullptr || source.is_null()) {
+		memdelete(instance);
+		ERR_FAIL_MSG(vformat("%s has no Skeleton3D, or no animation \"%s\".", retarget_source, retarget_animation));
+	}
+	const String problems = retarget(source, skeleton, retarget_map, retarget_start);
+	memdelete(instance);
+	if (!problems.is_empty()) {
+		WARN_PRINT("Retarget: " + problems);
+	}
+	// What the import found that the game cannot play: a face on blend shapes.
+	const String note = check_rig_scene(scene);
+	if (!note.is_empty()) {
+		WARN_PRINT("Retarget: " + note);
+	}
+}
+
+void CutsceneLayer::set_retarget_source(const String &p_path) { retarget_source = p_path; }
+String CutsceneLayer::get_retarget_source() const { return retarget_source; }
+void CutsceneLayer::set_retarget_animation(const String &p_name) { retarget_animation = p_name; }
+String CutsceneLayer::get_retarget_animation() const { return retarget_animation; }
+void CutsceneLayer::set_retarget_map(const Dictionary &p_map) { retarget_map = p_map; }
+Dictionary CutsceneLayer::get_retarget_map() const { return retarget_map; }
+void CutsceneLayer::set_retarget_start(double p_seconds) { retarget_start = MAX(0.0, p_seconds); }
+double CutsceneLayer::get_retarget_start() const { return retarget_start; }
+Callable CutsceneLayer::get_retarget_action() { return callable_mp(this, &CutsceneLayer::_retarget_from_source); }
+
 void CutsceneLayer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_joints", "joints"), &CutsceneLayer::set_joints);
 	ClassDB::bind_method(D_METHOD("get_joints"), &CutsceneLayer::get_joints);
@@ -2455,6 +2722,23 @@ void CutsceneLayer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_warnings"), &CutsceneLayer::get_configuration_warnings);
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_INT32_ARRAY, "joints"), "set_joints", "get_joints");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "weight", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_weight", "get_weight");
+	ClassDB::bind_method(D_METHOD("retarget", "source", "skeleton", "map", "start"), &CutsceneLayer::retarget, DEFVAL(0.0));
+	ClassDB::bind_method(D_METHOD("copy_keys_from", "layer", "offset"), &CutsceneLayer::copy_keys_from, DEFVAL(0.0));
+	ClassDB::bind_method(D_METHOD("set_retarget_source", "path"), &CutsceneLayer::set_retarget_source);
+	ClassDB::bind_method(D_METHOD("get_retarget_source"), &CutsceneLayer::get_retarget_source);
+	ClassDB::bind_method(D_METHOD("set_retarget_animation", "name"), &CutsceneLayer::set_retarget_animation);
+	ClassDB::bind_method(D_METHOD("get_retarget_animation"), &CutsceneLayer::get_retarget_animation);
+	ClassDB::bind_method(D_METHOD("set_retarget_map", "map"), &CutsceneLayer::set_retarget_map);
+	ClassDB::bind_method(D_METHOD("get_retarget_map"), &CutsceneLayer::get_retarget_map);
+	ClassDB::bind_method(D_METHOD("set_retarget_start", "seconds"), &CutsceneLayer::set_retarget_start);
+	ClassDB::bind_method(D_METHOD("get_retarget_start"), &CutsceneLayer::get_retarget_start);
+	ClassDB::bind_method(D_METHOD("get_retarget_action"), &CutsceneLayer::get_retarget_action);
+	ADD_GROUP("Retarget", "retarget_");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "retarget_source", PROPERTY_HINT_FILE, "*.glb,*.gltf,*.tscn,*.scn"), "set_retarget_source", "get_retarget_source");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "retarget_animation"), "set_retarget_animation", "get_retarget_animation");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "retarget_map"), "set_retarget_map", "get_retarget_map");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "retarget_start", PROPERTY_HINT_RANGE, "0,600,0.01,suffix:s"), "set_retarget_start", "get_retarget_start");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "retarget_bake", PROPERTY_HINT_TOOL_BUTTON, "Retarget,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_retarget_action");
 }
 
 void CutsceneMood::set_start(double p_seconds) { start = MAX(0.0, p_seconds); }
