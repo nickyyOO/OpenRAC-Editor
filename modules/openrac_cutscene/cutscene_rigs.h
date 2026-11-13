@@ -10,10 +10,10 @@ namespace cutscene_rigs {
 // Ratchet (rac1/hero), found in the port: joint 8 is the head (turned about -z for the game's yaw),
 // 10 the jaw (opened about -x), 25 and 29 the inner brows, 26 and 30 the outer ones, 37 and 51 the
 // mouth's corners. He has no eyelid joints (the game blinks him another way), so no "lids". Gaits:
-// sequence 0 stands, 4 runs (the decomp's set_hero_animation). Parts (first and last joint, for a
+// sequence 0 stands, 3 walks, 4 runs (the decomp's set_hero_animation). Parts (first and last joint, for a
 // layer's mask): 1-7 the spine, 8-51 the head, 52-71 and 72-91 the arms, 92-103 the legs, 104-110
-// the tail. Feet (hip, knee, ankle of each leg, for feet on the ground): 92-94 the right leg,
-// 98-100 the left.
+// the tail. Feet (hip, knee, ankle of each leg and the hip's parent, for feet on the ground): 92-94
+// the right leg, 98-100 the left, both on the pelvis (1).
 inline constexpr const char *BUILT_IN = R"RIGS({
  "rac1/hero": {
   "parts": {
@@ -24,7 +24,7 @@ inline constexpr const char *BUILT_IN = R"RIGS({
    "legs": [92, 103],
    "tail": [104, 110]
   },
-  "feet": [[92, 93, 94], [98, 99, 100]],
+  "feet": [[92, 93, 94, 1], [98, 99, 100, 1]],
   "jaw": {
    "joint": 10,
    "axis": [
@@ -176,8 +176,12 @@ inline constexpr const char *BUILT_IN = R"RIGS({
     "speed": 0
    },
    {
+    "seq": 3,
+    "speed": 0.5
+   },
+   {
     "seq": 4,
-    "speed": 1
+    "speed": 3
    }
   ]
  }

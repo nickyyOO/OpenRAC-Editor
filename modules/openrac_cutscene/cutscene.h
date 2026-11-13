@@ -65,7 +65,16 @@ private:
 	World world = WORLD_RUN;
 	Music music = MUSIC_DUCK;
 	HeroMode hero_mode = HERO_HELD;
+	int hero_sequence = 0;
 	TypedArray<Dictionary> variants;
+
+	// The editor's view of the held hero: the level's hero marker stands in its rest pose, so a copy
+	// of it plays the held hero's sequence in its place (not saved), the marker hidden meanwhile.
+	Node3D *hero_preview = nullptr;
+	ObjectID hero_marker;
+	uint64_t hero_marker_looked = 0;
+	void _update_hero_preview();
+	void _show_hero_marker(bool p_show);
 
 	void _export_pressed();
 	void _import_pressed();
@@ -85,6 +94,7 @@ private:
 
 protected:
 	static void _bind_methods();
+	void _notification(int p_what);
 	void _validate_property(PropertyInfo &p_property) const;
 
 public:
@@ -135,6 +145,8 @@ public:
 	Music get_music() const;
 	void set_hero_mode(HeroMode p_mode);
 	HeroMode get_hero_mode() const;
+	void set_hero_sequence(int p_sequence);
+	int get_hero_sequence() const;
 	void set_variants(const TypedArray<Dictionary> &p_variants);
 	TypedArray<Dictionary> get_variants() const;
 	Callable get_export_action();
@@ -243,9 +255,17 @@ private:
 	void _take_selected_moby();
 	void _use_known_rig();
 
+	// In the editor: the actor's model (its moby class's scene, or the prop), not saved, posed in
+	// the game's sequence at the timeline's time, so the 3D view shows what the game will play.
+	Node3D *preview = nullptr;
+	String preview_from;
+	String _preview_scene() const;
+	void _update_preview();
+
 protected:
 	static void _bind_methods();
 	void _validate_property(PropertyInfo &p_property) const;
+	void _notification(int p_what);
 
 public:
 	void set_actor_id(const String &p_id);

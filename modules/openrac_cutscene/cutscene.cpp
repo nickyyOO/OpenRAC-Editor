@@ -6,7 +6,12 @@
 #include "cutscene_math.h"
 #include "cutscene_rigs.h"
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/os/os.h"
+#include "scene/3d/label_3d.h"
+#include "scene/3d/visual_instance_3d.h"
+#include "servers/rendering/rendering_server.h"
 #include "core/crypto/crypto_core.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
@@ -17,6 +22,7 @@
 #include "core/object/class_db.h"
 #include "core/io/resource_loader.h"
 #include "scene/3d/mesh_instance_3d.h"
+#include "scene/main/scene_tree.h"
 #include "scene/3d/skeleton_3d.h"
 #include "scene/animation/animation_player.h"
 #include "scene/resources/packed_scene.h"
@@ -497,6 +503,8 @@ void Cutscene::set_music(Music p_music) { music = p_music; }
 Cutscene::Music Cutscene::get_music() const { return music; }
 void Cutscene::set_hero_mode(HeroMode p_mode) { hero_mode = p_mode; }
 Cutscene::HeroMode Cutscene::get_hero_mode() const { return hero_mode; }
+void Cutscene::set_hero_sequence(int p_sequence) { hero_sequence = CLAMP(p_sequence, 0, 255); }
+int Cutscene::get_hero_sequence() const { return hero_sequence; }
 void Cutscene::set_variants(const TypedArray<Dictionary> &p_variants) { variants = p_variants; }
 TypedArray<Dictionary> Cutscene::get_variants() const { return variants; }
 
@@ -729,6 +737,9 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 
 	Dictionary hero;
 	hero["mode"] = HERO_NAMES[hero_mode];
+	if (hero_mode == HERO_HELD && hero_sequence != 0) {
+		hero["seq"] = hero_sequence;
+	}
 	if (const Node3D *end = Object::cast_to<Node3D>(get_node_or_null(NodePath("HeroEnd")))) {
 		const Transform3D at = to_game * end->get_global_transform();
 		Dictionary place;
@@ -1483,6 +1494,7 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 	set_music(music_name == "keep" ? MUSIC_KEEP : (music_name == "stop" ? MUSIC_STOP : MUSIC_DUCK));
 	const Dictionary hero = p_data.get("hero", Dictionary());
 	set_hero_mode(HeroMode(name_index(HERO_NAMES, std::size(HERO_NAMES), hero.get("mode", "held"), HERO_HELD)));
+	set_hero_sequence(int(hero.get("seq", 0)));
 	if (p_data.get("variants", Variant()).get_type() == Variant::ARRAY) {
 		TypedArray<Dictionary> list;
 		for (const Variant &v : Array(p_data["variants"])) {
@@ -2098,6 +2110,8 @@ void Cutscene::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_music"), &Cutscene::get_music);
 	ClassDB::bind_method(D_METHOD("set_hero_mode", "mode"), &Cutscene::set_hero_mode);
 	ClassDB::bind_method(D_METHOD("get_hero_mode"), &Cutscene::get_hero_mode);
+	ClassDB::bind_method(D_METHOD("set_hero_sequence", "sequence"), &Cutscene::set_hero_sequence);
+	ClassDB::bind_method(D_METHOD("get_hero_sequence"), &Cutscene::get_hero_sequence);
 	ClassDB::bind_method(D_METHOD("set_variants", "variants"), &Cutscene::set_variants);
 	ClassDB::bind_method(D_METHOD("get_variants"), &Cutscene::get_variants);
 	ClassDB::bind_method(D_METHOD("get_export_action"), &Cutscene::get_export_action);
@@ -2144,6 +2158,7 @@ void Cutscene::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "world", PROPERTY_HINT_ENUM, "Run,Hold"), "set_world", "get_world");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "music", PROPERTY_HINT_ENUM, "Duck,Keep,Stop"), "set_music", "get_music");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "hero_mode", PROPERTY_HINT_ENUM, "Held,Hidden,Actor"), "set_hero_mode", "get_hero_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "hero_sequence", PROPERTY_HINT_RANGE, "0,255,1"), "set_hero_sequence", "get_hero_sequence");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "variants", PROPERTY_HINT_ARRAY_TYPE, "Dictionary"), "set_variants", "get_variants");
 
 	BIND_ENUM_CONSTANT(TRIGGER_LEVEL_START);
@@ -2271,6 +2286,283 @@ void CutsceneActor::set_anim_speed(float p_speed) { anim_speed = p_speed; }
 float CutsceneActor::get_anim_speed() const { return anim_speed; }
 void CutsceneActor::set_blend(int p_ticks) { blend = MAX(0, p_ticks); }
 int CutsceneActor::get_blend() const { return blend; }
+
+static Cutscene *cutscene_above(const Node *p_node);
+static const Node *timeline_root(const Cutscene *p_cutscene);
+
+// Poses a preview model's player at a sequence's clip (the one named *_seq_NNN*), looped when the
+// clip loops, held at its end otherwise.
+static void preview_pose(AnimationPlayer *p_player, int p_seq, double p_at) {
+	const String tag = vformat("_seq_%03d", p_seq);
+	LocalVector<StringName> names;
+	p_player->get_animation_list(&names);
+	for (const StringName &name : names) {
+		if (!String(name).contains(tag)) {
+			continue;
+		}
+		const Ref<Animation> clip = p_player->get_animation(name);
+		double at = p_at;
+		if (String(name).ends_with("_loop") && clip->get_length() > 0.0) {
+			at = Math::fmod(at, double(clip->get_length()));
+		} else {
+			at = MIN(at, double(clip->get_length()));
+		}
+		if (p_player->get_assigned_animation() != name) {
+			p_player->set_assigned_animation(name);
+		}
+		p_player->seek(at, true);
+		return;
+	}
+}
+
+// A moby scene's collision shapes and name label are for the level's view, not a character's.
+static void preview_strip(Node *p_preview) {
+	for (const Variant &item : p_preview->find_children("*", "Node3D", true, false)) {
+		Node3D *node = Object::cast_to<Node3D>(item);
+		if (String(node->get_name()).begins_with("Collision") || Object::cast_to<Label3D>(node) != nullptr) {
+			node->set_visible(false);
+		}
+	}
+}
+
+static AnimationPlayer *preview_player(Node *p_preview) {
+	TypedArray<Node> players = p_preview->find_children("*", "AnimationPlayer", true, false);
+	return players.is_empty() ? nullptr : Object::cast_to<AnimationPlayer>(players[0]);
+}
+
+static bool in_edited_scene(const Node *p_node) {
+	const Node *root = p_node->is_inside_tree() ? p_node->get_tree()->get_edited_scene_root() : nullptr;
+	return root != nullptr && root->is_ancestor_of(p_node);
+}
+
+void Cutscene::_show_hero_marker(bool p_show) {
+	Node3D *marker = Object::cast_to<Node3D>(ObjectDB::get_instance(hero_marker));
+	if (marker == nullptr) {
+		return;
+	}
+	// Straight on the rendering server, so nothing of the level's own scene changes.
+	for (const Variant &item : marker->find_children("*", "VisualInstance3D", true, false)) {
+		const VisualInstance3D *shown = Object::cast_to<VisualInstance3D>(item);
+		RS::get_singleton()->instance_set_visible(shown->get_instance(), p_show && shown->is_visible_in_tree());
+	}
+}
+
+void Cutscene::_update_hero_preview() {
+	Node3D *marker = Object::cast_to<Node3D>(ObjectDB::get_instance(hero_marker));
+	const bool show = hero_mode == HERO_HELD && in_edited_scene(this);
+	if (show && marker == nullptr && OS::get_singleton()->get_ticks_msec() - hero_marker_looked > 2000) {
+		// The level's hero marker: the moby scene of class 0.
+		hero_marker_looked = OS::get_singleton()->get_ticks_msec();
+		for (const Variant &item : get_tree()->get_edited_scene_root()->find_children("*", "Node3D", true, true)) {
+			Node3D *node = Object::cast_to<Node3D>(item);
+			if (node->has_meta("rc1_class") && int(node->get_meta("rc1_class")) == 0 && !node->get_scene_file_path().is_empty() && !is_ancestor_of(node)) {
+				marker = node;
+				hero_marker = node->get_instance_id();
+				break;
+			}
+		}
+	}
+	if (!show || marker == nullptr) {
+		if (hero_preview != nullptr) {
+			hero_preview->queue_free();
+			hero_preview = nullptr;
+			_show_hero_marker(true);
+		}
+		return;
+	}
+	if (hero_preview == nullptr) {
+		const Ref<PackedScene> scene = ResourceLoader::load(marker->get_scene_file_path());
+		hero_preview = scene.is_valid() ? Object::cast_to<Node3D>(scene->instantiate()) : nullptr;
+		if (hero_preview == nullptr) {
+			hero_marker = ObjectID();
+			return;
+		}
+		preview_strip(hero_preview);
+		add_child(hero_preview, false, INTERNAL_MODE_FRONT);
+	}
+	_show_hero_marker(!marker->is_visible_in_tree());
+	hero_preview->set_visible(marker->is_visible_in_tree());
+	hero_preview->set_global_transform(marker->get_global_transform());
+	if (AnimationPlayer *player = preview_player(hero_preview)) {
+		preview_pose(player, hero_sequence, get_timeline_position());
+	}
+}
+
+void Cutscene::_notification(int p_what) {
+	if (!Engine::get_singleton()->is_editor_hint()) {
+		return;
+	}
+	switch (p_what) {
+		case NOTIFICATION_READY: {
+			set_process_internal(true);
+		} break;
+		case NOTIFICATION_INTERNAL_PROCESS: {
+			_update_hero_preview();
+		} break;
+		case NOTIFICATION_EXIT_TREE: {
+			if (hero_preview != nullptr) {
+				hero_preview->queue_free();
+				hero_preview = nullptr;
+			}
+			_show_hero_marker(true);
+			hero_marker = ObjectID();
+		} break;
+	}
+}
+
+String CutsceneActor::_preview_scene() const {
+	const String dir = scene_dir_of(this);
+	if (dir.is_empty()) {
+		return String();
+	}
+	if (source == SOURCE_PROP) {
+		return prop_path.is_empty() ? String() : dir.path_join("cutscenes").path_join(prop_path);
+	}
+	const int cls = source == SOURCE_HERO_FIGURE ? 0 : moby_class;
+	return cls < 0 ? String() : dir.path_join("mobys").path_join(vformat("moby_%d.tscn", cls));
+}
+
+void CutsceneActor::_update_preview() {
+	const String from = _preview_scene();
+	if (from != preview_from) {
+		preview_from = from;
+		if (preview != nullptr) {
+			preview->queue_free();
+			preview = nullptr;
+		}
+		const Ref<PackedScene> scene = from.is_empty() || !ResourceLoader::exists(from) ? Ref<PackedScene>() : Ref<PackedScene>(ResourceLoader::load(from));
+		Node3D *made = scene.is_valid() ? Object::cast_to<Node3D>(scene->instantiate()) : nullptr;
+		if (made != nullptr) {
+			preview_strip(made);
+			add_child(made, false, INTERNAL_MODE_FRONT);
+			preview = made;
+		}
+	}
+	if (preview == nullptr) {
+		return;
+	}
+	AnimationPlayer *player = preview_player(preview);
+	if (player == nullptr) {
+		return;
+	}
+	// The sequence playing at the timeline's time, and since when: the last `sequence` key, else
+	// the walk's gait, else the actor's own sequence, else standing (0).
+	const Cutscene *cs = cutscene_above(this);
+	const double now = cs != nullptr ? cs->get_timeline_position() : 0.0;
+	int seq = sequence;
+	double since = 0.0;
+	const Ref<Animation> anim = cs != nullptr ? cs->get_timeline_animation() : Ref<Animation>();
+	bool keyed = false;
+	if (anim.is_valid()) {
+		const Node *root = timeline_root(cs);
+		for (int t = 0; t < anim->get_track_count(); t++) {
+			const NodePath path = anim->track_get_path(t);
+			if (path.get_subname_count() != 1 || String(path.get_subname(0)) != "sequence" || root->get_node_or_null(NodePath(path.get_concatenated_names())) != this) {
+				continue;
+			}
+			for (int k = 0; k < anim->track_get_key_count(t); k++) {
+				if (anim->track_get_key_time(t, k) <= now + 1e-6) {
+					seq = anim->track_get_key_value(t, k);
+					since = anim->track_get_key_time(t, k);
+					keyed = true;
+				}
+			}
+		}
+	}
+	// On a walk the model goes along it as the player moves the actor: straight from point to point
+	// at the walk's speed, turned along the stretch it is on, still at the end.
+	Transform3D placed;
+	for (int i = 0; i < get_child_count(); i++) {
+		const CutscenePath *walk = Object::cast_to<CutscenePath>(get_child(i));
+		if (walk == nullptr || walk->get_curve().is_null() || walk->get_curve()->get_point_count() < 2 || now < walk->get_start()) {
+			continue;
+		}
+		const Ref<Curve3D> curve = walk->get_curve();
+		const Transform3D to_world = walk->get_global_transform();
+		double left = (now - walk->get_start()) * MAX(0.0, walk->get_speed());
+		Vector3 at = to_world.xform(curve->get_point_position(0));
+		double yaw = 0.0;
+		for (int k = 0; k + 1 < curve->get_point_count(); k++) {
+			const Vector3 a = to_world.xform(curve->get_point_position(k));
+			const Vector3 b = to_world.xform(curve->get_point_position(k + 1));
+			const double len = a.distance_to(b);
+			if (len > 1e-6) {
+				yaw = Math::atan2(-(b.z - a.z), b.x - a.x);
+			}
+			at = len > 1e-6 ? a.lerp(b, MIN(1.0, left / len)) : b;
+			if (left <= len) {
+				break;
+			}
+			left -= len;
+		}
+		// The actor faces its own x: turned about the up axis from its facing now to the stretch's.
+		const Basis now_basis = get_global_basis();
+		const Vector3 facing = now_basis.get_column(0);
+		const double turn = yaw - Math::atan2(-facing.z, facing.x);
+		placed = Transform3D(Basis(Vector3(0, 1, 0), turn) * now_basis, at);
+		break;
+	}
+	if (placed == Transform3D()) {
+		preview->set_transform(Transform3D());
+	} else {
+		preview->set_global_transform(placed);
+	}
+	const Array gaits = rig.get("gaits", Array());
+	if (!gaits.is_empty()) {
+		for (int i = 0; i < get_child_count(); i++) {
+			const CutscenePath *walk = Object::cast_to<CutscenePath>(get_child(i));
+			if (walk == nullptr || walk->get_curve().is_null() || (keyed && since >= walk->get_start())) {
+				continue;
+			}
+			const double speed = MAX(0.01, walk->get_speed());
+			const double end = walk->get_start() + walk->get_curve()->get_baked_length() / speed;
+			if (now < walk->get_start()) {
+				continue;
+			}
+			// As the player picks: the fastest gait not above the walk's speed, the slowest once there.
+			int pick = -1, slow = -1;
+			double best = -1.0, slowest = 1e30;
+			for (const Variant &item : gaits) {
+				const Dictionary g = item;
+				const double s = g.get("speed", 0.0);
+				const int q = g.get("seq", -1);
+				if (q < 0) {
+					continue;
+				}
+				if (s < slowest) {
+					slowest = s, slow = q;
+				}
+				if (s <= speed && s > best) {
+					best = s, pick = q;
+				}
+			}
+			const bool walking = now < end;
+			const int gait = walking ? (pick >= 0 ? pick : slow) : slow;
+			if (gait >= 0) {
+				seq = gait;
+				since = walking ? walk->get_start() : end;
+			}
+		}
+	}
+	preview_pose(player, MAX(seq, 0), MAX(0.0, now - since) * anim_speed);
+}
+
+void CutsceneActor::_notification(int p_what) {
+	if (!Engine::get_singleton()->is_editor_hint()) {
+		return;
+	}
+	switch (p_what) {
+		case NOTIFICATION_READY: {
+			set_process_internal(true);
+		} break;
+		case NOTIFICATION_INTERNAL_PROCESS: {
+			// Only inside the scene being edited: a cutscene opened as an instance shows its own.
+			if (in_edited_scene(this)) {
+				_update_preview();
+			}
+		} break;
+	}
+}
 
 Callable CutsceneActor::get_take_selected_action() {
 	return callable_mp(this, &CutsceneActor::_take_selected_moby);

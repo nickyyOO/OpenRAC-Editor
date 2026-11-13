@@ -254,6 +254,14 @@ func test_triggers_and_defaults() -> void:
 	var d: Dictionary = cs.to_cutscene()
 	check(Array(d["languages"]) == ["en"], "an NTSC-U level: English")
 	check(d["length"] == 1, "no timeline and no length: one tick")
+	check(d["hero"] == {"mode": "held"}, "a held hero stands: no seq: %s" % [d["hero"]])
+	var held = add(game, Cutscene.new(), root)
+	held.name = "Held"
+	held.hero_sequence = 3
+	check(held.to_cutscene()["hero"] == {"mode": "held", "seq": 3}, "a held hero's own sequence")
+	held.hero_sequence = 0
+	held.from_cutscene(cs.to_cutscene().merged({"hero": {"mode": "held", "seq": 3}}, true))
+	check(held.hero_sequence == 3, "the held hero's sequence comes back")
 	check(d["trigger"]["kind"] == "volume" and near3(d["trigger"]["sphere"]["position"], Vector3(10, 20, 30)) and near(d["trigger"]["sphere"]["radius"], 2.5), "area as a sphere at the cutscene: %s" % [d["trigger"]])
 	cs.trigger_box = Vector3(4, 2, -6)
 	d = cs.to_cutscene()
@@ -909,7 +917,7 @@ func test_retarget() -> void:
 	var problems2 := PackedStringArray()
 	var d: Dictionary = cs.to_cutscene()
 	var dancer: Dictionary = d["actors"][0]
-	check(same(dancer.get("feet", {}).get("legs", []), [[92, 93, 94], [98, 99, 100]]), "the hero's legs: %s" % [dancer.get("feet")])
+	check(same(dancer.get("feet", {}).get("legs", []), [[92, 93, 94, 1], [98, 99, 100, 1]]), "the hero's legs: %s" % [dancer.get("feet")])
 	check(not d["actors"][2].has("feet"), "no legs, no feet")
 	var back = add(root.get_node("Game"), Cutscene.new(), root)
 	back.name = "MocapBack"

@@ -722,7 +722,8 @@ static void feet() {
     f[9] = 0, f[10] = 0, f[11] = 0;
     const JointFrame ankle = joint_frame(f);
     const V3 target{0, 0, 0.2f};
-    const LegTurns t = leg_ik(hip, knee, ankle, target);
+    const JointFrame pelvis{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {0, 0, 1.1f}};
+    const LegTurns t = leg_ik(pelvis, hip, knee, ankle, target);
     const V3 k2 = hip.at + turn_by(t.hip, knee.at - hip.at);
     float hk[4];
     quat_mul(t.hip, t.knee, hk);
@@ -734,10 +735,10 @@ static void feet() {
     quat_mul(hk, t.ankle, all);
     CHECK(std::fabs(all[3]) > 0.9999f);  // the foot keeps its tilt
     // Already there: no turns.
-    const LegTurns none = leg_ik(hip, knee, ankle, ankle.at);
+    const LegTurns none = leg_ik(pelvis, hip, knee, ankle, ankle.at);
     CHECK(std::fabs(none.hip[3]) > 0.9999f && std::fabs(none.knee[3]) > 0.9999f);
     // Too far: the leg straightens toward it, no further.
-    const LegTurns far = leg_ik(hip, knee, ankle, {0, 0, -1});
+    const LegTurns far = leg_ik(pelvis, hip, knee, ankle, {0, 0, -1});
     const V3 k3 = hip.at + turn_by(far.hip, knee.at - hip.at);
     float hk3[4];
     quat_mul(far.hip, far.knee, hk3);
@@ -757,7 +758,7 @@ static void feet() {
     const std::array<std::array<float, 4>, 3> given{{{t.hip[0], t.hip[1], t.hip[2], t.hip[3]},
                                                      {t.knee[0], t.knee[1], t.knee[2], t.knee[3]},
                                                      {t.ankle[0], t.ankle[1], t.ankle[2], t.ankle[3]}}};
-    const auto back = leg_unturned(drawn, given, -0.1f);
+    const auto back = leg_unturned(pelvis, drawn, given, -0.1f);
     CHECK(length(back[1].at - knee.at) < 1e-4f && length(back[2].at - ankle.at) < 1e-4f);
     CHECK(length(back[2].x - V3{1, 0, 0}) < 1e-4f && length(back[1].z - V3{0, 0, 1}) < 1e-4f);
     // A joint's own axes: a turn about the level's z is about the joint's y when its y is the
@@ -767,6 +768,74 @@ static void feet() {
     axis_radians({0, 0, 1}, 1.0f, q);
     to_joint(joint_frame(g), q, local);
     CHECK(std::fabs(local[1] - std::sin(0.5f)) < 1e-5f && std::fabs(local[0]) < 1e-6f && std::fabs(local[2]) < 1e-6f);
+}
+
+// The port's own composition (scene/moby_animation.cpp): a joint's quaternion q and a mod's
+// offset r make q*r, its matrix read by rows (the joint's axes in its parent's). A leg whose
+// joints all turn (as a figure's do) reaches the step through it, tick after tick as the player
+// runs it, and is read back to its animation.
+static Axes3 port_axes(const float q[4], const float r[4]) {
+    float qr[4];
+    quat_mul(q, r, qr);
+    const float x = qr[0], y = qr[1], z = qr[2], w = qr[3];
+    // quat_rows: rows of the standard matrix, each the image of an axis.
+    return {{1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)},
+            {2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)},
+            {2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)}};
+}
+
+static void feet_in_port() {
+    // The pelvis turned, each joint's own turn from its parent, each bone along its parent's axes.
+    float pq[4], q[3][4];
+    axis_radians(normal(V3{0.3f, -0.2f, 1}, {0, 0, 1}), 2.3f, pq);
+    axis_radians(normal(V3{1, 0.4f, 0.1f}, {1, 0, 0}), 2.9f, q[0]);   // the hip, pointing down
+    axis_radians(normal(V3{0.2f, 1, -0.3f}, {0, 1, 0}), -0.5f, q[1]);  // the knee, bent
+    axis_radians(normal(V3{-0.4f, 0.1f, 1}, {0, 0, 1}), 0.7f, q[2]);   // the ankle
+    const V3 bones[3] = {{0.08f, 0.02f, -0.1f}, {0.01f, 0.02f, 0.2f}, {-0.02f, 0.01f, 0.18f}};
+    const float none[4] = {0, 0, 0, 1};
+    const Axes3 pelvis_axes = port_axes(pq, none);
+    const JointFrame pelvis{pelvis_axes.x, pelvis_axes.y, pelvis_axes.z, {5, 6, 1}};
+    // The leg drawn with the given offsets (as the port gets them) and the body lowered by `low`.
+    auto draw = [&](const float offs[3][4], float low) {
+        std::array<JointFrame, 3> out;
+        Axes3 parent = pelvis_axes;
+        V3 at = pelvis.at + V3{0, 0, low};
+        for (int i = 0; i < 3; ++i) {
+            at = at + apply(parent, bones[i]);
+            const Axes3 local = port_axes(q[i], offs[i]);
+            parent = mul(parent, local);
+            out[static_cast<std::size_t>(i)] = {parent.x, parent.y, parent.z, at};
+        }
+        return out;
+    };
+    float zero[3][4] = {{0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}};
+    const std::array<JointFrame, 3> animated = draw(zero, 0);
+    const V3 target = animated[2].at + V3{0, 0, 0.12f};
+    const float low = -0.1f;
+    std::array<std::array<float, 4>, 3> turns{{{0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}}};
+    float lowered = 0;
+    for (int tick = 0; tick < 40; ++tick) {
+        float offs[3][4];
+        for (int i = 0; i < 3; ++i) offset_of(turns[static_cast<std::size_t>(i)].data(), offs[i]);
+        const std::array<JointFrame, 3> drawn = draw(offs, lowered);
+        std::array<JointFrame, 3> f = leg_unturned(pelvis, drawn, turns, lowered);
+        if (tick > 0) {
+            // Read back: the animation, wherever the turns are.
+            CHECK(length(f[1].at - animated[1].at) < 1e-3f && length(f[2].at - animated[2].at) < 1e-3f);
+            CHECK(length(normal(f[2].x, {}) - normal(animated[2].x, {})) < 1e-3f);
+        }
+        for (JointFrame& j : f) j.at.z += low;
+        const LegTurns t = leg_ik(pelvis, f[0], f[1], f[2], target);
+        const float* fresh[3] = {t.hip, t.knee, t.ankle};
+        for (std::size_t i = 0; i < 3; ++i) std::copy(fresh[i], fresh[i] + 4, turns[i].data());
+        lowered = low;
+    }
+    float offs[3][4];
+    for (int i = 0; i < 3; ++i) offset_of(turns[static_cast<std::size_t>(i)].data(), offs[i]);
+    const std::array<JointFrame, 3> drawn = draw(offs, low);
+    CHECK(length(drawn[2].at - target) < 2e-3f);  // the ankle on the step
+    CHECK(length(normal(drawn[2].x, {}) - normal(animated[2].x, {})) < 2e-3f);  // the foot's tilt kept
+    CHECK(length(normal(drawn[2].z, {}) - normal(animated[2].z, {})) < 2e-3f);
 }
 
 // Times and lengths far out of a scene's range: held, so no sum of two overflows.
@@ -818,6 +887,7 @@ int main() {
     rides_and_eyes();
     air_and_slow();
     feet();
+    feet_in_port();
     extreme_ticks();
     std::printf("timeline: %d check(s), %d failed\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

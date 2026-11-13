@@ -914,10 +914,19 @@ inline void axis_radians(V3 unit_axis, float radians, float out[4]) {
     out[0] = unit_axis.x * s, out[1] = unit_axis.y * s, out[2] = unit_axis.z * s, out[3] = std::cos(radians / 2);
 }
 
+// How the port composes a joint offset r with the joint's turn q (the game's joint modifiers): as
+// q*r, read by rows, so the joint is turned by r's inverse in its PARENT's axes, after its
+// animation. The legs keep their turns that way (each in its parent's axes: the hip's parent, then
+// the hip, then the knee) and give the port each one's inverse (offset_of).
+inline void offset_of(const float turn[4], float out[4]) {
+    out[0] = -turn[0], out[1] = -turn[1], out[2] = -turn[2], out[3] = turn[3];
+}
+
 // A leg as its animation has it, from the leg drawn with the turns a mod gave it (`turns`, each in
-// its joint's own axes, as leg_ik returns them) and the body lowered by `lowered`: the joints'
-// places and axes with those taken back off. Each turn is about its joint's own place, so the
-// bones keep their lengths and their places in their parents' axes.
+// its parent's axes, as leg_ik returns them; `parent` is the hip's parent, which they do not move)
+// and the body lowered by `lowered`: the joints' places and axes with those taken back off. Each
+// turn is about its joint's own place, so the bones keep their lengths and their places in their
+// parents' axes.
 struct Axes3 {
     V3 x, y, z;  // unit columns
 };
@@ -934,14 +943,15 @@ inline Axes3 quat_axes(const float q[4]) {
             {2 * (x * y - z * w), 1 - 2 * (x * x + z * z), 2 * (y * z + x * w)},
             {2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)}};
 }
-inline std::array<JointFrame, 3> leg_unturned(const std::array<JointFrame, 3>& drawn,
+inline std::array<JointFrame, 3> leg_unturned(const JointFrame& parent, const std::array<JointFrame, 3>& drawn,
                                               const std::array<std::array<float, 4>, 3>& turns, float lowered) {
     std::array<Axes3, 3> w, a;
     for (std::size_t i = 0; i < 3; ++i) w[i] = unit_axes(drawn[i]);
-    // Each joint's turn from its parent's axes as animated: drawn = parent * animated * turn.
-    a[0] = mul(w[0], transpose(quat_axes(turns[0].data())));
+    // Each joint's turn in its parent's axes as animated: drawn = parent * turn * animated.
+    const Axes3 p = unit_axes(parent);
+    a[0] = mul(mul(mul(p, transpose(quat_axes(turns[0].data()))), transpose(p)), w[0]);
     for (std::size_t i = 1; i < 3; ++i) {
-        const Axes3 local = mul(mul(transpose(w[i - 1]), w[i]), transpose(quat_axes(turns[i].data())));
+        const Axes3 local = mul(transpose(quat_axes(turns[i].data())), mul(transpose(w[i - 1]), w[i]));
         a[i] = mul(a[i - 1], local);
     }
     std::array<JointFrame, 3> out = drawn;
@@ -957,14 +967,15 @@ inline std::array<JointFrame, 3> leg_unturned(const std::array<JointFrame, 3>& d
     return out;
 }
 
-// The turns (each in its joint's own axes) that move a leg drawn as hip, knee, ankle so the ankle
+// The turns (each in its parent's axes: `parent` the hip's) that move a leg drawn as hip, knee, ankle so the ankle
 // reaches `target`: the knee bends to the hip-to-target length (as far as the leg reaches), the
 // hip swings the ankle onto the target, and the ankle turns back so the foot keeps its tilt in the
 // level. All three are identity when the ankle is there already.
 struct LegTurns {
     float hip[4] = {0, 0, 0, 1}, knee[4] = {0, 0, 0, 1}, ankle[4] = {0, 0, 0, 1};
 };
-inline LegTurns leg_ik(const JointFrame& hip, const JointFrame& knee, const JointFrame& ankle, V3 target) {
+inline LegTurns leg_ik(const JointFrame& parent, const JointFrame& hip, const JointFrame& knee, const JointFrame& ankle,
+                       V3 target) {
     LegTurns out;
     const V3 h = hip.at, k = knee.at, a = ankle.at;
     const V3 upper = k - h, lower = a - k;
@@ -988,9 +999,11 @@ inline LegTurns leg_ik(const JointFrame& hip, const JointFrame& knee, const Join
     float both[4];
     quat_mul(qh, qk, both);
     const float back[4] = {-both[0], -both[1], -both[2], both[3]};
-    to_joint(hip, qh, out.hip);
-    to_joint(knee, qk, out.knee);
-    to_joint(ankle, back, out.ankle);
+    // Each in its parent's axes as animated: the knee's turn is taken before the hip's swing, which
+    // carries it along, and so is the ankle's.
+    to_joint(parent, qh, out.hip);
+    to_joint(hip, qk, out.knee);
+    to_joint(knee, back, out.ankle);
     return out;
 }
 

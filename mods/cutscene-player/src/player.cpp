@@ -296,8 +296,12 @@ struct ActorRun {
     // the ground under it) and its three turns; how far the body is lowered.
     struct Leg {
         int joints[3] = {0, 0, 0};
+        int parent = 0;  // the hip's parent joint (its turns are in the parents' axes)
         float shift = 0;
         std::array<std::array<float, 4>, 3> turns{{{0, 0, 0, 1}, {0, 0, 0, 1}, {0, 0, 0, 1}}};
+        float settled = 0;  // the ground's height under the foot as taken, against the root
+        float pending = 0;  // a new one, and for how many ticks it has held
+        int pending_ticks = 0;
     };
     std::vector<Leg> legs;
     float feet_drop = 0;
@@ -614,24 +618,50 @@ void feet_tick(ActorRun& a) {
     const int slot = a.moby_slot();
     if (slot < 0) return;
     std::vector<std::array<JointFrame, 3>> frames(a.legs.size());
+    std::vector<JointFrame> parents(a.legs.size());
     for (std::size_t l = 0; l < a.legs.size(); ++l) {
+        float f[12];
         for (std::size_t i = 0; i < 3; ++i) {
-            float f[12];
             if (g_api->moby_joint_frame(slot, a.legs[l].joints[i], f) != OPENRAC_HOOK_OK) return;
             frames[l][i] = joint_frame(f);
         }
+        if (g_api->moby_joint_frame(slot, a.legs[l].parent, f) != OPENRAC_HOOK_OK) return;
+        parents[l] = joint_frame(f);
     }
     // The animation's floor is where the actor stands: its place's height.
     const float root = a.position.z;
+    const float lowered = a.feet_drop;  // as last drawn
     float drop = 0;
     for (std::size_t l = 0; l < a.legs.size(); ++l) {
         ActorRun::Leg& leg = a.legs[l];
-        float under = 0;
-        const float want = ground_below(frames[l][2].at, under) ? std::clamp(under - root, -0.5f, 0.5f) : 0.0f;
-        leg.shift += (want - leg.shift) * 0.35f;
+        // The ground under the ankle (the bend moves it up and down only, so where it is across
+        // is the animation's), the highest of a few points round it: a foot on the edge of a step
+        // stands on the step.
+        const V3 ankle{frames[l][2].at.x, frames[l][2].at.y, root + 0.3f};
+        float want = 0;
+        bool found = false;
+        constexpr float kFoot = 0.06f;
+        const V3 around[5] = {{0, 0, 0}, {kFoot, 0, 0}, {-kFoot, 0, 0}, {0, kFoot, 0}, {0, -kFoot, 0}};
+        for (const V3& o : around) {
+            float under = 0;
+            if (ground_below(ankle + o, under)) {
+                const float w = std::clamp(under - root, -0.5f, 0.5f);
+                want = found ? std::max(want, w) : w;
+                found = true;
+            }
+        }
+        // A new height counts once it holds for a few ticks, so a foot swaying over an edge does
+        // not flick between the step and the ground below.
+        if (std::abs(want - leg.settled) <= 0.02f) {
+            leg.pending_ticks = 0;
+        } else if (leg.pending_ticks > 0 && std::abs(want - leg.pending) <= 0.02f) {
+            if (++leg.pending_ticks >= 8) leg.settled = want, leg.pending_ticks = 0;
+        } else {
+            leg.pending = want, leg.pending_ticks = 1;
+        }
+        leg.shift += (leg.settled - leg.shift) * 0.25f;
         drop = std::min(drop, leg.shift);
     }
-    const float lowered = a.feet_drop;  // as last drawn
     a.feet_drop = drop;
     // The body is lowered by its root joint (a figure stands where the game's ground puts it): the
     // drop in the root's axes, over their length (the moby's scale).
@@ -648,13 +678,22 @@ void feet_tick(ActorRun& a) {
         ActorRun::Leg& leg = a.legs[l];
         // The leg as animated (the turns and lowering of last tick taken off), lowered now, and
         // its ankle moved by its own shift.
-        std::array<JointFrame, 3> f = leg_unturned(frames[l], leg.turns, lowered);
+        std::array<JointFrame, 3> f = leg_unturned(parents[l], frames[l], leg.turns, lowered);
         V3 target = f[2].at;
         target.z += leg.shift;
         for (JointFrame& j : f) j.at.z += drop;
-        const LegTurns turns = leg_ik(f[0], f[1], f[2], target);
+        const LegTurns turns = leg_ik(parents[l], f[0], f[1], f[2], target);
         const float* fresh[3] = {turns.hip, turns.knee, turns.ankle};
-        for (std::size_t i = 0; i < 3; ++i) std::copy(fresh[i], fresh[i] + 4, leg.turns[i].begin());
+        // Eased towards the new bend: the pose read back is the one drawn (between ticks too), so
+        // taking the bend at once would chase that read's small errors into a shake.
+        for (std::size_t i = 0; i < 3; ++i) {
+            float* q = leg.turns[i].data();
+            const float sign = q[0] * fresh[i][0] + q[1] * fresh[i][1] + q[2] * fresh[i][2] + q[3] * fresh[i][3] < 0 ? -1.0f : 1.0f;
+            float n = 0;
+            for (int k = 0; k < 4; ++k) q[k] += (sign * fresh[i][k] - q[k]) * 0.4f, n += q[k] * q[k];
+            n = std::sqrt(n);
+            for (int k = 0; k < 4; ++k) q[k] = n > 1e-6f ? q[k] / n : (k == 3 ? 1.0f : 0.0f);
+        }
     }
 }
 
@@ -674,7 +713,11 @@ void joints_tick(ActorRun& a, int t) {
     }
     face_turns(a, t, turns);
     for (const ActorRun::Leg& leg : a.legs) {
-        for (std::size_t i = 0; i < 3; ++i) turns.add(leg.joints[i], leg.turns[i].data());
+        for (std::size_t i = 0; i < 3; ++i) {
+            float q[4];
+            offset_of(leg.turns[i].data(), q);
+            turns.add(leg.joints[i], q);
+        }
     }
     if (!a.legs.empty()) {
         const float none[4] = {0, 0, 0, 1};
@@ -874,9 +917,10 @@ void actors_begin(Play& p) {
             load_layers(p, a);
         }
         for (const Value& leg : def["feet"]["legs"].items()) {
-            if (leg.size() != 3 || a.kind == ActorRun::Kind::None || a.kind == ActorRun::Kind::Prop) continue;
+            if ((leg.size() != 3 && leg.size() != 4) || a.kind == ActorRun::Kind::None || a.kind == ActorRun::Kind::Prop) continue;
             ActorRun::Leg l;
             for (std::size_t i = 0; i < 3; ++i) l.joints[i] = static_cast<int>(leg[i].integer());
+            l.parent = leg.size() == 4 ? static_cast<int>(leg[3].integer()) : 0;
             a.legs.push_back(l);
         }
         if (def.has("face") && a.kind != ActorRun::Kind::None && a.kind != ActorRun::Kind::Prop) {
@@ -1435,7 +1479,9 @@ void start(Cutscene& c, int hops = 0) {
     // Off (the "play" setting, or the party host's): it ends at once, as a skip, so what it leaves in
     // the world still happens.
     if (!scenes_on()) p->skipped = true;
-    g_api->hero_grab(g_mod, -1, 0);
+    // Held, the hero stands (his sequence 0) or plays the file's hero.seq; the grab's own animation
+    // (-1) is the one of being caught, arms up, which looked like a fall.
+    g_api->hero_grab(g_mod, std::clamp(static_cast<int>(c.doc["hero"]["seq"].integer(0)), 0, 255), 0);
     g_play = std::move(p);
     g_swallow_start = true;
     g_cutscene_on = true;

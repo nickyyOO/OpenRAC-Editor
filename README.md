@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/cutscene-editor.gif" alt="A cutscene on Kerwan in the editor: the camera's view framed as the game shows it, with letterbox and subtitles, and the Cutscene dock's timeline below" width="100%">
+  <img src="docs/assets/cutscene-editor.gif" alt="A cutscene on Kerwan in the editor: two Ratchets in their animations, one walking his path, seen through the cutscene camera with letterbox and subtitles, and the Cutscene dock's timeline below" width="100%">
 </p>
 
 ## What is OpenRAC Editor?
@@ -45,7 +45,7 @@ Ratchet & Clank levels.
 Add a Cutscene to a level and direct it: key the camera, place characters, give them lines,
 voices and music. The Cutscene dock shows the whole scene on one timeline, and the 3D view shows
 the camera's picture framed as the game shows it (4:3 or 16:9), with the letterbox, the safe areas
-and the subtitles.
+and the subtitles. The characters play their animations as you scrub, and walk their paths.
 
 Saving the level writes the cutscene beside it, and the cutscene player mod plays it in OpenRAC
 when its trigger happens: the level starting, walking into an area, talking to someone, picking
@@ -53,7 +53,7 @@ something up, a mission flag, or another cutscene ending. Start skips it, and a 
 world just as watching does.
 
 <p align="center">
-  <img src="docs/assets/cutscene-in-game.gif" alt="The cutscene playing in OpenRAC: letterbox, subtitles, a camera move and a cut" width="80%">
+  <img src="docs/assets/cutscene-in-game.gif" alt="The cutscene playing in OpenRAC: Ratchet stands while a second Ratchet walks up, with letterbox, subtitles, a camera move and a cut" width="80%">
 </p>
 
 ### Characters that stand on the ground
@@ -64,7 +64,7 @@ other. **Foot IK** keeps their feet on steps and slopes: a scene made on flat gr
 right where the ground is not.
 
 <p align="center">
-  <img src="docs/assets/foot-ik.gif" alt="Ratchet standing on the edge of a step: without foot IK one foot floats, with foot IK it reaches down to the lower ground" width="80%">
+  <img src="docs/assets/foot-ik.gif" alt="Ratchet standing on the edge of a step: without foot IK one foot floats over the grass, with foot IK one foot stands on the grass and the other on the step" width="80%">
 </p>
 
 Faces move too: mouths follow the voice lines, eyes blink, and moods (happy, angry, ...) change the

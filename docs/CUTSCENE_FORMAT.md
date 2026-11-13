@@ -79,6 +79,7 @@ twice: a loop stops there.
 | Key | Meaning |
 |---|---|
 | `mode` | `"held"` (he stays, controls locked, `hero_grab`), `"hidden"`, or `"actor"` (a figure in his look is an actor with id `"hero"`) |
+| `seq` | The sequence he plays while held, 0 (standing) if not given (version 1.4) |
 | `end` | Where he stands when it ends: `{ "position": [x, y, z], "yaw": r }`, placed on the ground |
 
 ## `camera`
@@ -145,8 +146,9 @@ animation (its index, 0 up), played from the entry's `t` at `speed` (and `frame`
 second, into it), looped unless `"loop": false`; the mesh's joints are its skin's, numbered by their
 `joint_NNN` names or else their order (version 1.4).
 
-`"feet": { "legs": [[92, 93, 94], [98, 99, 100]] }` keeps the actor's feet on the level's ground
-(version 1.4): each leg's hip, knee and ankle. Each ankle goes up or down by how far the ground under
+`"feet": { "legs": [[92, 93, 94, 1], [98, 99, 100, 1]] }` keeps the actor's feet on the level's ground
+(version 1.4): each leg's hip, knee and ankle, then the hip's parent joint (0, the root, if left
+out; the player turns the hip in its parent's axes, as the game's joint modifiers do). Each ankle goes up or down by how far the ground under
 it is from the height the actor stands at (half a unit at most, eased in), the body lowers for the
 lower foot, the legs bend to reach and each foot keeps its tilt. On steps and slopes, a scene made
 on flat ground then stands on them.
@@ -225,7 +227,7 @@ moods (quaternions, x y z w, on top of its animation). The editor fills it from 
 for the actor's class (`modules/openrac_cutscene/cutscene_rigs.h`, and a project's
 `res://cutscene_rigs.json`, an object by `"<game>/<class>"` or `"<game>/hero"`), and it can be set
 by hand on the actor. A known rig may also list `parts` (a name and its first and last joint, such
-as `"head": [8, 51]`) for layers' masks, and `feet` (each leg's hip, knee and ankle) for an actor's
+as `"head": [8, 51]`) for layers' masks, and `feet` (each leg's hip, knee, ankle and the hip's parent) for an actor's
 **Feet On Ground**: the editor keeps them, and writes `feet` as the actor's own (the hero's legs for a
 hero figure when its rig has none).
 
