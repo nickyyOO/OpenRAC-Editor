@@ -85,6 +85,13 @@ private:
 public:
 	// What an export leaves out or cannot do, said in words (an export prints them too).
 	PackedStringArray export_problems() const;
+	// The camera at one key, in the game's space.
+	struct View {
+		Vector3 eye;
+		Vector3 forward;
+		float fov = 70.0f;
+	};
+	void scene_moby_problems(const Vector<View> &p_views, const Array &p_events, PackedStringArray &r_problems) const;
 	// The files an export writes beside the .cutscene besides it, by path.
 	Dictionary export_files() const;
 

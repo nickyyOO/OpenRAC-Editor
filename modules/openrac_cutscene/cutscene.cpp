@@ -643,6 +643,52 @@ Ref<Animation> Cutscene::get_timeline_animation() const {
 	return Ref<Animation>();
 }
 
+// A level moby the camera sees whose showing depends on what the player did before (rc1/moby.gd
+// may_change), and which no hide, show or kill event names: the game may show it or not, so the
+// author is told to decide.
+void Cutscene::scene_moby_problems(const Vector<View> &p_views, const Array &p_events, PackedStringArray &r_problems) const {
+	const Node *root = get_owner() != nullptr ? get_owner() : get_parent();
+	if (root == nullptr || p_views.is_empty()) {
+		return;
+	}
+	HashSet<int> decided;
+	for (const Variant &item : p_events) {
+		const Dictionary e = item;
+		if (e.has("spawn_id")) {
+			decided.insert(int(e["spawn_id"]));
+		}
+	}
+	// 4:3, the game's picture: the half widths the field of view gives.
+	constexpr float ASPECT = 4.0f / 3.0f;
+	constexpr float SEE_FAR = 120.0f;
+	TypedArray<Node> mobys = root->find_children("*", "Node3D", true, false);
+	for (const Variant &item : mobys) {
+		const Node3D *moby = Object::cast_to<Node3D>(item);
+		if (moby == nullptr || !moby->has_meta("rc1_spawn_id") || !moby->is_inside_tree() || !bool(moby->get("may_change"))) {
+			continue;
+		}
+		const int spawn_id = moby->get_meta("rc1_spawn_id");
+		if (spawn_id < 0 || decided.has(spawn_id)) {
+			continue;
+		}
+		const Vector3 at = (to_game_space(moby) * moby->get_global_transform()).origin;
+		for (const View &view : p_views) {
+			const Vector3 to = at - view.eye;
+			const float ahead = to.dot(view.forward);
+			if (ahead <= 0.0f || to.length() > SEE_FAR) {
+				continue;
+			}
+			// Within the cone the field of view spans across the wider side.
+			const float half = Math::atan(Math::tan(Math::deg_to_rad(view.fov) * 0.5f) * ASPECT);
+			if (Math::acos(CLAMP(ahead / MAX(to.length(), 1e-4f), -1.0f, 1.0f)) <= half) {
+				r_problems.push_back(vformat("%s (spawn id %d) is in view, and what the player did before decides whether the game shows it: add a Show or Hide event for it",
+						moby->get_name(), spawn_id));
+				break;
+			}
+		}
+	}
+}
+
 Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_files) const {
 	PackedStringArray problems;
 	Timeline tl;
@@ -656,6 +702,10 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 	const Dictionary level_info = level_json(dir);
 	const Transform3D to_game = to_game_space(this);
 	const Transform3D here = to_game * (is_inside_tree() ? get_global_transform() : get_transform());
+
+	// The camera's eye, forward and vertical field of view at each key, in the game's space: which
+	// level mobys it sees (scene_moby_problems).
+	Vector<View> views;
 
 	Dictionary out;
 	out["format"] = "openrac-cutscene";
@@ -771,6 +821,7 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 			}
 			cuts = cutscene_math::sorted_unique(cuts);
 			Array keys;
+			views.clear();
 			const CutsceneActor *carrier = Object::cast_to<CutsceneActor>(cam->get_node_or_null(cam->get_ride_on()));
 			if (!cam->get_ride_on().is_empty() && carrier == nullptr) {
 				problems.push_back(vformat("%s rides on %s, which is not an actor: it does not ride", cam->get_name(), String(cam->get_ride_on())));
@@ -779,6 +830,7 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 				const double time = t / cutscene_math::TICK_RATE;
 				const Transform3D at = game_at(tl, cam, time);
 				Vector3 rot = cutscene_math::camera_rotation(-at.basis.get_column(2), at.basis.get_column(1));
+				views.push_back({ at.origin, -at.basis.get_column(2).normalized(), float(value_at(tl, cam, "fov", time)) });
 				Dictionary key;
 				key["t"] = t;
 				if (carrier != nullptr) {
@@ -1198,6 +1250,7 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 		}
 	}
 	out["camera"] = camera;
+	scene_moby_problems(views, events, problems);
 	// Talking: each voice line on an actor whose rig has a jaw opens its mouth as loud as the line,
 	// in each language the line has a WAV for.
 	for (int i = 0; i < actors.size(); i++) {
