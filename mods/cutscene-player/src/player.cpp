@@ -341,6 +341,7 @@ struct Play {
     std::vector<char> events_done;
     std::vector<char> sounds_done;
     std::vector<Voice> voices;
+    bool muted = false;  // a menu is over the scene: its voices are silent (the port does not pause them)
     struct Haze {
         openrac_haze patch;
         int until;
@@ -1271,11 +1272,12 @@ void sounds_tick(Play& p, int t) {
             v.voice = 0;
             continue;
         }
-        if (v.fade_in > 0 || v.fade_out > 0) {
+        if (v.fade_in > 0 || v.fade_out > 0 || p.muted) {
             g_api->sound_set(g_mod, v.voice, v.volume * fade_gain(v.start, v.fade_in, v.fade_out, v.end, t), 1.0f);
         }
     }
     std::erase_if(p.voices, [](const Voice& v) { return v.voice == 0; });
+    p.muted = false;
 }
 
 // --- Air and slow motion
@@ -1704,8 +1706,13 @@ void frame() {
         g_language = code;
     }
     if (g_play) {
-        // A menu over the cutscene pauses it.
-        if (s.phase == OPENRAC_PLAY_PLAYING) play_tick();
+        // A menu over the cutscene pauses it, and silences its voices until it goes.
+        if (s.phase == OPENRAC_PLAY_PLAYING) {
+            play_tick();
+        } else if (!g_play->muted) {
+            for (const Voice& v : g_play->voices) g_api->sound_set(g_mod, v.voice, 0.0f, 1.0f);
+            g_play->muted = true;
+        }
     } else if (!g_level.scenes.empty()) {
         triggers_tick(s);
     }
