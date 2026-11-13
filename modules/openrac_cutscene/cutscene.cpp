@@ -2290,19 +2290,33 @@ int CutsceneActor::get_blend() const { return blend; }
 static Cutscene *cutscene_above(const Node *p_node);
 static const Node *timeline_root(const Cutscene *p_cutscene);
 
-// Poses a preview model's player at a sequence's clip (the one named *_seq_NNN*), looped when the
-// clip loops, held at its end otherwise.
+// The sequence a clip plays: the number after its "seq_" (ratchet_seq_004_loop, seq_02), -1 if none.
+static int clip_sequence(const String &p_name) {
+	const int at = p_name.find("seq_");
+	if (at < 0 || (at > 0 && p_name[at - 1] != '_')) {
+		return -1;
+	}
+	int digits = 0;
+	while (at + 4 + digits < p_name.length() && is_digit(p_name[at + 4 + digits])) {
+		digits++;
+	}
+	return digits == 0 ? -1 : p_name.substr(at + 4, digits).to_int();
+}
+
+// Poses a preview model's player at a sequence's clip, looped when the clip loops, held at its end
+// otherwise.
 static void preview_pose(AnimationPlayer *p_player, int p_seq, double p_at) {
-	const String tag = vformat("_seq_%03d", p_seq);
 	LocalVector<StringName> names;
 	p_player->get_animation_list(&names);
 	for (const StringName &name : names) {
-		if (!String(name).contains(tag)) {
+		if (clip_sequence(name) != p_seq) {
 			continue;
 		}
 		const Ref<Animation> clip = p_player->get_animation(name);
 		double at = p_at;
-		if (String(name).ends_with("_loop") && clip->get_length() > 0.0) {
+		// The import keeps a "_loop" clip as looping (and may drop the suffix).
+		const bool loops = String(name).ends_with("_loop") || clip->get_loop_mode() != Animation::LOOP_NONE;
+		if (loops && clip->get_length() > 0.0) {
 			at = Math::fmod(at, double(clip->get_length()));
 		} else {
 			at = MIN(at, double(clip->get_length()));
