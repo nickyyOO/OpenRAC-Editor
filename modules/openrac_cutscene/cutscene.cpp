@@ -37,8 +37,9 @@ namespace {
 
 using cutscene_math::ticks;
 
-// Subtitles the game's font cannot write (Japanese, and any letter past Latin) go into the file as
-// pictures the player draws: 1 bit a pixel, two pixels to one of the game's 512 x 448 picture.
+// Subtitles the game's font cannot write (the HUD's is ASCII without & * = [ ] { } ~: Japanese,
+// a French, German, Spanish or Italian accent) go into the file as pictures the player draws: 1 bit a pixel, two pixels to
+// one of the game's 512 x 448 picture.
 constexpr int SUBTITLE_FONT_SIZE = 26;
 constexpr int SUBTITLE_MAX_WIDTH = 880; // 440 of the game's pixels
 constexpr int SUBTITLE_MAX_ROWS = 3;
@@ -48,7 +49,11 @@ bool needs_picture(const String &p_language, const String &p_text) {
 		return true;
 	}
 	for (int i = 0; i < p_text.length(); i++) {
-		if (p_text[i] > 0x24F) {
+		const char32_t c = p_text[i];
+		if (c == '\n' || c == '\t' || c == '\r') {
+			continue;
+		}
+		if (c < 32 || c > 126 || String("&*=[]{}~").contains_char(c)) {
 			return true;
 		}
 	}
@@ -269,21 +274,23 @@ Transform3D local_at(const Timeline &p_tl, const Node3D *p_node, double p_time) 
 	Quaternion rotation = p_node->get_quaternion();
 	Vector3 scale = p_node->get_scale();
 	int k = -1;
-	if ((k = p_tl.find(p_node, Animation::TYPE_POSITION_3D)) >= 0) {
-		position = p_tl.anim->position_track_interpolate(k, p_time);
-	} else if ((k = p_tl.find(p_node, Animation::TYPE_VALUE, "position")) >= 0) {
+	// A track with no key (made by hand, or emptied) gives nothing: the node's own.
+	const auto keyed = [&](int p_k) { return p_k >= 0 && p_tl.anim->track_get_key_count(p_k) > 0; };
+	if (keyed(k = p_tl.find(p_node, Animation::TYPE_POSITION_3D))) {
+		p_tl.anim->try_position_track_interpolate(k, p_time, &position);  // keys all past the end: its own
+	} else if (keyed(k = p_tl.find(p_node, Animation::TYPE_VALUE, "position"))) {
 		position = p_tl.anim->value_track_interpolate(k, p_time);
 	}
-	if ((k = p_tl.find(p_node, Animation::TYPE_ROTATION_3D)) >= 0) {
-		rotation = p_tl.anim->rotation_track_interpolate(k, p_time);
-	} else if ((k = p_tl.find(p_node, Animation::TYPE_VALUE, "quaternion")) >= 0) {
+	if (keyed(k = p_tl.find(p_node, Animation::TYPE_ROTATION_3D))) {
+		p_tl.anim->try_rotation_track_interpolate(k, p_time, &rotation);
+	} else if (keyed(k = p_tl.find(p_node, Animation::TYPE_VALUE, "quaternion"))) {
 		rotation = p_tl.anim->value_track_interpolate(k, p_time);
-	} else if ((k = p_tl.find(p_node, Animation::TYPE_VALUE, "rotation")) >= 0) {
+	} else if (keyed(k = p_tl.find(p_node, Animation::TYPE_VALUE, "rotation"))) {
 		rotation = Basis::from_euler(p_tl.anim->value_track_interpolate(k, p_time), p_node->get_rotation_order()).get_rotation_quaternion();
 	}
-	if ((k = p_tl.find(p_node, Animation::TYPE_SCALE_3D)) >= 0) {
-		scale = p_tl.anim->scale_track_interpolate(k, p_time);
-	} else if ((k = p_tl.find(p_node, Animation::TYPE_VALUE, "scale")) >= 0) {
+	if (keyed(k = p_tl.find(p_node, Animation::TYPE_SCALE_3D))) {
+		p_tl.anim->try_scale_track_interpolate(k, p_time, &scale);
+	} else if (keyed(k = p_tl.find(p_node, Animation::TYPE_VALUE, "scale"))) {
 		scale = p_tl.anim->value_track_interpolate(k, p_time);
 	}
 	return Transform3D(Basis(rotation, scale), position);
@@ -299,7 +306,7 @@ Transform3D game_at(const Timeline &p_tl, const Node3D *p_node, double p_time) {
 // A property's value at `p_time`: keyed, else the node's own.
 Variant value_at(const Timeline &p_tl, const Node *p_node, const String &p_property, double p_time) {
 	const int k = p_tl.find(p_node, Animation::TYPE_VALUE, p_property);
-	return k >= 0 ? p_tl.anim->value_track_interpolate(k, p_time) : p_node->get(p_property);
+	return k >= 0 && p_tl.anim->track_get_key_count(k) > 0 ? p_tl.anim->value_track_interpolate(k, p_time) : p_node->get(p_property);
 }
 
 // The ticks to write keys at for a node: every tenth of a second, each key of its tracks, the end,
@@ -1235,7 +1242,8 @@ Vector3 vec3_of(const Variant &p_value, const Vector3 &p_fallback = Vector3()) {
 	if (a.size() < 3) {
 		return p_fallback;
 	}
-	return Vector3(a[0], a[1], a[2]);
+	const Vector3 v(a[0], a[1], a[2]);
+	return v.is_finite() ? v : p_fallback;  // 1e300 is past a float
 }
 
 // A camera key's picture as a Camera3D's basis in the game's space: [roll, pitch, yaw] (or a
@@ -1594,7 +1602,10 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 				}
 				for (int j = 0; j < joints.size(); j++) {
 					const uint8_t *q = r + t * stride + j * 16;
-					const Quaternion turn(decode_float(q), decode_float(q + 4), decode_float(q + 8), decode_float(q + 12));
+					Quaternion turn(decode_float(q), decode_float(q + 4), decode_float(q + 8), decode_float(q + 12));
+					if (!turn.is_finite() || turn.length_squared() < 1e-12) {
+						turn = Quaternion();  // as the player reads it: no turn
+					}
 					Vector3 degrees = Basis(turn.normalized()).get_euler() * (180.0 / Math::PI);
 					if (t > 0) {
 						degrees = euler_near(degrees, before[j]);
@@ -1739,7 +1750,8 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 			if (look.get_type() == Variant::DICTIONARY) {
 				problems.push_back(vformat("camera key at %d: looking at an actor is kept as the key's turn", t));
 			}
-			roll = key.get("roll", roll);
+			const float key_roll = key.get("roll", roll);
+			roll = Math::is_finite(key_roll) ? key_roll : roll;
 			const Transform3D local = from_game * Transform3D(camera_basis(forward, roll), eye);
 			if (bool(key.get("cut", false))) {
 				cuts.push_back(t / cutscene_math::TICK_RATE);

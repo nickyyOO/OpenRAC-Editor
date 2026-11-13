@@ -253,9 +253,10 @@ walk did plays instead. The editor writes the rig's `gaits` on the walk.
 Drawn in the game's font at the bottom, as the game's scenes do. A language the line lacks shows
 the first language of `languages`.
 
-The game's font writes only ASCII letters (accents are dropped). For a line it cannot write
-(Japanese, or any letter past Latin), the editor adds a picture of it, drawn with a system font,
-which the player draws over the picture instead:
+The game's font writes only ASCII letters (and not `& * = [ ] { } ~`). For a line it cannot write
+(Japanese, French, German, Spanish or Italian with an accent), the editor adds a picture of it, drawn with a system font, which
+the player draws over the picture instead. A line with no picture is written in ASCII, an accented
+letter as the letter without its accent:
 
 ```jsonc
 "bitmap": { "ja": { "width": 412, "height": 34, "pixel": 0.5, "bits": "AAAA..." } }

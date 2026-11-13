@@ -449,6 +449,12 @@ func test_walk_shake_and_pictures() -> void:
 			check(lit > 100 and lit < w * h / 2, "letters drawn, not a block: %d of %d lit" % [lit, w * h])
 	else:
 		print("  (no Japanese font on this computer: the picture is not checked)")
+	# Accents are no letters of the HUD's font either: a French line is a picture, the English text.
+	line.text = {"en": "Hi there", "fr": "Un café ?"}
+	var latin := SystemFont.new()
+	if latin.has_char(0xE9):
+		var subs: Dictionary = cs.to_cutscene()["subtitles"][0]
+		check(subs.has("bitmap") and subs["bitmap"].has("fr") and not subs["bitmap"].has("en"), "a picture for fr: %s" % [subs.get("bitmap", {}).keys()])
 	# A long line breaks into rows, three at most.
 	line.text = {"ja": "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん".repeat(3)}
 	d = cs.to_cutscene()
@@ -942,6 +948,21 @@ func test_retarget() -> void:
 	root.queue_free()
 
 
+# Numbers past a float and keys past the end: imported and written back without an engine error.
+func test_odd_numbers() -> void:
+	var root := make_level("user://t/level_06", {"level": 6, "version": "ntsc"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Odd"
+	cs.from_cutscene({"format": "openrac-cutscene", "version": 1, "level": 6, "length": 10,
+		"camera": {"keys": [{"t": 50, "eye": [1e300, 0, 0], "look_at": [0, 0, 1e300], "roll": 1e300},
+			{"t": 90, "eye": [0, 0, 5], "rotation": [0, 0, 1]}]}})
+	var d: Dictionary = cs.to_cutscene()
+	for k in d["camera"].get("keys", []):
+		for v in k["eye"]:
+			check(is_finite(v), "a finite eye: %s" % [k])
+	root.queue_free()
+
+
 # Run on the first frame: before it the root is not in the tree yet, so neither are the levels.
 func _process(_delta: float) -> bool:
 	test_full_cutscene()
@@ -949,6 +970,7 @@ func _process(_delta: float) -> bool:
 	test_no_game_node()
 	test_round_trip()
 	test_import_by_hand()
+	test_odd_numbers()
 	test_import_errors()
 	test_walk_shake_and_pictures()
 	test_faces()

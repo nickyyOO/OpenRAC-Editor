@@ -312,11 +312,23 @@ inline CameraAxes camera_axes(V3 forward, float roll) {
 // ---------------------------------------------------------------------------------------------
 // Text
 
-// The printable ASCII of a UTF-8 text (the HUD font has nothing else).
+// The printable ASCII of a UTF-8 text (the HUD font has nothing else): a Latin letter with an
+// accent as the letter without it (a line the editor did not draw as a picture), the rest left out.
 inline std::string ascii(const std::string& utf8) {
+    // U+00C0 to U+017F, each as its letter.
+    static constexpr char kLatin[] =
+        "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYTsaaaaaaaceeeeiiiidnooooo/ouuuuytyAaAaAaCcCcCcCcDdDdEeEeEeEeEeGgGg"
+        "GgGgHhHhIiIiIiIiIiIiJjKkkLlLlLlLlLlNnNnNnnNnOoOoOoOoRrRrRrSsSsSsSsTtTtTtUuUuUuUuUuUuWwYyYZzZzZzs";
     std::string out;
-    for (unsigned char c : utf8) {
-        if (c >= 32 && c < 127) out += static_cast<char>(c);
+    for (std::size_t i = 0; i < utf8.size(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(utf8[i]);
+        if (c >= 32 && c < 127) {
+            out += static_cast<char>(c);
+        } else if ((c & 0xE0) == 0xC0 && i + 1 < utf8.size() && (utf8[i + 1] & 0xC0) == 0x80) {
+            const unsigned cp = (c & 0x1Fu) << 6 | (static_cast<unsigned char>(utf8[i + 1]) & 0x3Fu);
+            if (cp >= 0xC0 && cp < 0x180) out += kLatin[cp - 0xC0];
+            ++i;
+        }
     }
     return out;
 }

@@ -337,7 +337,9 @@ void camera_axes_and_shake() {
 // --- Text, sounds, triggers
 
 void text() {
-    CHECK(ascii("caf\xC3\xA9 ok\x01") == "caf ok");
+    CHECK(ascii("Gr\xc3\xbc\xc3\x9f" "e, se\xc3\xb1or! Caf\xc3\xa9 \xe6\xad\xa6") == "Gruse, senor! Cafe ");
+    CHECK(ascii("\xc5") == "" && ascii("a\xc5" "b") == "ab");
+    CHECK(ascii("caf\xC3\xA9 ok\x01") == "cafe ok");
     auto rows = wrap("one two three", 40, 3);
     CHECK(rows.size() == 1 && rows[0] == "one two three");
     rows = wrap("aaaa bbbb cccc", 9, 3);
