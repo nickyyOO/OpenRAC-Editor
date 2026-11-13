@@ -768,6 +768,8 @@ void actors_begin(Play& p) {
         }
         p.actors.push_back(std::move(a));
     }
+    // The new mobys' own size (their class's), for actor_tick's scale 1.
+    read_mobys();
 }
 
 void actor_tick(Play& p, ActorRun& a, int t) {
@@ -817,7 +819,8 @@ void actor_tick(Play& p, ActorRun& a, int t) {
             a.base_scale = now->scale;
         }
     }
-    const float size = a.scale * (a.base_scale > 0 ? a.base_scale : 1.0f);
+    // Size unknown yet (0): the moby keeps the one it has.
+    const float size = a.base_scale > 0 ? a.scale * a.base_scale : 0.0f;
     std::uint32_t seq = now ? now->seq : 0, frame = now ? now->frame : 0;
     std::uint32_t next = now ? now->next_frame : 0;
     float anim_time = now ? now->anim_time : 0, speed = now ? now->anim_speed : 1;

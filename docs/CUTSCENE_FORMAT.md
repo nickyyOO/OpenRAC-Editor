@@ -326,10 +326,20 @@ view. Keys themselves are set as in any Godot animation, with the key icons in t
 the Animation dock.
 
 Saving the level writes every Cutscene to `cutscenes/<name>.cutscene` beside the scene, and the
-launcher packs them with the level. **Export .cutscene** writes one now; **Import .cutscene** reads
+launcher packs them with the level. Packing checks each one first (OpenRAC's `editor/pack.py`, `check_cutscene`) and
+leaves out one that is for another level, has no length or one over ten minutes, has two actors of
+one name, spawns a moby class the level does not load, or asks for more than the port has (8
+figures, 256 meshes, 128 joints an actor, 64 MiB of sounds). What the player would only skip is
+reported and packed: a file not beside it, a moby not in the level, an actor that is not one. **Export .cutscene** writes one now; **Import .cutscene** reads
 one back into a new, empty Cutscene (a camera looking at an actor becomes its turn, bezier handles
 a smooth curve, and events the editor has no node for are not kept: it says which). From a script, `to_cutscene()`,
 `export_cutscene()`, `from_cutscene(data)` and `import_cutscene(path)` do the same.
+
+The game's own in-engine scenes can be a start: OpenRAC's `editor/game_scenes.py DISC.iso --level 3
+--out DIR` writes each of a level's scenes as `game_scene_KK.cutscene`, with its speech as WAV per
+language. It keeps the camera (a key a tick, its cuts and field of view), each actor's class, place
+and size, the subtitles and the speech; the first hero actor becomes a figure and the hero is hidden.
+Not kept: the actors' own joint animation, so they stand in their class's first animation.
 
 ## What the player does today (version 0.3)
 
