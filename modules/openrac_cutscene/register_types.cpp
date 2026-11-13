@@ -17,6 +17,8 @@ void initialize_openrac_cutscene_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(Cutscene);
 		GDREGISTER_CLASS(CutsceneCamera);
 		GDREGISTER_CLASS(CutsceneActor);
+		GDREGISTER_CLASS(CutscenePath);
+		GDREGISTER_CLASS(CutsceneShake);
 		GDREGISTER_CLASS(CutsceneSubtitle);
 		GDREGISTER_CLASS(CutsceneSound);
 		GDREGISTER_CLASS(CutsceneEvent);
@@ -29,4 +31,7 @@ void initialize_openrac_cutscene_module(ModuleInitializationLevel p_level) {
 }
 
 void uninitialize_openrac_cutscene_module(ModuleInitializationLevel p_level) {
+	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		cutscene_free_font();
+	}
 }

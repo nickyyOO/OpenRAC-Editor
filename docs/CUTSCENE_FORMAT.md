@@ -61,9 +61,9 @@ control, on foot, alive, with no menu and no game scene playing. Until then it w
 |---|---|---|
 | `skippable` | true | Start skips it. On a skip the player applies the end state of every `persistent` event and puts actors where the cutscene leaves them |
 | `letterbox` | true | Black bars, as the game's scenes |
-| `hide_hud` | true | |
-| `world` | `"run"` | `"run"`: the level goes on; `"hold"`: mobys that are not actors are held while it plays |
-| `music` | `"duck"` | `"keep"`, `"duck"` (lower), `"stop"` |
+| `hide_hud` | true | The game's HUD is hidden while it plays (subtitles stay) |
+| `world` | `"run"` | `"run"`: the level goes on; `"hold"`: mobys that are not actors (nor the hero) do not update while it plays |
+| `music` | `"duck"` | `"keep"`, `"duck"` (a quarter of its volume), `"stop"` (silent); eased over half a second, and back on the way out |
 
 ## `hero`
 
@@ -90,7 +90,12 @@ A key gives `eye` and either `look_at` (a point, or `{ "actor": "vendor", "joint
 `rotation` (`[roll, pitch, yaw]`: yaw 0 looks along +x, a pitch above 0 looks down). A look-at
 actor point is the actor's place plus `offset` (default `[0, 0, 1]`). `cut` jumps to the key with no motion from the one before. `ease` is `linear`,
 `smooth` (Catmull-Rom through the keys) or `bezier` with `in` and `out` handles. `fov` is the
-vertical field of view in degrees; the game's own is kept when no key gives one.
+vertical field of view in degrees (1 to 150), linear between the keys that give one and jumping at a
+cut; the game's own is kept when no key gives one. It changes only the picture, never what the
+game's logic sees. `{ "actor": "vendor", "joint": 4 }` is that joint where the port last drew it
+(the offset then defaults to none); a port that cannot place joints uses the actor's place.
+`shake` keys wobble the eye from `t` for `length` ticks (30 if not given), fading out, by
+`strength` units (0.3 if not given).
 
 ## `actors`
 
@@ -118,9 +123,19 @@ vertical field of view in degrees; the game's own is kept when no key gives one.
 }
 ```
 
-`track` keys move it; `path` walks it along points on the ground at a speed instead (the editor
-picks the walk or run sequence when `anims` gives none). `anims` start the game's sequences of the
+`track` keys move it; `path` walks it along points on the ground at `speed` units a second (8 if
+not given) from tick `t` instead, facing the way it walks. `anims` start the game's sequences of the
 actor's class, blending over `blend` ticks.
+
+`look_at` turns the actor's body (its yaw) towards a `target` (a point, or an actor or the hero,
+with `joint` and `offset` as the camera's), by `weight` (0 to 1, 1 if not given), easing to it
+over `blend` ticks (10 if not given) from the key before. A key with `"target": null` eases the
+turn out. A new target turns the body round at most 0.2 radians a tick.
+
+`held` keys say what the actor holds from `t` on: `{ "from": "hero" }` what the hero holds now (a
+figure only), `{ "class": 1088, "joint": 56 }` a moby of that class on that joint (`item` and
+`slot`, the game's, for a figure), or `{}` nothing. On an actor that is not a figure the held moby
+follows the joint's place and the actor's turn.
 
 ### Layers (advanced, version 1.1)
 
@@ -131,8 +146,13 @@ actor's class, blending over `blend` ticks.
 ]
 ```
 
-Expressions, lip sync and hand-set joint keys all become layers the editor bakes to one joint
-rotation per tick for the listed joints; the player applies them as the game's joint modifiers.
+Expressions, lip sync and hand-set joint keys all become layers baked to one joint rotation per
+tick for the listed joints; the player turns the actor's joints by them, on top of its animation
+(the port's joint offsets, as a mod turns the hero's). `frames` is a file beside the .cutscene
+file: for each tick from 0, for each joint in `joints`' order, a quaternion (x, y, z, w) as four
+little-endian float32s; after its last tick the last holds. `weight` keys (`w` from 0 to 1, linear
+between them, 1 if none) blend each rotation in from none. The editor does not write layers yet:
+they come from a tool or by hand, and the editor keeps them as written (the actor's `advanced`).
 
 ## `subtitles`
 
@@ -143,6 +163,19 @@ rotation per tick for the listed joints; the player applies them as the game's j
 Drawn in the game's font at the bottom, as the game's scenes do. A language the line lacks shows
 the first language of `languages`.
 
+The game's font writes only ASCII letters (accents are dropped). For a line it cannot write
+(Japanese, or any letter past Latin), the editor adds a picture of it, drawn with a system font,
+which the player draws over the picture instead:
+
+```jsonc
+"bitmap": { "ja": { "width": 412, "height": 34, "pixel": 0.5, "bits": "AAAA..." } }
+```
+
+`bits` is base64 of rows of 1-bit pixels (the first pixel in each byte's top bit, every row whole
+bytes); `pixel` is the size of one in the game's 512 x 448 picture. Up to three rows, broken at
+spaces or anywhere in a language without them. The editor needs a font with the letters (Noto
+Sans CJK, Yu Gothic, Meiryo, Hiragino); without one it says so and writes no picture.
+
 ## `sounds`
 
 ```jsonc
@@ -152,7 +185,8 @@ the first language of `languages`.
 ```
 
 `file` is beside the .cutscene file (WAV or Ogg Vorbis). `kind` decides the volume group the player
-uses. With `actor` the sound comes from that actor's place.
+uses. `game_sound` is an entry of the actor's class's sound table (the hero's when `actor` is
+`"hero"` or not given), played on that actor where it is.
 
 ## `events`
 
@@ -190,7 +224,9 @@ cutscene's timeline, and a **CutsceneCamera**. Its children are what the file li
 | Node | In the file |
 |------|-------------|
 | CutsceneCamera | `camera`: its place and turn on the timeline, sampled every tenth of a second and at each key; `cuts` (seconds) jump |
-| CutsceneActor | `actors`: **Take Selected Moby** makes it a moby of the level; a `sequence` key starts an animation, `visible` keys show and hide it |
+| CutsceneActor | `actors`: **Take Selected Moby** makes it a moby of the level; a `sequence` key starts an animation, `visible` keys show and hide it; `advanced` holds `look_at`, `held` and `layers` as the file writes them |
+| CutscenePath (a child of an actor) | the actor's `path`: the curve's points, drawn in the 3D view as any Path3D's; `start`, `speed`, `ground` |
+| CutsceneShake (a child of the camera) | `camera.shake`: `start`, `duration`, `strength` |
 | CutsceneSubtitle | `subtitles` |
 | CutsceneSound | `sounds` |
 | CutsceneEvent | `events` |
@@ -198,21 +234,37 @@ cutscene's timeline, and a **CutsceneCamera**. Its children are what the file li
 
 Saving the level writes every Cutscene to `cutscenes/<name>.cutscene` beside the scene, and the
 launcher packs them with the level. **Export .cutscene** writes one now; **Import .cutscene** reads
-one back into a new, empty Cutscene (a `path`, `look_at` on actors, shake, bezier handles and
-events the editor has no node for are not kept: it says which). From a script, `to_cutscene()`,
+one back into a new, empty Cutscene (a camera looking at an actor becomes its turn, bezier handles
+a smooth curve, and events the editor has no node for are not kept: it says which). From a script, `to_cutscene()`,
 `export_cutscene()`, `from_cutscene(data)` and `import_cutscene(path)` do the same.
 
-## What the player does today (version 0.1)
+## What the player does today (version 0.2)
 
-The player is a mod on the port's mod interface (1.14, with `pack_folder` and `game_language`). It
-plays: the triggers, `once` (per save, in the mod's data folder), variants, the hero held or
-hidden, camera keys (linear, smooth, bezier, cuts, shake, the way back to the game's camera),
-actors of all four sources with `track`, `path`, `anims` and `visible`, subtitles (ASCII letters,
-the disc's language, the first language as fallback), sounds with fades, the letterbox, and the
-events `moby_hide`, `moby_kill`, `mission_flag`, `haze`, `fade`, `play` and `travel`. Start skips.
-The letterbox and fades need the port's overlay for mods (`on_overlay`).
+The player is a mod on the port's mod interface (1.14, with `pack_folder` and `game_language`; SDK
+1.14.8 adds what a scene needs: `camera_fov`, `hud_hide`, `music_volume`, `moby_set_joints`,
+`moby_joint_position`, `moby_sound_play`). It plays all of this format: the triggers, `once` (per
+save, in the mod's data folder), variants, the hero held, hidden or an actor, camera keys (linear,
+smooth, bezier, cuts, field of view, shake, the way back to the game's camera), actors of all four
+sources with `track`, `path`, `anims`, `visible`, `look_at`, `held` and `layers`, joints as
+look-at targets, subtitles (the game's font for ASCII, pictures for the rest, the disc's language),
+sounds with fades and game sounds on actors, the letterbox, fades, the hidden HUD, the held world,
+the lowered music, and the events `moby_hide`, `moby_kill`, `mission_flag`, `haze`, `fade`, `play`
+and `travel`. Start skips. The letterbox, fades and subtitle pictures need the port's overlay for
+mods (`on_overlay`); holding the world needs the moby update gate, which one mod has at a time.
 
-Not yet, for want of a call in the mod interface: `fov`, hiding the HUD,
-holding the world, lowering the music, `look_at` and `held` on actors, joints as look-at targets,
-`layers`, a game sound on an actor other than the hero, and Japanese subtitles (the HUD's text is
-ASCII). The player logs each one it skips, once a cutscene.
+On a port without a call it needs, the player plays the rest and logs what it skipped, once a
+cutscene.
+
+Not played: a sound's place (the port's mod sounds are not placed in the world), and a `blend`
+other than 4 ticks between animations (the game's own).
+
+## PCSX2
+
+The player is a mod of OpenRAC's port, which runs the game natively; PCSX2 runs the disc's own
+code, which has no mod interface. Playing a cutscene there would need a player written for the
+PlayStation 2 itself (MIPS code patched into the game, reading the file from memory), or a program
+beside PCSX2 that writes the camera and the actors into the game's memory each frame over PCSX2's
+PINE socket. The second is a rough preview at best: PINE is not in step with the game's frames, so
+the camera would shake against the game's own, and what the port adds (figures, props, joints, the
+overlay) has no counterpart. Neither is built; the editor's preview and the port are the way to
+watch a cutscene.

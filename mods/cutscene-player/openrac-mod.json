@@ -2,7 +2,7 @@
   "format": 2,
   "id": "cutscene-player",
   "name": "Cutscene player",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "OpenRAC",
   "description": "Plays the cutscenes made in OpenRAC Editor: camera, characters, subtitles in the disc's language, voices and music. Start skips one.",
   "license": "MIT",

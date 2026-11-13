@@ -4,6 +4,7 @@
 #include <clocale>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "json.hpp"
@@ -415,7 +416,140 @@ void picture() {
     CHECK(pack_rgba({-1, 2, 0, NAN}) == 0x00FF0000u);
 }
 
+void field_of_view() {
+    // No key with a field of view: the game's.
+    CHECK(fov_at(parse(R"([{"t": 0, "eye": [0, 0, 0]}])"), 5) == 0.0f);
+    CHECK(fov_at(parse("null"), 5) == 0.0f);
+    // Held before and after, linear between, keys out of order, out of range kept in it.
+    const Value keys = parse(R"([{"t": 100, "fov": 30}, {"t": 0, "fov": 60}, {"t": 50}, {"t": 200, "fov": 500}])");
+    CHECK(near(fov_at(keys, -10), 60));
+    CHECK(near(fov_at(keys, 0), 60));
+    CHECK(near(fov_at(keys, 50), 45));
+    CHECK(near(fov_at(keys, 100), 30));
+    CHECK(near(fov_at(keys, 150), 90));
+    CHECK(near(fov_at(keys, 999), 150));
+    CHECK(near(fov_at(parse(R"([{"t": 0, "fov": 0}])"), 0), 1));
+    // A cut jumps.
+    const Value cut = parse(R"([{"t": 0, "fov": 60}, {"t": 100, "fov": 20, "cut": true}])");
+    CHECK(near(fov_at(cut, 99), 60));
+    CHECK(near(fov_at(cut, 100), 20));
+    // A field of view that is not a number is not one.
+    CHECK(fov_at(parse(R"([{"t": 0, "fov": "wide"}])"), 0) == 0.0f);
+}
+
+void looking() {
+    CHECK(near(yaw_to({0, 0, 0}, {0, 5, 3}, 9), kPi / 2));
+    CHECK(near(yaw_to({1, 1, 0}, {1, 1, 8}, 0.25f), 0.25f));
+    CHECK(near(yaw_to({0, 0, 0}, {-1, 0, 0}, 0), kPi));
+    // Weights ease in over the blend, from 0 before the first key.
+    const Value keys = parse(R"([
+        {"t": 10, "target": {"actor": "hero"}, "weight": 1, "blend": 10},
+        {"t": 40, "target": [1, 2, 3], "weight": 0.5, "blend": 0},
+        {"t": 60, "target": null, "blend": 20}])");
+    CHECK(look_at(keys, 0).key == -1 && look_at(keys, 0).weight == 0);
+    CHECK(look_at(keys, 10).weight == 0);  // the blend has not begun
+    CHECK(look_at(keys, 15).key == 0 && near(look_at(keys, 15).weight, 0.5f));
+    CHECK(near(look_at(keys, 25).weight, 1));
+    CHECK(look_at(keys, 40).key == 1 && near(look_at(keys, 40).weight, 0.5f));
+    // A key with no target eases out, still turned towards the one before.
+    CHECK(look_at(keys, 70).key == -2 && near(look_at(keys, 70).weight, 0.25f));
+    CHECK(look_at(keys, 80).key == -1 && look_at(keys, 80).weight == 0);
+    // A weight past 1 is 1; none given is 1.
+    CHECK(near(look_at(parse(R"([{"t": 0, "target": [0, 0, 0], "weight": 7, "blend": 0}])"), 0).weight, 1));
+    CHECK(near(look_at(parse(R"([{"t": 0, "target": [0, 0, 0], "blend": 0}])"), 3).weight, 1));
+    // Turns the short way round, no more than asked.
+    CHECK(near(turn_toward(0, 1, 0.25f), 0.25f));
+    CHECK(near(turn_toward(0, -1, 0.25f), -0.25f));
+    CHECK(near(turn_toward(3.0f, -3.0f, 1.0f), 3.0f + (2 * kPi - 6.0f)));
+    CHECK(near(turn_toward(0.5f, 0.6f, 1.0f), 0.6f));
+}
+
+void layers() {
+    CHECK(near(weight_at(parse("null"), 5), 1));
+    const Value w = parse(R"([{"t": 10, "w": 0}, {"t": 20, "w": 1}, {"t": 30, "w": 3}])");
+    CHECK(near(weight_at(w, 0), 0));
+    CHECK(near(weight_at(w, 15), 0.5f));
+    CHECK(near(weight_at(w, 40), 1));
+    // Two joints, two ticks.
+    std::string bytes;
+    const auto put = [&](float f) {
+        std::uint32_t u;
+        std::memcpy(&u, &f, 4);
+        for (int i = 0; i < 4; ++i) bytes.push_back(static_cast<char>(u >> (8 * i)));
+    };
+    const float h = std::sqrt(0.5f);
+    for (float f : {0.f, 0.f, h, h, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, -1.f, 1.f, 0.f, 0.f, 0.f}) put(f);
+    LayerFrames frames;
+    CHECK(layer_frames(bytes, 2, frames) && frames.ticks() == 2);
+    CHECK(!layer_frames(bytes, 3, frames) && frames.ticks() == 0);
+    CHECK(!layer_frames("", 2, frames));
+    CHECK(!layer_frames(bytes, 0, frames));
+    CHECK(!layer_frames(bytes.substr(0, 20), 1, frames));
+    std::string bad = bytes;
+    const float nan = NAN;
+    std::memcpy(&bad[4], &nan, 4);
+    CHECK(!layer_frames(bad, 2, frames));
+    CHECK(layer_frames(bytes, 2, frames));
+    float q[4];
+    layer_rotation(frames, 0, 0, 1, q);
+    CHECK(near(q[2], h) && near(q[3], h));
+    // Half the weight: half the turn (45 degrees about z of a 90 one).
+    layer_rotation(frames, 0, 0, 0.5f, q);
+    CHECK(near(std::atan2(q[2], q[3]) * 2, kPi / 4, 0.02f));
+    layer_rotation(frames, 0, 0, 0, q);
+    CHECK(near(q[3], 1) && near(q[2], 0));
+    // A negative w is the same turn the short way; ticks past the end hold the last.
+    layer_rotation(frames, 0, 50, 1, q);
+    CHECK(near(q[3], 1));
+    layer_rotation(frames, 1, -5, 1, q);
+    CHECK(near(q[3], 1));
+    layer_rotation(frames, 1, 1, 1, q);
+    CHECK(near(q[0], 1) && near(q[3], 0));
+    // A joint the layer does not have: no turn.
+    layer_rotation(frames, 9, 0, 1, q);
+    CHECK(q[3] == 1 && q[0] == 0);
+}
+
+void music() {
+    CHECK(near(music_gain("duck", 0, 1), 1));
+    CHECK(near(music_gain("duck", kMusicTicks / 2, 1), (1 + kMusicDucked) / 2));
+    CHECK(near(music_gain("duck", 999, 1), kMusicDucked));
+    CHECK(near(music_gain("stop", 999, 1), 0));
+    CHECK(near(music_gain("keep", 999, 1), 1));
+    CHECK(near(music_gain("stop", 999, 0.5f), 0.5f));
+    CHECK(near(music_gain("stop", 999, 0), 1));
+    CHECK(near(music_gain("", 999, 1), kMusicDucked));
+}
+
 }  // namespace
+
+void subtitle_pictures() {
+    std::string out;
+    CHECK(base64_decode("TWFu", out) && out == "Man");
+    CHECK(base64_decode("TWE=", out) && out == "Ma");
+    CHECK(base64_decode("TQ", out) && out == "M");
+    CHECK(base64_decode("", out) && out.empty());
+    CHECK(base64_decode("//8=", out) && out == std::string("\xff\xff"));
+    CHECK(!base64_decode("TW!u", out));
+    CHECK(!base64_decode("TW u", out));
+    // 10 x 2: row 0 lit at 0-2 and 9, row 1 lit at 4-9 (two bytes a row).
+    // Row 0: 11100000 01000000 -> 0xE0 0x40; row 1: 00001111 11000000 -> 0x0F 0xC0.
+    std::vector<BitmapRun> runs;
+    CHECK(bitmap_runs(parse(R"({"width": 10, "height": 2, "bits": "4EAPwA=="})"), runs));
+    CHECK(runs.size() == 3);
+    CHECK(runs.size() == 3 && runs[0].x == 0 && runs[0].y == 0 && runs[0].length == 3);
+    CHECK(runs.size() == 3 && runs[1].x == 9 && runs[1].y == 0 && runs[1].length == 1);
+    CHECK(runs.size() == 3 && runs[2].x == 4 && runs[2].y == 1 && runs[2].length == 6);
+    // Too few bits, sizes out of range, bad base64: nothing.
+    CHECK(!bitmap_runs(parse(R"({"width": 10, "height": 3, "bits": "4EAPwA=="})"), runs) && runs.empty());
+    CHECK(!bitmap_runs(parse(R"({"width": 0, "height": 2, "bits": ""})"), runs));
+    CHECK(!bitmap_runs(parse(R"({"width": 5000, "height": 2, "bits": "4EAPwA=="})"), runs));
+    CHECK(!bitmap_runs(parse(R"({"width": 10, "height": 2, "bits": "4E*PwA=="})"), runs));
+    CHECK(!bitmap_runs(parse("null"), runs));
+    // All lit: one run a row.
+    CHECK(bitmap_runs(parse(R"({"width": 8, "height": 2, "bits": "//8="})"), runs) && runs.size() == 2 &&
+          runs[1].length == 8);
+}
 
 int main() {
     json_values();
@@ -432,6 +566,11 @@ int main() {
     fades();
     volumes();
     picture();
+    field_of_view();
+    looking();
+    layers();
+    music();
+    subtitle_pictures();
     std::printf("timeline: %d check(s), %d failed\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

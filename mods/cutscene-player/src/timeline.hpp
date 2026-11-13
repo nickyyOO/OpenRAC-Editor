@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -433,6 +434,219 @@ inline bool inside(const Value& trigger, V3 at) {
         return length(at - vec(trigger["sphere"]["position"])) <= trigger["sphere"]["radius"].number(4);
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Field of view, look-at, joint layers, the music
+
+// Ratchet & Clank's own vertical field of view, about: what the way back to the game's camera
+// eases a cutscene's field of view to before it gives the game's back.
+constexpr float kGameFov = 51.0f;
+
+// The camera's vertical field of view at t, in degrees, from the keys that give "fov" (kept within
+// 1 to 150): held before the first and after the last, linear between, jumping to a "cut" key. 0
+// when no key gives one: the game's own.
+inline float fov_at(const Value& keys, int t) {
+    const auto& all = keys.items();
+    std::vector<std::pair<int, float>> stops;
+    std::vector<char> cuts;
+    for (std::size_t i : by_time(all)) {
+        const Value& k = all[i];
+        if (!k["fov"].is_number()) continue;
+        const double f = k["fov"].number();
+        if (!std::isfinite(f)) continue;
+        stops.emplace_back(k["t"].integer(), static_cast<float>(std::clamp(f, 1.0, 150.0)));
+        cuts.push_back(k["cut"].boolean() ? 1 : 0);
+    }
+    if (stops.empty()) return 0.0f;
+    if (t <= stops.front().first) return stops.front().second;
+    std::size_t i = 0;
+    while (i + 1 < stops.size() && stops[i + 1].first <= t) ++i;
+    if (i + 1 >= stops.size() || cuts[i + 1]) return stops[i].second;
+    const auto [ta, fa] = stops[i];
+    const auto [tb, fb] = stops[i + 1];
+    const float u = tb > ta ? static_cast<float>(t - ta) / static_cast<float>(tb - ta) : 1.0f;
+    return fa + (fb - fa) * u;
+}
+
+// The yaw from `from` towards `to` (0 along +x, as a rotation's z); `fallback` when they are on one
+// upright line.
+inline float yaw_to(V3 from, V3 to, float fallback) {
+    const float dx = to.x - from.x, dy = to.y - from.y;
+    return dx * dx + dy * dy > 1e-8f ? std::atan2(dy, dx) : fallback;
+}
+
+// What an actor looks at at t (its "look_at" keys): the key whose target applies (-1 for none) and
+// the weight, which eases from the key before's over the key's "blend" ticks (10 if not given).
+// Before the first key, and for a key with no target, the weight is 0.
+struct Look {
+    int key = -1;
+    float weight = 0;
+};
+inline Look look_at(const Value& keys, int t) {
+    const auto& all = keys.items();
+    const std::vector<std::size_t> order = by_time(all);
+    Look look;
+    float before = 0;
+    for (std::size_t n = 0; n < order.size(); ++n) {
+        const Value& k = all[order[n]];
+        const int kt = k["t"].integer();
+        if (kt > t) break;
+        const bool has_target = !k["target"].is_null() && (k["target"].is_array() || k["target"].is_object());
+        const float w = has_target ? static_cast<float>(std::clamp(k["weight"].number(1), 0.0, 1.0)) : 0.0f;
+        const int blend = std::max(0, k["blend"].integer(10));
+        const float u = blend > 0 ? std::min(1.0f, static_cast<float>(t - kt) / static_cast<float>(blend)) : 1.0f;
+        const float start = n == 0 ? 0.0f : before;
+        look.key = has_target ? static_cast<int>(order[n]) : -1;
+        look.weight = start + (w - start) * u;
+        before = look.weight;
+        // A key with no target keeps easing out towards the one before's target.
+        if (!has_target && n > 0 && look.weight > 0) look.key = -2;
+    }
+    if (look.weight < 1e-4f) look = {};
+    return look;
+}
+
+// A turn from `now` towards `want` by at most `most` radians, the short way round.
+inline float turn_toward(float now, float want, float most) {
+    float d = std::fmod(want - now, 2 * kPi);
+    if (d > kPi) d -= 2 * kPi;
+    if (d < -kPi) d += 2 * kPi;
+    return now + std::clamp(d, -most, most);
+}
+
+// A joint layer's weight at t: "w" of its weight keys, linear between them, held before the first
+// and after the last; 1 with none. Kept within 0 to 1.
+inline float weight_at(const Value& keys, int t) {
+    const auto& all = keys.items();
+    if (all.empty()) return 1.0f;
+    const std::vector<std::size_t> order = by_time(all);
+    const auto w = [&](std::size_t n) {
+        return static_cast<float>(std::clamp(all[order[n]]["w"].number(1), 0.0, 1.0));
+    };
+    const auto at = [&](std::size_t n) { return all[order[n]]["t"].integer(); };
+    if (t <= at(0)) return w(0);
+    std::size_t i = 0;
+    while (i + 1 < order.size() && at(i + 1) <= t) ++i;
+    if (i + 1 >= order.size()) return w(i);
+    const float u = at(i + 1) > at(i) ? static_cast<float>(t - at(i)) / static_cast<float>(at(i + 1) - at(i)) : 1.0f;
+    return w(i) + (w(i + 1) - w(i)) * u;
+}
+
+// A layer's frames, as the editor writes them: for each tick, for each of the layer's joints, a
+// rotation as a quaternion (x, y, z, w), four little-endian float32s. The last tick holds after.
+struct LayerFrames {
+    std::size_t joints = 0;
+    std::vector<float> values;  // ticks * joints * 4
+    std::size_t ticks() const { return joints == 0 ? 0 : values.size() / (joints * 4); }
+};
+// From a file's bytes: false (and nothing) when it is empty, not whole ticks, or has a value that is
+// not a number.
+inline bool layer_frames(const std::string& bytes, std::size_t joints, LayerFrames& out) {
+    out = {};
+    const std::size_t tick = joints * 16;
+    if (joints == 0 || bytes.empty() || bytes.size() % tick != 0) return false;
+    out.joints = joints;
+    out.values.resize(bytes.size() / 4);
+    for (std::size_t i = 0; i < out.values.size(); ++i) {
+        const auto* b = reinterpret_cast<const unsigned char*>(bytes.data()) + 4 * i;
+        const std::uint32_t u = std::uint32_t(b[0]) | std::uint32_t(b[1]) << 8 | std::uint32_t(b[2]) << 16 |
+                                std::uint32_t(b[3]) << 24;
+        float f;
+        static_assert(sizeof(f) == sizeof(u));
+        std::memcpy(&f, &u, sizeof(f));
+        if (!std::isfinite(f)) {
+            out = {};
+            return false;
+        }
+        out.values[i] = f;
+    }
+    return true;
+}
+// Joint `j`'s rotation at tick t, weighted from none (w 0) to the whole frame (w 1), as a unit
+// quaternion; the last tick after the end, the first before it.
+inline void layer_rotation(const LayerFrames& f, std::size_t j, int t, float w, float out[4]) {
+    out[0] = out[1] = out[2] = 0, out[3] = 1;
+    if (j >= f.joints || f.ticks() == 0) return;
+    const std::size_t tick = static_cast<std::size_t>(std::clamp<long long>(t, 0, static_cast<long long>(f.ticks()) - 1));
+    const float* q = &f.values[(tick * f.joints + j) * 4];
+    float x = q[0], y = q[1], z = q[2], qw = q[3];
+    if (qw < 0) x = -x, y = -y, z = -z, qw = -qw;  // the short way from none
+    w = std::clamp(w, 0.0f, 1.0f);
+    // From the identity: a straight blend, then made whole again (close to a slerp for the turns a
+    // face or a hand makes).
+    float r[4] = {x * w, y * w, z * w, 1 + (qw - 1) * w};
+    const float l = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2] + r[3] * r[3]);
+    if (!(l > 1e-6f)) return;
+    for (int k = 0; k < 4; ++k) out[k] = r[k] / l;
+}
+
+// The game's music gain at t for an "options.music" of "keep", "duck" or "stop", `k` of the way in
+// (less on the way back to the game): ducked to a quarter, stopped to nothing, over half a second.
+constexpr float kMusicDucked = 0.25f;
+constexpr int kMusicTicks = 30;
+inline float music_gain(const std::string& mode, int t, float k) {
+    const float low = mode == "stop" ? 0.0f : mode == "keep" ? 1.0f : kMusicDucked;
+    const float in = std::clamp(static_cast<float>(t) / kMusicTicks, 0.0f, 1.0f) * std::clamp(k, 0.0f, 1.0f);
+    return 1.0f + (low - 1.0f) * in;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Subtitles as pictures (a language the game's font cannot write, such as Japanese)
+
+// Standard base64 (with or without "=" padding) to bytes: false for any other character.
+inline bool base64_decode(const std::string& in, std::string& out) {
+    out.clear();
+    std::uint32_t acc = 0;
+    int bits = 0;
+    for (char c : in) {
+        int v;
+        if (c >= 'A' && c <= 'Z') v = c - 'A';
+        else if (c >= 'a' && c <= 'z') v = c - 'a' + 26;
+        else if (c >= '0' && c <= '9') v = c - '0' + 52;
+        else if (c == '+') v = 62;
+        else if (c == '/') v = 63;
+        else if (c == '=') break;
+        else return false;
+        acc = (acc << 6) | static_cast<std::uint32_t>(v);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<char>((acc >> bits) & 0xFF));
+        }
+    }
+    return true;
+}
+
+// One lit stretch of a row of a subtitle's picture.
+struct BitmapRun {
+    std::uint16_t x = 0, y = 0, length = 0;
+};
+constexpr int kBitmapMaxWidth = 2048, kBitmapMaxHeight = 256;
+// A subtitle's picture ("bitmap": {"width", "height", "bits"}: rows of lit pixels, the first pixel
+// in each byte's top bit, every row whole bytes, in base64) as the lit runs of its rows. False for
+// a size out of range or bits that do not fill it.
+inline bool bitmap_runs(const Value& bitmap, std::vector<BitmapRun>& out) {
+    out.clear();
+    const int w = bitmap["width"].integer(), h = bitmap["height"].integer();
+    if (w <= 0 || h <= 0 || w > kBitmapMaxWidth || h > kBitmapMaxHeight) return false;
+    std::string bytes;
+    if (!base64_decode(bitmap["bits"].string(), bytes)) return false;
+    const std::size_t row = static_cast<std::size_t>((w + 7) / 8);
+    if (bytes.size() < row * static_cast<std::size_t>(h)) return false;
+    for (int y = 0; y < h; ++y) {
+        int start = -1;
+        for (int x = 0; x <= w; ++x) {
+            const bool lit = x < w && (static_cast<unsigned char>(bytes[row * y + x / 8]) >> (7 - x % 8) & 1u);
+            if (lit && start < 0) start = x;
+            if (!lit && start >= 0) {
+                out.push_back({static_cast<std::uint16_t>(start), static_cast<std::uint16_t>(y),
+                               static_cast<std::uint16_t>(x - start)});
+                start = -1;
+            }
+        }
+    }
+    return true;
 }
 
 }  // namespace cutscene

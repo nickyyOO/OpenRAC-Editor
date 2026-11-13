@@ -8,6 +8,7 @@
 #include "core/variant/typed_array.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/3d/node_3d.h"
+#include "scene/3d/path_3d.h"
 
 class AnimationPlayer;
 class Animation;
@@ -191,6 +192,7 @@ private:
 	int sequence = -1;
 	float anim_speed = 1.0f;
 	int blend = 4;
+	Dictionary advanced;
 
 	void _take_selected_moby();
 
@@ -222,6 +224,58 @@ public:
 	void set_blend(int p_ticks);
 	int get_blend() const;
 	Callable get_take_selected_action();
+	// "look_at", "held" and "layers" as the file writes them (docs/CUTSCENE_FORMAT.md), kept as
+	// they are: what the editor has no node for yet.
+	void set_advanced(const Dictionary &p_advanced);
+	Dictionary get_advanced() const;
+
+	PackedStringArray get_configuration_warnings() const override;
+};
+
+// Where an actor walks (the file's `path`), as a child of the CutsceneActor: the curve's points on
+// the ground, from `start` at `speed` units a second. Its points are drawn and moved in the 3D view
+// as any Path3D's; it stays put when the timeline moves the actor (a top-level node).
+class CutscenePath : public Path3D {
+	GDCLASS(CutscenePath, Path3D);
+
+	double start = 0.0;
+	double speed = 8.0;
+	bool ground = true;
+
+protected:
+	static void _bind_methods();
+
+public:
+	CutscenePath();
+	void set_start(double p_seconds);
+	double get_start() const;
+	void set_speed(double p_speed);
+	double get_speed() const;
+	void set_ground(bool p_ground);
+	bool get_ground() const;
+
+	PackedStringArray get_configuration_warnings() const override;
+};
+
+// A shake of the camera (the file's `camera.shake`), as a child of the CutsceneCamera: from
+// `start`, fading out over `duration`.
+class CutsceneShake : public Node {
+	GDCLASS(CutsceneShake, Node);
+
+	double start = 0.0;
+	double duration = 0.5;
+	double strength = 0.3;
+
+protected:
+	static void _bind_methods();
+
+public:
+	void set_start(double p_seconds);
+	double get_start() const;
+	void set_duration(double p_seconds);
+	double get_duration() const;
+	void set_strength(double p_strength);
+	double get_strength() const;
 
 	PackedStringArray get_configuration_warnings() const override;
 };
@@ -370,6 +424,9 @@ public:
 VARIANT_ENUM_CAST(Cutscene::TriggerKind);
 VARIANT_ENUM_CAST(Cutscene::HeroMode);
 VARIANT_ENUM_CAST(Cutscene::World);
+// Lets go of the subtitle pictures' font: the module calls it as it closes.
+void cutscene_free_font();
+
 VARIANT_ENUM_CAST(Cutscene::Music);
 VARIANT_ENUM_CAST(CutsceneActor::Source);
 VARIANT_ENUM_CAST(CutsceneActor::End);

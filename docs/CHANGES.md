@@ -47,9 +47,10 @@ These are deleted from the source:
 - **MCP server** (`editor/mcp/`): AI assistants read and edit the open level, with undo. See
   [MCP.md](MCP.md).
 - **Cutscenes** (`modules/openrac_cutscene/`): the Cutscene node and its camera, actors,
-  subtitles, sounds and events, keyed on an AnimationPlayer. Saving the level writes each one to
-  `cutscenes/<name>.cutscene` beside it; a `.cutscene` imports back into nodes. Tests:
-  `modules/openrac_cutscene/tests/run_tests.sh`.
+  walks (CutscenePath), camera shakes (CutsceneShake), subtitles, sounds and events, keyed on an
+  AnimationPlayer. Saving the level writes each one to `cutscenes/<name>.cutscene` beside it; a
+  `.cutscene` imports back into nodes. Lines the game's font cannot write (Japanese) are drawn into
+  the file as pictures. Tests: `modules/openrac_cutscene/tests/run_tests.sh`.
 - **Cutscene player** (`mods/cutscene-player/`): the OpenRAC mod that plays the editor's
   cutscenes. See [CUTSCENE_FORMAT.md](CUTSCENE_FORMAT.md).
 

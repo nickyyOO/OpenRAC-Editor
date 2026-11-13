@@ -14,6 +14,7 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -40,6 +41,9 @@ openrac_mod* g_mod = nullptr;
 fs::path utf8_path(const std::string& text) { return fs::path(std::u8string(text.begin(), text.end())); }
 
 void log(int level, const std::string& text) { g_api->log(g_mod, level, text.c_str()); }
+
+// Whether the port has call `f` of the interface (newer ones are added at the table's end).
+#define API_HAS(f) (g_api->size >= offsetof(openrac_api, f) + sizeof(g_api->f) && g_api->f != nullptr)
 
 // ---------------------------------------------------------------------------------------------
 // The level's cutscenes
@@ -255,13 +259,47 @@ struct ActorRun {
     V3 rotation;
     float scale = 1;
     float base_scale = 0;  // its own size, which a track's scale multiplies (0: not read yet)
+    // look_at: the yaw it last turned to, and where it last wanted to look.
+    bool looking = false;
+    float look_turn = 0, look_yaw = 0;
+    // held, on an actor that is not a figure: a moby of the class, kept on the joint.
+    int held_slot = -1;
+    int held_class = -1;
+    bool held_hidden = false;
+    // layers: each one's joints and frames, and whether any offsets were set.
+    struct Layer {
+        const Value* def = nullptr;
+        std::vector<int> joints;
+        LayerFrames frames;
+    };
+    std::vector<Layer> layers;
+    bool joints_set = false;
+    // The moby the actor is in the level (a figure's too), -1 for none.
+    int moby_slot() const;
 };
+
+int ActorRun::moby_slot() const {
+    switch (kind) {
+        case Kind::Moby:
+        case Kind::Spawned: return slot;
+        case Kind::Figure: return g_api->figure_slot(g_mod, figure);
+        default: return -1;
+    }
+}
 
 struct Voice {
     std::uint32_t voice = 0;
     int start = 0;
     int fade_in = 0, fade_out = 0, end = -1;
     float volume = 1;
+};
+
+// A subtitle line written as a picture (a language the game's font cannot write): its lit runs,
+// `pixel` of the game's 512 x 448 picture a pixel.
+struct SubPicture {
+    std::vector<BitmapRun> runs;
+    int width = 0, height = 0;
+    float pixel = 0.5f;
 };
 
 struct Play {
@@ -286,14 +324,30 @@ struct Play {
     CameraPose last_camera;  // the last picture of the cutscene's camera, for the way back
     bool has_camera = false;
     bool hero_hidden = false;
+    // Subtitles drawn as pictures, decoded once: by subtitle and language.
+    std::map<std::pair<std::size_t, std::string>, std::shared_ptr<const SubPicture>> pictures;
+    float last_fov = 0;  // the field of view last asked for, 0 for the game's
+    bool hud_hidden = false;
+    std::string music = "keep";  // options.music, when the port can lower it
 };
 std::unique_ptr<Play> g_play;
 // What the overlay draws, set on the game's thread and read on the window's.
 std::atomic<float> g_bars{0};  // the letterbox, 0 to 1
 std::atomic<std::uint32_t> g_fade{0};  // the colour over the picture, 0xRRGGBBAA
+std::mutex g_pictures_lock;
+std::vector<std::shared_ptr<const SubPicture>> g_pictures;  // the subtitle pictures shown now
+
+void show_pictures(std::vector<std::shared_ptr<const SubPicture>> pictures) {
+    const std::lock_guard<std::mutex> lock(g_pictures_lock);
+    g_pictures = std::move(pictures);
+}
 bool g_has_overlay = false;  // the port draws for mods
 std::string g_language;
 bool g_subtitles = true;  // the "subtitles" setting
+// Holding the world (options.world "hold"): the gate skips the update of every moby but these.
+bool g_holding = false;
+std::set<int> g_hold_free;
+bool g_has_gate = false;  // the port gave this mod the moby update gate
 std::map<std::string, int> g_sounds;  // pack path -> sound id (kept until the program ends)
 
 void warn_once(Play& p, const std::string& what) {
@@ -317,9 +371,20 @@ bool target_point(Play& p, const Value& v, V3& out) {
     }
     if (!v.is_object()) return false;
     const std::string id = v["actor"].string();
+    ActorRun* a = actor(p, id);
+    // A joint of the actor (or the hero): where the port last drew it, then the offset.
+    if (v.has("joint")) {
+        const int slot = a != nullptr ? a->moby_slot() : (id == "hero" ? g_api->figure_slot(g_mod, -1) : -1);
+        float at[3];
+        if (slot >= 0 && API_HAS(moby_joint_position)
+            && g_api->moby_joint_position(slot, v["joint"].integer(), at) == OPENRAC_HOOK_OK) {
+            out = V3{at[0], at[1], at[2]} + vec(v["offset"], {0, 0, 0});
+            return true;
+        }
+        warn_once(p, "a joint as a look-at target (the port cannot place joints)");
+    }
     const V3 offset = vec(v["offset"], {0, 0, 1});
-    if (v.has("joint")) warn_once(p, "a joint as a look-at target");
-    if (ActorRun* a = actor(p, id)) {
+    if (a != nullptr) {
         out = a->position + offset;
         return true;
     }
@@ -346,6 +411,144 @@ int sound_id(Play& p, const std::string& file) {
 }
 
 // --- Actors
+
+// A file of the cutscene's folder, read whole; empty for a path that leaves the folder or a file
+// that cannot be read.
+std::string pack_file(Play& p, const std::string& rel) {
+    const fs::path path = utf8_path(rel);
+    if (rel.empty() || path.is_absolute() || path.has_root_name()) return {};
+    for (const fs::path& part : path) {
+        if (part == "..") return {};
+    }
+    const std::string pack = pack_folder();
+    if (pack.empty()) return {};
+    std::ifstream in(utf8_path(pack) / utf8_path(p.scene->pack_dir) / path, std::ios::binary);
+    if (!in) return {};
+    std::stringstream bytes;
+    bytes << in.rdbuf();
+    return bytes.str();
+}
+
+void load_layers(Play& p, ActorRun& a) {
+    if (!API_HAS(moby_set_joints)) {
+        warn_once(p, "actor layers (the port cannot turn a moby's joints)");
+        return;
+    }
+    for (const Value& def : (*a.def)["layers"].items()) {
+        ActorRun::Layer layer;
+        layer.def = &def;
+        for (const Value& j : def["joints"].items()) {
+            if (j.is_number() && j.integer() >= 0 && j.integer() < 256) layer.joints.push_back(j.integer());
+        }
+        const std::string file = def["frames"].string();
+        if (layer.joints.empty() || !layer_frames(pack_file(p, file), layer.joints.size(), layer.frames)) {
+            log(OPENRAC_LOG_WARN, std::format("{}: actor \"{}\": layer \"{}\" has no usable frames ({})",
+                                              p.scene->name, a.id, def["name"].string(), file));
+            continue;
+        }
+        a.layers.push_back(std::move(layer));
+    }
+}
+
+// The actor's layers at t, as joint offsets on its moby.
+void layers_tick(ActorRun& a, int t) {
+    if (a.layers.empty()) return;
+    const int slot = a.moby_slot();
+    if (slot < 0) return;
+    std::vector<openrac_joint_offset> offsets;
+    for (const ActorRun::Layer& layer : a.layers) {
+        const float w = weight_at((*layer.def)["weight"], t);
+        for (std::size_t j = 0; j < layer.joints.size() && offsets.size() < OPENRAC_JOINT_OFFSETS_MAX; ++j) {
+            openrac_joint_offset o{};
+            o.joint = static_cast<std::uint32_t>(layer.joints[j]);
+            layer_rotation(layer.frames, j, t, w, o.rotation);
+            offsets.push_back(o);
+        }
+    }
+    a.joints_set = g_api->moby_set_joints(g_mod, slot, offsets.data(), static_cast<int>(offsets.size())) == OPENRAC_HOOK_OK;
+}
+
+// What an actor holds at t: a figure's pieces through the port; on a moby, a moby of the class kept
+// on the joint.
+void held_tick(Play& p, ActorRun& a, int t) {
+    const Value& list = (*a.def)["held"];
+    if (!list.is_array() || list.size() == 0) return;
+    const int at = anim_at(list, t);
+    const Value* e = at >= 0 ? &list[static_cast<std::size_t>(at)] : nullptr;
+    const bool none = e == nullptr || (!e->has("class") && (*e)["from"].string() != "hero");
+    if (a.kind == ActorRun::Kind::Figure) {
+        openrac_held held{};
+        held.size = sizeof(held);
+        if (!none && (*e)["from"].string() == "hero") {
+            if (g_api->hero_held(&held) != OPENRAC_HOOK_OK) held.count = 0;
+        } else if (!none) {
+            held.count = 1;
+            openrac_held_piece& piece = held.pieces[0];
+            piece.slot = (*e)["slot"].integer(0);
+            piece.item = (*e)["item"].integer(-1);
+            piece.oclass = (*e)["class"].integer();
+            piece.joint = (*e)["joint"].integer();
+        }
+        held.size = sizeof(held);
+        g_api->figure_held(g_mod, a.figure, &held);
+        return;
+    }
+    if (a.kind != ActorRun::Kind::Moby && a.kind != ActorRun::Kind::Spawned) return;
+    if (!none && (*e)["from"].string() == "hero") {
+        warn_once(p, "\"held\" from the hero on an actor that is not a figure");
+        return;
+    }
+    const int cls = none ? -1 : (*e)["class"].integer();
+    if (cls != a.held_class && a.held_slot >= 0) {
+        g_api->moby_kill(g_mod, a.held_slot);
+        a.held_slot = -1;
+    }
+    a.held_class = cls;
+    if (cls < 0) return;
+    // At the joint as the port last drew it, else in the actor's middle.
+    V3 where = a.position + V3{0, 0, 1};
+    float joint_at[3];
+    if (API_HAS(moby_joint_position) && a.slot >= 0
+        && g_api->moby_joint_position(a.slot, (*e)["joint"].integer(), joint_at) == OPENRAC_HOOK_OK) {
+        where = {joint_at[0], joint_at[1], joint_at[2]};
+    }
+    openrac_moby pose{};
+    pose.size = sizeof(pose);
+    std::memcpy(pose.position, &where, sizeof(float) * 3);
+    std::memcpy(pose.rotation, &a.rotation, sizeof(float) * 3);
+    if (a.held_slot < 0) {
+        a.held_slot = g_api->moby_spawn(g_mod, cls, &pose);
+        if (a.held_slot < 0) {
+            warn_once(p, std::format("a held moby of class {} (the level cannot make one)", cls));
+            a.held_class = -2;  // not again this cutscene
+            return;
+        }
+    }
+    pose.slot = a.held_slot;
+    g_api->moby_pose(g_mod, a.held_slot, &pose);
+}
+
+// Turns the actor's body towards what its look_at keys say, by their weight.
+void look_tick(Play& p, ActorRun& a, int t) {
+    const Value& keys = (*a.def)["look_at"];
+    if (!keys.is_array() || keys.size() == 0) return;
+    const Look look = look_at(keys, t);
+    if (look.key == -1) {
+        a.looking = false;
+        return;
+    }
+    if (look.key >= 0) {
+        V3 target;
+        if (target_point(p, keys[static_cast<std::size_t>(look.key)]["target"], target)) {
+            a.look_yaw = yaw_to(a.position, target, a.look_yaw);
+        }
+    }
+    const float goal = angle_lerp(a.rotation.z, a.look_yaw, look.weight);
+    // A new target turns the body round over a few ticks, not at once.
+    a.look_turn = a.looking ? turn_toward(a.look_turn, goal, 0.2f) : goal;
+    a.looking = true;
+    a.rotation.z = a.look_turn;
+}
 
 void actors_begin(Play& p) {
     const Value& list = (*p.doc)["actors"];
@@ -386,8 +589,8 @@ void actors_begin(Play& p) {
         if (a.kind == ActorRun::Kind::None) {
             log(OPENRAC_LOG_WARN, std::format("{}: actor \"{}\" is missing, skipped", p.scene->name, a.id));
         }
-        for (const char* part : {"look_at", "held", "layers"}) {
-            if (def.has(part)) warn_once(p, std::format("actor \"{}\"", part));
+        if (def.has("layers") && a.kind != ActorRun::Kind::None && a.kind != ActorRun::Kind::Prop) {
+            load_layers(p, a);
         }
         p.actors.push_back(std::move(a));
     }
@@ -398,6 +601,8 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     const Value& def = *a.def;
     track_at(def["track"], t, a.position, a.rotation, a.scale);
     path_at(def["path"], t, a.position, a.rotation);
+    if (!a.looking) a.look_yaw = a.rotation.z;
+    look_tick(p, a, t);
 
     const int visible = visible_at(def["visible"], t) ? 1 : 0;
 
@@ -472,6 +677,12 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     }
     if (visible != a.visible && slot >= 0) g_api->moby_hide(g_mod, slot, !visible);
     a.visible = visible;
+    held_tick(p, a, t);
+    layers_tick(a, t);
+    if (a.held_slot >= 0 && a.held_hidden != !visible) {
+        g_api->moby_hide(g_mod, a.held_slot, !visible);
+        a.held_hidden = !visible;
+    }
 }
 
 void actors_end(Play& p) {
@@ -479,6 +690,14 @@ void actors_end(Play& p) {
         const std::string end = (*a.def)["end"].string_or("keep");
         // A skip puts every actor where the cutscene leaves it.
         if (p.skipped) actor_tick(p, a, p.scene->length);
+        if (a.joints_set) g_api->moby_set_joints(g_mod, a.moby_slot(), nullptr, 0);
+        if (a.held_slot >= 0) {
+            if (end == "keep") {
+                g_api->moby_drive(g_mod, a.held_slot, 0);
+            } else {
+                g_api->moby_kill(g_mod, a.held_slot);
+            }
+        }
         switch (a.kind) {
             case ActorRun::Kind::Moby:
                 if (end == "remove") {
@@ -519,7 +738,6 @@ std::vector<CamKey> camera_keys(Play& p) {
         V3 target;
         const bool has_target = target_point(p, k["look_at"], target);
         keys.push_back(camera_key(k, keys.empty() ? nullptr : &keys.back(), has_target ? &target : nullptr));
-        if (k.has("fov")) warn_once(p, "a camera field of view");
     }
     return keys;
 }
@@ -541,6 +759,22 @@ bool camera_at(Play& p, int t, CameraPose& out) {
     return true;
 }
 
+// The camera's field of view, once the camera is the cutscene's (0 gives the game's back).
+void fov_set(Play& p, float fov) {
+    if (fov == p.last_fov) return;
+    if (!API_HAS(camera_fov)) {
+        if (fov > 0) warn_once(p, "a camera field of view (the port cannot set one)");
+        return;
+    }
+    if (g_api->camera_fov(g_mod, fov) == OPENRAC_HOOK_OK) p.last_fov = fov;
+}
+
+// The game's music, lowered as options.music says, `k` of the way in.
+void music_set(Play& p, int t, float k) {
+    if (p.music == "keep") return;
+    g_api->music_volume(g_mod, music_gain(p.music, t, k));
+}
+
 // --- Over the picture
 
 // The letterbox and the fade at t, `k` of the way in (less on the way back to the game).
@@ -559,6 +793,24 @@ void draw_overlay(void*, const openrac_overlay* o) {
         o->rect(o->context, 0, 0, kWidth, kBar * bars, 0x000000FFu);
         o->rect(o->context, 0, kHeight - kBar * bars, kWidth, kBar * bars, 0x000000FFu);
     }
+    // Subtitle pictures, one above the other, centred where the HUD's lines go, with a shadow.
+    {
+        const std::lock_guard<std::mutex> lock(g_pictures_lock);
+        float total = 0;
+        for (const auto& pic : g_pictures) total += pic->height * pic->pixel;
+        float y = kHeight * 0.80f - total / 2;
+        for (const auto& pic : g_pictures) {
+            const float x = (kWidth - pic->width * pic->pixel) / 2;
+            for (const std::uint32_t colour : {0x000000C0u, 0xF0F0F0FFu}) {
+                const float shift = colour == 0xF0F0F0FFu ? 0.0f : 1.0f;
+                for (const BitmapRun& r : pic->runs) {
+                    o->rect(o->context, x + r.x * pic->pixel + shift, y + r.y * pic->pixel + shift,
+                            r.length * pic->pixel, pic->pixel, colour);
+                }
+            }
+            y += pic->height * pic->pixel;
+        }
+    }
     const std::uint32_t fade = g_fade.load();
     if ((fade & 0xFFu) != 0) o->rect(o->context, 0, 0, kWidth, kHeight, fade);
 }
@@ -567,13 +819,34 @@ void draw_overlay(void*, const openrac_overlay* o) {
 
 void subtitles_tick(Play& p, int t) {
     std::vector<openrac_hud_text> lines;
+    std::vector<std::shared_ptr<const SubPicture>> pictures;
     if (!g_subtitles) return;
-    for (const Value& s : (*p.doc)["subtitles"].items()) {
+    const auto& list = (*p.doc)["subtitles"].items();
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        const Value& s = list[i];
         if (t < s["t"].integer() || t >= s["end"].integer(s["t"].integer() + 120)) continue;
         const Value& text = s["text"];
         const std::string lang = text.is_string() ? std::string() : pick_language(text, (*p.doc)["languages"]);
+        // A line the editor wrote as a picture (Japanese, and any the game's font cannot write).
+        const Value& bitmap = s["bitmap"][lang];
+        if (!lang.empty() && bitmap.is_object() && g_has_overlay) {
+            auto& pic = p.pictures[{i, lang}];
+            if (!pic) {
+                auto made = std::make_shared<SubPicture>();
+                if (bitmap_runs(bitmap, made->runs)) {
+                    made->width = bitmap["width"].integer();
+                    made->height = bitmap["height"].integer();
+                    made->pixel = static_cast<float>(std::clamp(bitmap["pixel"].number(0.5), 0.1, 4.0));
+                } else {
+                    log(OPENRAC_LOG_WARN, std::format("{}: subtitle {} has a broken {} picture", p.scene->name, i, lang));
+                }
+                pic = std::move(made);
+            }
+            if (!pic->runs.empty() && pictures.size() < 4) pictures.push_back(pic);
+            continue;
+        }
         if (lang == "ja") {
-            warn_once(p, "Japanese subtitles (the HUD font has only ASCII)");
+            warn_once(p, "Japanese subtitles without a picture (the HUD font has only ASCII)");
             continue;
         }
         // Lines of up to 40 letters, broken at spaces, at most three.
@@ -592,6 +865,7 @@ void subtitles_tick(Play& p, int t) {
     }
     if (lines.size() > 8) lines.resize(8);
     g_api->hud_text_set(g_mod, lines.empty() ? nullptr : lines.data(), static_cast<int>(lines.size()));
+    show_pictures(std::move(pictures));
 }
 
 // --- Sounds
@@ -605,10 +879,15 @@ void sounds_tick(Play& p, int t) {
         if (p.skipped) continue;
         const float volume = static_cast<float>(s["volume"].number(1));
         if (s.has("game_sound")) {
-            if (s["actor"].string_or("hero") == "hero") {
+            const std::string who = s["actor"].string_or("hero");
+            ActorRun* a = who == "hero" ? nullptr : actor(p, who);
+            const int slot = a != nullptr ? a->moby_slot() : -1;
+            if (who == "hero" && actor(p, "hero") == nullptr) {
                 g_api->hero_sound_play(g_mod, s["game_sound"].integer(), 0);
+            } else if (slot >= 0 && API_HAS(moby_sound_play)) {
+                g_api->moby_sound_play(g_mod, slot, s["game_sound"].integer(), 0);
             } else {
-                warn_once(p, "a game sound on an actor other than the hero");
+                warn_once(p, "a game sound on an actor the port cannot play one on");
             }
             continue;
         }
@@ -725,8 +1004,21 @@ void start(Cutscene& c, int hops = 0) {
     p->sounds_done.assign(c.doc["sounds"].size(), 0);
     const Value& opts = c.doc["options"];
     if (opts["letterbox"].boolean(true) && !g_has_overlay) warn_once(*p, "the letterbox (needs the port's overlay)");
-    if (opts["world"].string_or("run") != "run") warn_once(*p, "holding the world");
-    if (opts["music"].string_or("duck") != "keep") warn_once(*p, "lowering the game's music");
+    if (opts["world"].string_or("run") == "hold" && !g_has_gate) {
+        warn_once(*p, "holding the world (another mod has the moby update gate)");
+    }
+    p->music = opts["music"].string_or("duck");
+    if (p->music != "keep" && !API_HAS(music_volume)) {
+        warn_once(*p, "lowering the game's music (the port cannot)");
+        p->music = "keep";
+    }
+    if (opts["hide_hud"].boolean(true)) {
+        if (API_HAS(hud_hide)) {
+            p->hud_hidden = g_api->hud_hide(g_mod, 1) == OPENRAC_HOOK_OK;
+        } else {
+            warn_once(*p, "hiding the HUD (the port cannot)");
+        }
+    }
     if (c.doc["trigger"]["once"].boolean(true)) g_seen.add(seen_key(c));
     g_api->hero_grab(g_mod, -1, 0);
     g_play = std::move(p);
@@ -747,9 +1039,15 @@ void finish(bool level_gone) {
     for (Voice& v : p.voices) g_api->sound_stop(g_mod, v.voice);
     p.voices.clear();
     g_api->hud_text_set(g_mod, nullptr, 0);
+    show_pictures({});
     g_api->haze_set(g_mod, nullptr, 0);
+    if (p.last_fov > 0) fov_set(p, 0);
     g_api->camera_set(g_mod, nullptr);
     g_api->hero_release(g_mod);
+    if (p.hud_hidden) g_api->hud_hide(g_mod, 0);
+    if (p.music != "keep") g_api->music_volume(g_mod, 1.0f);
+    g_holding = false;
+    g_hold_free.clear();
     if (!level_gone) {
         actors_end(p);
         if (p.hero_hidden) g_api->moby_hide(g_mod, g_api->figure_slot(g_mod, -1), 0);
@@ -800,6 +1098,15 @@ void play_tick() {
             p.hero_hidden = g_api->moby_hide(g_mod, g_api->figure_slot(g_mod, -1), 1) == OPENRAC_HOOK_OK;
         }
         actors_begin(p);
+        if ((*p.doc)["options"]["world"].string_or("run") == "hold" && g_has_gate) {
+            // Every moby but the actors, the hero and what the mods' figures are holds still.
+            g_hold_free.clear();
+            g_hold_free.insert(g_api->figure_slot(g_mod, -1));
+            for (const ActorRun& a : p.actors) {
+                if (a.moby_slot() >= 0) g_hold_free.insert(a.moby_slot());
+            }
+            g_holding = true;
+        }
     }
     if (p.ease_out >= 0) {
         // Back to the game's camera, then the end.
@@ -812,8 +1119,13 @@ void play_tick() {
             const V3 f = lerp(p.last_camera.forward, V3{game.forward[0], game.forward[1], game.forward[2]}, s);
             openrac_camera cam = make_camera(eye, normal(f, p.last_camera.forward), p.last_camera.roll * (1 - s));
             g_api->camera_set(g_mod, &cam);
+            if (p.last_fov > 0) {
+                const float from = fov_at((*p.doc)["camera"]["keys"], p.scene->length);
+                fov_set(p, from + (kGameFov - from) * s);
+            }
         }
         overlay_tick(p, p.scene->length, 1 - s);
+        music_set(p, p.scene->length, 1 - s);
         if (++p.ease_out > kCameraEaseOut) finish(false);
         return;
     }
@@ -833,7 +1145,9 @@ void play_tick() {
         g_api->camera_set(g_mod, &cam);
         p.last_camera = pose;
         p.has_camera = true;
+        fov_set(p, fov_at((*p.doc)["camera"]["keys"], t));
     }
+    music_set(p, t, 1);
     subtitles_tick(p, t);
     sounds_tick(p, t);
     events_tick(p, t);
@@ -844,6 +1158,7 @@ void play_tick() {
     }
     if (++p.t > p.scene->length) {
         g_api->hud_text_set(g_mod, nullptr, 0);
+        show_pictures({});
         if (p.has_camera && (*p.doc)["camera"]["end"].string_or("ease") == "ease") {
             g_api->hero_release(g_mod);
             p.ease_out = 0;
@@ -946,6 +1261,10 @@ void frame() {
     g_pressed = 0;
 }
 
+int moby_gate(void*, int slot, int phase) {
+    return phase == OPENRAC_MOBY_BEFORE && g_holding && g_hold_free.count(slot) == 0 ? 1 : 0;
+}
+
 void load(openrac::Mod& mod) {
     g_api = &mod.api();
     g_mod = mod.handle();
@@ -955,6 +1274,8 @@ void load(openrac::Mod& mod) {
     }
     g_subtitles = mod.setting<bool>("subtitles");
     g_has_overlay = mod.on_overlay(draw_overlay);
+    // The gate holds the world (options.world "hold"); it lets every update run otherwise.
+    g_has_gate = g_api->on_moby_update(g_mod, moby_gate, nullptr) == OPENRAC_HOOK_OK;
     mod.on_frame(frame);
     mod.on_pad(on_pad);
     mod.info("ready");
@@ -962,4 +1283,4 @@ void load(openrac::Mod& mod) {
 
 }  // namespace
 
-OPENRAC_MOD_CPP("cutscene-player", "0.1.0", load)
+OPENRAC_MOD_CPP("cutscene-player", "0.2.0", load)

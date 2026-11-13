@@ -6,6 +6,7 @@
 #include "cutscene_math.h"
 
 #include "core/config/project_settings.h"
+#include "core/crypto/crypto_core.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/io/json.h"
@@ -13,6 +14,8 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/animation/animation_player.h"
+#include "scene/resources/font.h"
+#include "servers/text/text_server.h"
 #include "scene/resources/animation.h"
 #include "scene/resources/animation_library.h"
 
@@ -25,6 +28,165 @@
 namespace {
 
 using cutscene_math::ticks;
+
+// Subtitles the game's font cannot write (Japanese, and any letter past Latin) go into the file as
+// pictures the player draws: 1 bit a pixel, two pixels to one of the game's 512 x 448 picture.
+constexpr int SUBTITLE_FONT_SIZE = 26;
+constexpr int SUBTITLE_MAX_WIDTH = 880; // 440 of the game's pixels
+constexpr int SUBTITLE_MAX_ROWS = 3;
+
+bool needs_picture(const String &p_language, const String &p_text) {
+	if (p_language == "ja") {
+		return true;
+	}
+	for (int i = 0; i < p_text.length(); i++) {
+		if (p_text[i] > 0x24F) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// A font with the letters of a language the game's font lacks: the system's (Noto CJK, Yu Gothic,
+// Hiragino, ...), found once and let go with the module (cutscene_free_font), before the text server.
+Ref<SystemFont> g_subtitle_font;
+
+Ref<SystemFont> subtitle_font() {
+	if (g_subtitle_font.is_null()) {
+		Ref<SystemFont> font;
+		font.instantiate();
+		PackedStringArray names;
+		for (const char *name : { "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic", "Meiryo", "MS Gothic",
+					 "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Source Han Sans JP", "IPAGothic",
+					 "TakaoGothic", "WenQuanYi Zen Hei", "Droid Sans Fallback", "Noto Sans" }) {
+			names.push_back(name);
+		}
+		font->set_font_names(names);
+		font->set_antialiasing(TextServer::FONT_ANTIALIASING_GRAY);
+		g_subtitle_font = font;
+	}
+	return g_subtitle_font;
+}
+
+// `p_text` drawn as a subtitle picture: { width, height, pixel, bits } (rows of bits, the first pixel
+// in each byte's top bit, base64). Broken into up to three rows at spaces, or anywhere in a language
+// without them. Empty, with `r_problem` set, when no font has its letters.
+Dictionary subtitle_picture(const String &p_text, String &r_problem) {
+	const Ref<SystemFont> font = subtitle_font();
+	for (int i = 0; i < p_text.length(); i++) {
+		if (p_text[i] > 32 && !font->has_char(p_text[i])) {
+			r_problem = vformat("no font on this computer has the letter %s (install Noto Sans CJK)", String::chr(p_text[i]));
+			return Dictionary();
+		}
+	}
+	TextServer *ts = TextServerManager::get_singleton()->get_primary_interface().ptr();
+	const TypedArray<RID> rids = font->get_rids();
+	if (ts == nullptr || rids.is_empty()) {
+		r_problem = "no text server to draw it";
+		return Dictionary();
+	}
+	const RID shaped = ts->create_shaped_text();
+	ts->shaped_text_add_string(shaped, p_text, rids, SUBTITLE_FONT_SIZE);
+	const Glyph *glyphs = ts->shaped_text_get_glyphs(shaped);
+	const int count = ts->shaped_text_get_glyph_count(shaped);
+	const int ascent = int(Math::ceil(ts->shaped_text_get_ascent(shaped)));
+	const int line = ascent + int(Math::ceil(ts->shaped_text_get_descent(shaped))) + 2;
+
+	// The rows: glyph ranges, broken at the last space that fits, else at the glyph that does not.
+	Vector<Vector2i> rows; // first glyph, past the last
+	int first = 0;
+	while (first < count && rows.size() < SUBTITLE_MAX_ROWS) {
+		float width = 0;
+		int end = first, space = -1;
+		while (end < count) {
+			const float advance = glyphs[end].advance * glyphs[end].repeat;
+			if (width + advance > SUBTITLE_MAX_WIDTH && end > first) {
+				break;
+			}
+			if (glyphs[end].start >= 0 && glyphs[end].start < p_text.length() && p_text[glyphs[end].start] == ' ') {
+				space = end;
+			}
+			width += advance;
+			end++;
+		}
+		if (end < count && space > first) {
+			end = space + 1;
+		}
+		rows.push_back(Vector2i(first, end));
+		first = end;
+	}
+
+	// Each row's width without its spaces at the ends, and the picture's.
+	Vector<float> widths;
+	float widest = 1;
+	for (const Vector2i &row : rows) {
+		float w = 0;
+		for (int g = row.x; g < row.y; g++) {
+			w += glyphs[g].advance * glyphs[g].repeat;
+		}
+		widths.push_back(w);
+		widest = MAX(widest, w);
+	}
+	const int width = MIN(int(Math::ceil(widest)) + 2, SUBTITLE_MAX_WIDTH + 2);
+	const int height = MAX(1, line * rows.size());
+	Vector<uint8_t> lit;
+	lit.resize_initialized(width * height);
+
+	for (int r = 0; r < rows.size(); r++) {
+		float pen = (width - widths[r]) / 2;
+		const float baseline = r * line + ascent + 1;
+		for (int g = rows[r].x; g < rows[r].y; g++) {
+			const Glyph &gl = glyphs[g];
+			for (int k = 0; k < gl.repeat; k++) {
+				if (gl.font_rid.is_valid() && (gl.flags & TextServer::GRAPHEME_IS_VIRTUAL) == 0) {
+					const Vector2i size(gl.font_size, 0);
+					ts->font_render_glyph(gl.font_rid, size, gl.index);
+					const int tex = ts->font_get_glyph_texture_idx(gl.font_rid, size, gl.index);
+					if (tex >= 0) {
+						const Ref<Image> atlas = ts->font_get_texture_image(gl.font_rid, size, tex);
+						const Rect2 uv = ts->font_get_glyph_uv_rect(gl.font_rid, size, gl.index);
+						const Vector2 off = ts->font_get_glyph_offset(gl.font_rid, size, gl.index);
+						const int x0 = int(Math::round(pen + gl.x_off + off.x));
+						const int y0 = int(Math::round(baseline + gl.y_off + off.y));
+						if (atlas.is_valid()) {
+							for (int v = 0; v < int(uv.size.y); v++) {
+								for (int u = 0; u < int(uv.size.x); u++) {
+									const int x = x0 + u, y = y0 + v;
+									const int ax = int(uv.position.x) + u, ay = int(uv.position.y) + v;
+									if (x < 0 || y < 0 || x >= width || y >= height || ax >= atlas->get_width() || ay >= atlas->get_height()) {
+										continue;
+									}
+									if (atlas->get_pixel(ax, ay).a >= 0.5f) {
+										lit.write[y * width + x] = 1;
+									}
+								}
+							}
+						}
+					}
+				}
+				pen += gl.advance;
+			}
+		}
+	}
+	ts->free_rid(shaped);
+
+	const int row_bytes = (width + 7) / 8;
+	Vector<uint8_t> bits;
+	bits.resize_initialized(row_bytes * height);
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			if (lit[y * width + x]) {
+				bits.write[y * row_bytes + x / 8] |= uint8_t(0x80 >> (x % 8));
+			}
+		}
+	}
+	Dictionary picture;
+	picture["width"] = width;
+	picture["height"] = height;
+	picture["pixel"] = 0.5;
+	picture["bits"] = CryptoCore::b64_encode_str(bits.ptr(), bits.size());
+	return picture;
+}
 
 // A number as the file keeps it: four decimals are a tenth of a millimetre in the game's units.
 double tidy(double p_value) {
@@ -198,6 +360,10 @@ const char *const END_NAMES[] = { "keep", "restore", "remove" };
 const char *const KIND_NAMES[] = { "voice", "music", "sfx" };
 
 } // namespace
+
+void cutscene_free_font() {
+	g_subtitle_font.unref();
+}
 
 // ------------------------------------------------------------------------------------------------
 // Cutscene
@@ -498,6 +664,19 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems) const {
 			}
 			camera["keys"] = keys;
 			camera["end"] = cam->get_ease_back() ? "ease" : "cut";
+			Array shake;
+			for (int c = 0; c < cam->get_child_count(); c++) {
+				if (const CutsceneShake *one = Object::cast_to<CutsceneShake>(cam->get_child(c))) {
+					Dictionary e;
+					e["t"] = ticks(one->get_start());
+					e["length"] = MAX(1, ticks(one->get_duration()));
+					e["strength"] = tidy(one->get_strength());
+					shake.push_back(e);
+				}
+			}
+			if (!shake.is_empty()) {
+				camera["shake"] = shake;
+			}
 		} else if (const CutsceneActor *actor = Object::cast_to<CutsceneActor>(child)) {
 			const String id = actor->get_effective_id();
 			if (ids.has(id)) {
@@ -548,7 +727,37 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems) const {
 				track.push_back(key);
 			}
 			a["track"] = track;
-			// Animations: each key of `sequence` starts one, at the speed `anim_speed` has then.
+			// A walk: the first CutscenePath child's points, in the game's space.
+			for (int c = 0; c < actor->get_child_count(); c++) {
+				const CutscenePath *walk = Object::cast_to<CutscenePath>(actor->get_child(c));
+				if (walk == nullptr) {
+					continue;
+				}
+				const Ref<Curve3D> curve = walk->get_curve();
+				const Transform3D walk_to_game = to_game_space(walk) * (walk->is_inside_tree() ? walk->get_global_transform() : walk->get_transform());
+				Array points;
+				for (int k = 0; curve.is_valid() && k < curve->get_point_count(); k++) {
+					points.push_back(vec3(walk_to_game.xform(curve->get_point_position(k))));
+				}
+				if (points.size() < 2) {
+					problems.push_back(vformat("actor \"%s\": its path has fewer than two points and is left out", id));
+					break;
+				}
+				Dictionary path;
+				path["points"] = points;
+				path["speed"] = tidy(walk->get_speed());
+				path["ground"] = walk->get_ground();
+				path["t"] = ticks(walk->get_start());
+				a["path"] = path;
+				break;
+			}
+			// What the editor has no node for, as the file writes it.
+			const Dictionary advanced = actor->get_advanced();
+			for (const char *part : { "look_at", "held", "layers" }) {
+				if (advanced.has(part)) {
+					a[part] = advanced[part];
+				}
+			}
 			Array anims;
 			const int seq_track = tl.find(actor, Animation::TYPE_VALUE, "sequence");
 			if (seq_track >= 0) {
@@ -621,6 +830,24 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems) const {
 				}
 			}
 			s["text"] = text;
+			// The lines the game's font cannot write, as pictures.
+			Dictionary pictures;
+			for (const Variant *key = text.next(nullptr); key != nullptr; key = text.next(key)) {
+				const String code = *key;
+				if (!needs_picture(code, text[*key])) {
+					continue;
+				}
+				String problem;
+				const Dictionary picture = subtitle_picture(text[*key], problem);
+				if (picture.is_empty()) {
+					problems.push_back(vformat("%s: the %s line is not drawn: %s", line->get_name(), code, problem));
+				} else {
+					pictures[code] = picture;
+				}
+			}
+			if (!pictures.is_empty()) {
+				s["bitmap"] = pictures;
+			}
 			const String speaker = actor_id_of(line, line->get_speaker());
 			if (!speaker.is_empty()) {
 				s["actor"] = speaker;
@@ -1015,11 +1242,35 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 				anim->track_insert_key(discrete_track(anim, NodePath(String(path) + ":visible")), seconds(e.get("t", 0)), bool(e.get("on", true)));
 			}
 		}
-		for (const char *part : { "path", "look_at", "held", "layers" }) {
+		// A walk, as a CutscenePath child with the points in its space.
+		const Dictionary walk = a.get("path", Dictionary());
+		const Array points = walk.get("points", Array());
+		if (points.size() >= 2) {
+			CutscenePath *path_node = memnew(CutscenePath);
+			path_node->set_name("Path");
+			actor->add_child(path_node, true);
+			path_node->set_owner(owner);
+			// A top-level node: its own transform is its place, the Cutscene's.
+			path_node->set_transform(is_inside_tree() ? get_global_transform() : get_transform());
+			Ref<Curve3D> curve;
+			curve.instantiate();
+			for (const Variant &point : points) {
+				curve->add_point(from_game.xform(vec3_of(point)));
+			}
+			path_node->set_curve(curve);
+			path_node->set_speed(walk.get("speed", 8.0));
+			path_node->set_ground(walk.get("ground", true));
+			path_node->set_start(seconds(walk.get("t", 0)));
+		} else if (a.has("path")) {
+			problems.push_back(vformat("actor \"%s\": its path has fewer than two points and is not kept", id));
+		}
+		Dictionary advanced;
+		for (const char *part : { "look_at", "held", "layers" }) {
 			if (a.has(part)) {
-				problems.push_back(vformat("actor \"%s\": its \"%s\" is not kept", id, part));
+				advanced[part] = a[part];
 			}
 		}
+		actor->set_advanced(advanced);
 	}
 
 	// The camera: its keys as its place and turn on the timeline, its cuts.
@@ -1086,8 +1337,15 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 		}
 		cam->set_cuts(cuts);
 		cam->set_export_fov(any_fov);
-		if (camera.has("shake")) {
-			problems.push_back("the camera's shake is not kept");
+		for (const Variant &item : Array(camera.get("shake", Array()))) {
+			const Dictionary e = item;
+			CutsceneShake *one = memnew(CutsceneShake);
+			one->set_name("Shake");
+			cam->add_child(one, true);
+			one->set_owner(owner);
+			one->set_start(seconds(e.get("t", 0)));
+			one->set_duration(seconds(e.get("length", 30)));
+			one->set_strength(e.get("strength", 0.3));
 		}
 	}
 
@@ -1431,6 +1689,9 @@ void CutsceneActor::_take_selected_moby() {
 #endif
 }
 
+void CutsceneActor::set_advanced(const Dictionary &p_advanced) { advanced = p_advanced; }
+Dictionary CutsceneActor::get_advanced() const { return advanced; }
+
 PackedStringArray CutsceneActor::get_configuration_warnings() const {
 	PackedStringArray warnings = Node3D::get_configuration_warnings();
 	if (source == SOURCE_LEVEL_MOBY && spawn_id < 0) {
@@ -1480,6 +1741,8 @@ void CutsceneActor::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_blend", "ticks"), &CutsceneActor::set_blend);
 	ClassDB::bind_method(D_METHOD("get_blend"), &CutsceneActor::get_blend);
 	ClassDB::bind_method(D_METHOD("get_take_selected_action"), &CutsceneActor::get_take_selected_action);
+	ClassDB::bind_method(D_METHOD("set_advanced", "advanced"), &CutsceneActor::set_advanced);
+	ClassDB::bind_method(D_METHOD("get_advanced"), &CutsceneActor::get_advanced);
 
 	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "take_selected_moby", PROPERTY_HINT_TOOL_BUTTON, "Take Selected Moby,Node3D", PROPERTY_USAGE_EDITOR), "", "get_take_selected_action");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "actor_id", PROPERTY_HINT_PLACEHOLDER_TEXT, "the node's name"), "set_actor_id", "get_actor_id");
@@ -1493,6 +1756,8 @@ void CutsceneActor::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "sequence", PROPERTY_HINT_RANGE, "-1,255,1"), "set_sequence", "get_sequence");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "anim_speed", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_anim_speed", "get_anim_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "blend", PROPERTY_HINT_RANGE, "0,60,1,suffix:ticks"), "set_blend", "get_blend");
+	ADD_GROUP("Advanced", "");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "advanced", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_advanced", "get_advanced");
 
 	BIND_ENUM_CONSTANT(SOURCE_LEVEL_MOBY);
 	BIND_ENUM_CONSTANT(SOURCE_NEW_MOBY);
@@ -1528,6 +1793,73 @@ void CutsceneSubtitle::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "duration", PROPERTY_HINT_RANGE, "0,60,0.01,or_greater,suffix:s"), "set_duration", "get_duration");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "text", PROPERTY_HINT_DICTIONARY_TYPE, "String;String"), "set_text", "get_text");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "speaker", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "CutsceneActor"), "set_speaker", "get_speaker");
+}
+
+// ------------------------------------------------------------------------------------------------
+// CutscenePath
+
+CutscenePath::CutscenePath() {
+	set_as_top_level(true);
+}
+
+void CutscenePath::set_start(double p_seconds) { start = MAX(0.0, p_seconds); }
+double CutscenePath::get_start() const { return start; }
+void CutscenePath::set_speed(double p_speed) { speed = MAX(0.01, p_speed); }
+double CutscenePath::get_speed() const { return speed; }
+void CutscenePath::set_ground(bool p_ground) { ground = p_ground; }
+bool CutscenePath::get_ground() const { return ground; }
+
+PackedStringArray CutscenePath::get_configuration_warnings() const {
+	PackedStringArray warnings = Path3D::get_configuration_warnings();
+	if (Object::cast_to<CutsceneActor>(get_parent()) == nullptr) {
+		warnings.push_back(RTR("A path is walked only as a child of a CutsceneActor."));
+	}
+	if (get_curve().is_null() || get_curve()->get_point_count() < 2) {
+		warnings.push_back(RTR("Add at least two points (select the path and click in the 3D view)."));
+	}
+	return warnings;
+}
+
+void CutscenePath::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_start", "seconds"), &CutscenePath::set_start);
+	ClassDB::bind_method(D_METHOD("get_start"), &CutscenePath::get_start);
+	ClassDB::bind_method(D_METHOD("set_speed", "speed"), &CutscenePath::set_speed);
+	ClassDB::bind_method(D_METHOD("get_speed"), &CutscenePath::get_speed);
+	ClassDB::bind_method(D_METHOD("set_ground", "ground"), &CutscenePath::set_ground);
+	ClassDB::bind_method(D_METHOD("get_ground"), &CutscenePath::get_ground);
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_start", "get_start");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed", PROPERTY_HINT_RANGE, "0.01,40,0.01,or_greater,suffix:u/s"), "set_speed", "get_speed");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ground"), "set_ground", "get_ground");
+}
+
+// ------------------------------------------------------------------------------------------------
+// CutsceneShake
+
+void CutsceneShake::set_start(double p_seconds) { start = MAX(0.0, p_seconds); }
+double CutsceneShake::get_start() const { return start; }
+void CutsceneShake::set_duration(double p_seconds) { duration = MAX(0.0, p_seconds); }
+double CutsceneShake::get_duration() const { return duration; }
+void CutsceneShake::set_strength(double p_strength) { strength = MAX(0.0, p_strength); }
+double CutsceneShake::get_strength() const { return strength; }
+
+PackedStringArray CutsceneShake::get_configuration_warnings() const {
+	PackedStringArray warnings = Node::get_configuration_warnings();
+	if (Object::cast_to<CutsceneCamera>(get_parent()) == nullptr) {
+		warnings.push_back(RTR("A shake moves the camera only as a child of a CutsceneCamera."));
+	}
+	return warnings;
+}
+
+void CutsceneShake::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_start", "seconds"), &CutsceneShake::set_start);
+	ClassDB::bind_method(D_METHOD("get_start"), &CutsceneShake::get_start);
+	ClassDB::bind_method(D_METHOD("set_duration", "seconds"), &CutsceneShake::set_duration);
+	ClassDB::bind_method(D_METHOD("get_duration"), &CutsceneShake::get_duration);
+	ClassDB::bind_method(D_METHOD("set_strength", "strength"), &CutsceneShake::set_strength);
+	ClassDB::bind_method(D_METHOD("get_strength"), &CutsceneShake::get_strength);
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_start", "get_start");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "duration", PROPERTY_HINT_RANGE, "0,10,0.01,or_greater,suffix:s"), "set_duration", "get_duration");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "strength", PROPERTY_HINT_RANGE, "0,2,0.01,or_greater"), "set_strength", "get_strength");
 }
 
 // ------------------------------------------------------------------------------------------------

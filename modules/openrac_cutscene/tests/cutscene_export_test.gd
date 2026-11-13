@@ -339,7 +339,7 @@ func test_import_by_hand() -> void:
 		"variants": [{"if": {"byte": 3}, "play": "other"}, 7],
 	})
 	var said := "\n".join(problems)
-	for what in ["shake", "\"path\"", "looking at an actor", "\"dance\""]:
+	for what in ["fewer than two points", "looking at an actor", "\"dance\""]:
 		check(said.contains(what), "says %s is not kept: %s" % [what, said])
 	check(cs.position.is_equal_approx(Vector3(12, 11, 1)), "placed at the box's centre: %s" % cs.position)
 	check(cs.trigger_box.is_equal_approx(Vector3(4, 2, 2)) and not cs.trigger_once, "the box, min and max either way: %s" % cs.trigger_box)
@@ -386,6 +386,96 @@ func test_import_errors() -> void:
 	root.queue_free()
 
 
+# A walk, a shake, the parts the editor keeps as written, and a Japanese line drawn as a picture:
+# exported, and imported back the same.
+func test_walk_shake_and_pictures() -> void:
+	var root := make_level("user://t/level_08", {"level": 8, "version": "pal"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Walk"
+	timeline(cs, 2.0)
+	var cam = add(cs, CutsceneCamera.new(), root)
+	cam.name = "Camera"
+	var shake = add(cam, CutsceneShake.new(), root)
+	shake.start = 0.5
+	shake.duration = 0.25
+	shake.strength = 0.4
+	var walker = add(cs, CutsceneActor.new(), root)
+	walker.name = "Walker"
+	walker.source = CutsceneActor.SOURCE_HERO_FIGURE
+	walker.position = Vector3(5, 0, 0)
+	walker.advanced = {"look_at": [{"t": 0, "target": {"actor": "hero"}, "weight": 1}], "held": [{"t": 0, "from": "hero"}], "other": 1}
+	var walk = add(walker, CutscenePath.new(), root)
+	walk.name = "Path"
+	walk.speed = 3.0
+	walk.start = 0.5
+	walk.ground = false
+	var curve := Curve3D.new()
+	curve.add_point(Vector3(1, 0, 0))
+	curve.add_point(Vector3(1, 0, -4))  # Godot's -z is the game's +y
+	walk.curve = curve
+	check(walk.top_level, "a path stays put when its actor moves")
+	var line = add(cs, CutsceneSubtitle.new(), root)
+	line.name = "Line"
+	line.duration = 1.0
+	line.text = {"en": "Need a weapon?", "ja": "武器が必要か？いい物があるよ。"}
+
+	var d: Dictionary = cs.to_cutscene()
+	check(d["camera"].get("shake", []) == [{"t": 30, "length": 15, "strength": 0.4}], "the shake: %s" % [d["camera"].get("shake")])
+	var a: Dictionary = d["actors"][0]
+	check(a.has("path"), "the walk is written: %s" % [a])
+	if a.has("path"):
+		check(same(a["path"]["points"], [[1, 0, 0], [1, 4, 0]]), "its points in the game's space: %s" % [a["path"]["points"]])
+		check(near(a["path"]["speed"], 3) and a["path"]["t"] == 30 and a["path"]["ground"] == false, "its speed, start and ground: %s" % [a["path"]])
+	check(a.get("look_at") == walker.advanced["look_at"] and a.get("held") == walker.advanced["held"], "look_at and held as written")
+	check(not a.has("other"), "only the parts of the format")
+
+	# The Japanese line as a picture (when this computer has a font for it); the English one not.
+	var sub: Dictionary = d["subtitles"][0]
+	var font := SystemFont.new()
+	font.font_names = PackedStringArray(["Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic", "Meiryo", "MS Gothic", "Hiragino Sans", "WenQuanYi Zen Hei", "Droid Sans Fallback"])
+	if font.has_char(0x6B66):
+		check(sub.has("bitmap") and sub["bitmap"].has("ja") and not sub["bitmap"].has("en"), "a picture for ja only: %s" % [sub.keys()])
+		if sub.has("bitmap") and sub["bitmap"].has("ja"):
+			var pic: Dictionary = sub["bitmap"]["ja"]
+			var w: int = pic["width"]
+			var h: int = pic["height"]
+			var bits := Marshalls.base64_to_raw(pic["bits"])
+			check(w > 50 and w <= 882 and h >= 20 and h <= 120 and near(pic["pixel"], 0.5), "its size: %d x %d" % [w, h])
+			check(bits.size() == ((w + 7) / 8) * h, "whole rows of bits: %d" % bits.size())
+			var lit := 0
+			for b in bits:
+				for k in 8:
+					lit += (b >> k) & 1
+			check(lit > 100 and lit < w * h / 2, "letters drawn, not a block: %d of %d lit" % [lit, w * h])
+	else:
+		print("  (no Japanese font on this computer: the picture is not checked)")
+	# A long line breaks into rows, three at most.
+	line.text = {"ja": "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん".repeat(3)}
+	d = cs.to_cutscene()
+	if font.has_char(0x3042) and d["subtitles"][0].has("bitmap"):
+		var pic: Dictionary = d["subtitles"][0]["bitmap"]["ja"]
+		check(pic["width"] <= 882 and pic["height"] > 60 and pic["height"] < 130, "three rows at most: %d x %d" % [pic["width"], pic["height"]])
+
+	# Imported back: the same walk, shake and advanced parts.
+	var path := "user://t/walk.cutscene"
+	write(path, JSON.stringify(cs.to_cutscene()))
+	var copy = add(root.get_node("Game"), Cutscene.new(), root)
+	copy.name = "WalkCopy"
+	var problems: PackedStringArray = copy.from_cutscene(JSON.parse_string(FileAccess.get_file_as_string(path)))
+	var said := "\n".join(problems)
+	check(not said.contains("shake") and not said.contains("path") and not said.contains("look_at"), "nothing said lost: %s" % said)
+	var again: Dictionary = copy.to_cutscene()
+	check(same(again["camera"].get("shake"), d["camera"]["shake"]), "the shake again: %s" % [again["camera"].get("shake")])
+	check(same(again["actors"][0].get("path"), d["actors"][0]["path"]), "the walk again: %s" % [again["actors"][0].get("path")])
+	check(same(again["actors"][0].get("held"), d["actors"][0]["held"]), "held again")
+	var copy_walk = copy.get_node_or_null("Walker/Path")
+	check(copy_walk is CutscenePath and copy_walk.curve.point_count == 2, "a CutscenePath with its points")
+	# A path of one point is no walk.
+	walk.curve.remove_point(1)
+	check(not cs.to_cutscene()["actors"][0].has("path"), "one point: no walk")
+	root.queue_free()
+
+
 # Run on the first frame: before it the root is not in the tree yet, so neither are the levels.
 func _process(_delta: float) -> bool:
 	test_full_cutscene()
@@ -394,6 +484,7 @@ func _process(_delta: float) -> bool:
 	test_round_trip()
 	test_import_by_hand()
 	test_import_errors()
+	test_walk_shake_and_pictures()
 	print("cutscene export: ", "%d check(s) failed" % failures if failures else "all checks passed")
 	quit(1 if failures else 0)
 	return true
