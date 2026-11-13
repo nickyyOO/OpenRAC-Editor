@@ -1014,6 +1014,31 @@ func test_inspector_fields() -> void:
 	root.queue_free()
 
 
+func test_smooth_with_cuts() -> void:
+	# A smooth camera with a cut: no flying off between the cut's two keys a tick apart.
+	var root := make_level("user://t/level_14", {"level": 14, "version": "ntsc"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Cuts"
+	cs.from_cutscene({"format": "openrac-cutscene", "version": 1, "level": 14, "length": 420,
+		"camera": {"keys": [{"t": 0, "eye": [257, 110, 57.5], "look_at": [264.5, 103, 55.5], "ease": "smooth"},
+			{"t": 180, "eye": [271, 110, 57.5], "look_at": [264.5, 103, 55.5]},
+			{"t": 181, "eye": [267, 97, 56], "look_at": [266, 104, 55], "cut": true},
+			{"t": 360, "eye": [262, 96, 56.5], "look_at": [266, 104, 55]}]}})
+	var anim: Animation = cs.get_timeline_animation()
+	var track := anim.find_track(NodePath("Camera"), Animation.TYPE_POSITION_3D)
+	var worst := 0.0
+	for i in 61:
+		var p: Vector3 = anim.position_track_interpolate(track, i * 0.1)
+		worst = maxf(worst, p.distance_to(Vector3(264, 103, 57)))
+	check(worst < 12.0, "the eye stays near its keys: %s" % worst)
+	var d: Dictionary = cs.to_cutscene()
+	var far := 0.0
+	for k in d["camera"]["keys"]:
+		far = maxf(far, Vector3(k["eye"][0], k["eye"][1], k["eye"][2]).distance_to(Vector3(264, 103, 57)))
+	check(far < 12.0, "and exports so: %s" % far)
+	root.queue_free()
+
+
 # Run on the first frame: before it the root is not in the tree yet, so neither are the levels.
 func _process(_delta: float) -> bool:
 	test_full_cutscene()
@@ -1031,6 +1056,7 @@ func _process(_delta: float) -> bool:
 	test_layers()
 	test_retarget()
 	test_inspector_fields()
+	test_smooth_with_cuts()
 	print("cutscene export: ", "%d check(s) failed" % failures if failures else "all checks passed")
 	quit(1 if failures else 0)
 	return true

@@ -63,18 +63,14 @@ void CutsceneTimelineView::set_cutscene(Cutscene *p_cutscene) {
 	refresh();
 	if (other) {
 		scroll = 0.0;
-		fit = true; // a new cutscene opens whole, once the view has its width
+		fit = true; // a new cutscene opens whole, and stays whole until zoomed
 		queue_redraw();
 	}
 }
 
 void CutsceneTimelineView::fit_to_length() {
-	const double room = double(get_size().x - _label_width()) - 40.0 * EDSCALE; // room for "End" past it
-	if (room <= 0.0) {
-		return;
-	}
-	scroll = 0.0;
-	set_zoom(room / MAX(length, 0.5));
+	fit = true;
+	queue_redraw();
 }
 
 Control::CursorShape CutsceneTimelineView::get_cursor_shape(const Point2 &p_pos) const {
@@ -224,6 +220,7 @@ Size2 CutsceneTimelineView::get_minimum_size() const {
 }
 
 void CutsceneTimelineView::set_zoom(double p_zoom) {
+	fit = false; // zoomed by hand
 	zoom = CLAMP(p_zoom, 10.0, 2000.0);
 	queue_redraw();
 }
@@ -286,6 +283,7 @@ void CutsceneTimelineView::gui_input(const Ref<InputEvent> &p_event) {
 				set_scroll(at - double(mb->get_position().x - _label_width()) / zoom);
 				accept_event();
 			} else if (mb->is_shift_pressed()) {
+				fit = false;
 				set_scroll(scroll - sign * visible_seconds() * 0.1);
 				accept_event();
 			}
@@ -357,9 +355,12 @@ void CutsceneTimelineView::_notification(int p_what) {
 	if (p_what != NOTIFICATION_DRAW) {
 		return;
 	}
-	if (fit && get_size().x > _label_width()) {
-		fit = false;
-		fit_to_length();
+	if (fit) {
+		const double room = double(get_size().x - _label_width()) - 40.0 * EDSCALE;
+		if (room > 0.0) {
+			zoom = CLAMP(room / MAX(length, 0.5), 10.0, 2000.0);
+			scroll = 0.0;
+		}
 	}
 	const Ref<Font> font = get_theme_font(SceneStringName(font), SNAME("Label"));
 	const int font_size = get_theme_font_size(SceneStringName(font_size), SNAME("Label"));

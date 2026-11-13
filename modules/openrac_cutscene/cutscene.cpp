@@ -35,6 +35,16 @@ static String check_rig_scene(const Ref<PackedScene> &p_scene);
 
 namespace {
 
+// A camera key's eye as the file has it, for the import's smooth curve: its tick, place, whether
+// the curve from it is smooth, and whether the picture cuts to it.
+struct CameraEye {
+	int t;
+	Vector3 at;
+	bool smooth;
+	bool cut;
+	bool operator<(const CameraEye &p_other) const { return t < p_other.t; }
+};
+
 using cutscene_math::ticks;
 
 // Subtitles the game's font cannot write (the HUD's is ASCII without & * = [ ] { } ~: Japanese,
@@ -1760,6 +1770,7 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 		Transform3D before;
 		int before_t = -1;
 		bool any_fov = false, smooth = false;
+		Vector<CameraEye> eyes;
 		for (int k = 0; k < keys.size(); k++) {
 			const Dictionary key = keys[k];
 			const int t = key.get("t", 0);
@@ -1827,6 +1838,7 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 			}
 			anim->position_track_insert_key(pos_track, t / cutscene_math::TICK_RATE, local.origin);
 			anim->rotation_track_insert_key(rot_track, t / cutscene_math::TICK_RATE, local.basis.get_rotation_quaternion());
+			eyes.push_back({ t, local.origin, ease != "linear", bool(key.get("cut", false)) });
 			if (key.has("fov")) {
 				any_fov = true;
 				anim->track_insert_key(track_for(anim, NodePath(String(path) + ":fov"), Animation::TYPE_VALUE), t / cutscene_math::TICK_RATE, double(key["fov"]));
@@ -1837,8 +1849,25 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 			before = local;
 			before_t = t;
 		}
-		if (smooth) {
+		if (smooth && cuts.is_empty()) {
 			anim->track_set_interpolation_type(pos_track, Animation::INTERPOLATION_CUBIC);
+		} else if (smooth) {
+			// Godot's cubic curve runs through a cut's two keys a tick apart and flies far off, so
+			// with cuts the smooth stretches are drawn as the player draws them (a Catmull-Rom
+			// curve, not across a cut) with a key every tenth of a second, joined by straight lines.
+			eyes.sort();
+			for (int i = 0; i + 1 < eyes.size(); i++) {
+				const CameraEye &a = eyes[i], &b = eyes[i + 1];
+				if (!a.smooth || b.cut || b.t - a.t < 2) {
+					continue;
+				}
+				const Vector3 p0 = (i > 0 && !a.cut) ? eyes[i - 1].at : a.at;
+				const Vector3 p3 = (i + 2 < eyes.size() && !eyes[i + 2].cut) ? eyes[i + 2].at : b.at;
+				for (int t = a.t + 6; t < b.t; t += 6) {
+					const real_t u = real_t(t - a.t) / real_t(b.t - a.t);
+					anim->position_track_insert_key(pos_track, t / cutscene_math::TICK_RATE, a.at.cubic_interpolate(b.at, p0, p3, u));
+				}
+			}
 		}
 		cam->set_cuts(cuts);
 		cam->set_export_fov(any_fov);

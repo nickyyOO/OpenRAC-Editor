@@ -37,7 +37,7 @@ private:
 	double length = 1.0;
 	double zoom = 120.0; // pixels a second
 	double scroll = 0.0; // seconds at the left edge
-	bool fit = false; // zoom to the whole cutscene at the next draw
+	bool fit = false; // the whole cutscene in view (at any width) until zoomed by hand
 	// A drag in progress: seeking, or moving an item's start.
 	bool seeking = false;
 	ObjectID dragged;
@@ -66,7 +66,7 @@ public:
 	double get_length() const { return length; }
 	void set_zoom(double p_zoom);
 	double get_zoom() const { return zoom; }
-	// Zooms so the whole cutscene fits the view.
+	// Keeps the whole cutscene in view, as the dock's width changes, until zoomed by hand.
 	void fit_to_length();
 	CursorShape get_cursor_shape(const Point2 &p_pos = Point2i()) const override;
 	void set_scroll(double p_seconds);
