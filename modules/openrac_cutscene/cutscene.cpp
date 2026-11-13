@@ -901,6 +901,17 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 					a[part] = advanced[part];
 				}
 			}
+			// Its own animation's pose file, written beside the file.
+			if (!actor->get_pose_file().is_empty() && actor->get_pose_joints() > 0 && FileAccess::exists(actor->get_pose_file())) {
+				const String file = vformat("poses/%s.bin", vformat("%s_%s", get_cutscene_id(), id).validate_filename());
+				Dictionary pose;
+				pose["frames"] = file;
+				pose["joints"] = actor->get_pose_joints();
+				a["pose"] = pose;
+				if (r_files != nullptr) {
+					(*r_files)[file] = FileAccess::get_file_as_bytes(actor->get_pose_file());
+				}
+			}
 			// Its layers: each joint's turn baked per tick, up to the last key.
 			Array layers = Array(a.get("layers", Array())).duplicate();
 			for (int c = 0; c < actor->get_child_count(); c++) {
@@ -1722,6 +1733,16 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 		}
 		actor->set_rig(rig);
 		actor->set_blink(face.get("blink", true));
+		const Dictionary pose = a.get("pose", Dictionary());
+		if (!pose.is_empty()) {
+			const String pose_path = files_from.is_empty() ? String() : files_from.path_join(String(pose.get("frames", "")));
+			if (pose_path.is_empty() || !FileAccess::exists(pose_path)) {
+				problems.push_back(vformat("actor \"%s\": its pose file %s is not beside the file and is left out", id, String(pose.get("frames", ""))));
+			} else {
+				actor->set_pose_file(pose_path);
+				actor->set_pose_joints(pose.get("joints", 0));
+			}
+		}
 		const Array legs = Dictionary(a.get("feet", Dictionary())).get("legs", Array());
 		if (!legs.is_empty()) {
 			actor->set_feet_on_ground(true);
@@ -2424,6 +2445,51 @@ void Cutscene::_notification(int p_what) {
 	}
 }
 
+// The pose file's frame at `p_seconds` on the preview's skeleton, between its two 30 Hz frames:
+// every joint's turn, place and scale as the file has them. False without a pose file.
+bool CutsceneActor::_pose_preview(double p_seconds) {
+	if (pose_file.is_empty() || pose_joints <= 0 || preview == nullptr) {
+		return false;
+	}
+	if (pose_loaded != pose_file) {
+		pose_loaded = pose_file;
+		pose_bytes = FileAccess::exists(pose_file) ? FileAccess::get_file_as_bytes(pose_file) : PackedByteArray();
+	}
+	constexpr int RECORD = 20;  // 4 x s16 turn, 3 x s16 place (x 1024), 3 x u16 scale (/ 4096)
+	const int frame_size = pose_joints * RECORD;
+	const int frames = pose_bytes.size() / frame_size;
+	TypedArray<Node> skeletons = preview->find_children("*", "Skeleton3D", true, false);
+	Skeleton3D *skeleton = skeletons.is_empty() ? nullptr : Object::cast_to<Skeleton3D>(skeletons[0]);
+	if (frames == 0 || skeleton == nullptr) {
+		return false;
+	}
+	const double at = CLAMP(p_seconds * 30.0, 0.0, double(frames - 1));
+	const int f0 = int(Math::floor(at));
+	const int f1 = MIN(f0 + 1, frames - 1);
+	const real_t w = real_t(at - f0);
+	const uint8_t *data = pose_bytes.ptr();
+	auto s16 = [&](int p_at) { return real_t(int16_t(decode_uint16(data + p_at))); };
+	auto u16 = [&](int p_at) { return real_t(decode_uint16(data + p_at)); };
+	for (int j = 0; j < pose_joints; j++) {
+		const int bone = skeleton->find_bone(vformat("joint_%03d", j));
+		if (bone < 0) {
+			continue;
+		}
+		Quaternion q[2];
+		Vector3 t[2], sc[2];
+		for (int k = 0; k < 2; k++) {
+			const int base = (k == 0 ? f0 : f1) * frame_size + j * RECORD;
+			q[k] = Quaternion(s16(base), s16(base + 2), s16(base + 4), s16(base + 6)).normalized();
+			t[k] = Vector3(s16(base + 8), s16(base + 10), s16(base + 12)) / 1024.0;
+			sc[k] = Vector3(u16(base + 14), u16(base + 16), u16(base + 18)) / 4096.0;
+		}
+		skeleton->set_bone_pose_rotation(bone, q[0].slerp(q[1], w));
+		skeleton->set_bone_pose_position(bone, t[0].lerp(t[1], w));
+		skeleton->set_bone_pose_scale(bone, sc[0].lerp(sc[1], w));
+	}
+	return true;
+}
+
 String CutsceneActor::_preview_scene() const {
 	const String dir = scene_dir_of(this);
 	if (dir.is_empty()) {
@@ -2453,6 +2519,10 @@ void CutsceneActor::_update_preview() {
 		}
 	}
 	if (preview == nullptr) {
+		return;
+	}
+	// Its own animation (a game scene's) in place of its class's, which a class may not even have.
+	if (const Cutscene *pose_cs = cutscene_above(this); _pose_preview(pose_cs != nullptr ? pose_cs->get_timeline_position() : 0.0)) {
 		return;
 	}
 	AnimationPlayer *player = preview_player(preview);
@@ -2639,6 +2709,10 @@ double CutsceneActor::get_ride_end() const { return ride_end; }
 Dictionary CutsceneActor::get_rig() const { return rig; }
 void CutsceneActor::set_blink(bool p_blink) { blink = p_blink; }
 bool CutsceneActor::get_blink() const { return blink; }
+void CutsceneActor::set_pose_file(const String &p_path) { pose_file = p_path; }
+String CutsceneActor::get_pose_file() const { return pose_file; }
+void CutsceneActor::set_pose_joints(int p_joints) { pose_joints = CLAMP(p_joints, 0, 255); }
+int CutsceneActor::get_pose_joints() const { return pose_joints; }
 void CutsceneActor::set_feet_on_ground(bool p_on) { feet_on_ground = p_on; }
 bool CutsceneActor::get_feet_on_ground() const { return feet_on_ground; }
 
@@ -2757,6 +2831,12 @@ void CutsceneActor::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_feet_on_ground", "on"), &CutsceneActor::set_feet_on_ground);
 	ClassDB::bind_method(D_METHOD("get_feet_on_ground"), &CutsceneActor::get_feet_on_ground);
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "feet_on_ground"), "set_feet_on_ground", "get_feet_on_ground");
+	ClassDB::bind_method(D_METHOD("set_pose_file", "path"), &CutsceneActor::set_pose_file);
+	ClassDB::bind_method(D_METHOD("get_pose_file"), &CutsceneActor::get_pose_file);
+	ClassDB::bind_method(D_METHOD("set_pose_joints", "joints"), &CutsceneActor::set_pose_joints);
+	ClassDB::bind_method(D_METHOD("get_pose_joints"), &CutsceneActor::get_pose_joints);
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "pose_file", PROPERTY_HINT_FILE, "*.bin"), "set_pose_file", "get_pose_file");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "pose_joints", PROPERTY_HINT_RANGE, "0,255,1"), "set_pose_joints", "get_pose_joints");
 	ADD_GROUP("Advanced", "");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "advanced", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_advanced", "get_advanced");
 

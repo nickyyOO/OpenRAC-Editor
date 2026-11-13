@@ -204,6 +204,26 @@ later by `offset` seconds: a move made once, played by another actor of the same
 editor warns on a prop actor whose `.glb` moves its face by blend shapes (the game has none: a face
 is turned on bones, as the hero's rig does) or has no skeleton.
 
+### Pose (version 1.5)
+
+```jsonc
+"pose": { "frames": "poses/game_scene_04_0.bin", "joints": 111 }
+```
+
+The actor's whole animation, every joint per 30 Hz frame, as the game's own scenes have it
+(OpenRAC's `editor/game_scenes.py` writes one for each actor of a scene it imports). `frames` is a
+file beside the .cutscene file: for each frame from 0 (frame f is tick 2f), for each of `joints`
+joints, 20 bytes, little-endian: the joint's turn from its parent as int16 x, y, z, w over 32767
+(its columns are the joint's axes in its parent's, as glTF has it), its place in its parent as
+three int16 in the model's units times 1024, and its scale as three uint16 over 4096. Between two
+frames the turn and place blend; before the first and after the last, those hold.
+
+The pose replaces the actor's animation: the root joint carries its turn, so `track` and `path`
+move it but do not turn it, and `anims`, `look_at`, `layers`, `face` and `feet` do nothing on it. In
+the editor the actor's model shows the pose; the player sets every joint's turn and place in place
+of the class's animation (the port's `moby_set_joint_poses`; the first 128 joints, the most the port
+takes). The scale is shown in the editor only.
+
 ### Face and gaits (version 1.2)
 
 ```jsonc
@@ -379,11 +399,11 @@ Not kept: the actors' own joint animation, so they stand in their class's first 
 The player is a mod on the port's mod interface (1.14, with `pack_folder` and `game_language`; SDK
 1.14.8 adds what a scene needs: `camera_fov`, `hud_hide`, `music_volume`, `moby_set_joints`,
 `moby_joint_position`, `moby_sound_play`, `scene_air`, `time_stretch`, `tie_hide`, `prop_animate`,
-`moby_joint_frame`). It plays all of this format: the triggers, `once` (per
+`moby_joint_frame`, `moby_set_joint_poses`). It plays all of this format: the triggers, `once` (per
 save, in the mod's data folder), variants, the hero held, hidden or an actor, camera keys (linear,
 smooth, bezier, cuts, field of view, shake, the way back to the game's camera), actors of all four
 sources with `track`, `path` (with `gaits`), `anims`, `visible`, `look_at`, `held`, `layers`, `face`
-(talk, blink, moods, the head's share of a look), `ride` and `feet`, animated props, cameras riding on actors, joints as
+(talk, blink, moods, the head's share of a look), `ride`, `feet` and `pose` (without its scale), animated props, cameras riding on actors, joints as
 look-at targets, subtitles (the game's font for ASCII, pictures for the rest, the disc's language),
 sounds with fades and game sounds on actors, the letterbox, fades, the hidden HUD, the held world,
 the lowered music, and the events `moby_hide`, `moby_kill`, `mission_flag`, `haze`, `fade`, `play`,

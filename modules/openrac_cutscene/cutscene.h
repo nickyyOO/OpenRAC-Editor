@@ -248,6 +248,11 @@ private:
 	Dictionary rig;
 	bool blink = true;
 	bool feet_on_ground = false;
+	// Its own animation, every joint per 30 Hz frame (a game scene's): the file and its joints.
+	String pose_file;
+	int pose_joints = 0;
+	PackedByteArray pose_bytes;
+	String pose_loaded;
 	NodePath ride_on;
 	double ride_start = 0.0;
 	double ride_end = 0.0;
@@ -260,6 +265,7 @@ private:
 	Node3D *preview = nullptr;
 	String preview_from;
 	String _preview_scene() const;
+	bool _pose_preview(double p_seconds);
 	void _update_preview();
 
 protected:
@@ -303,6 +309,12 @@ public:
 	// names bend to reach it, and the body lowers for the lower foot.
 	void set_feet_on_ground(bool p_on);
 	bool get_feet_on_ground() const;
+	// Its own animation in place of its class's: a pose file (a game scene's, from game_scenes.py)
+	// with every joint's turn, place and scale per 30 Hz frame, and how many joints it has.
+	void set_pose_file(const String &p_path);
+	String get_pose_file() const;
+	void set_pose_joints(int p_joints);
+	int get_pose_joints() const;
 	// Another actor (or the hero's figure) this one rides on from `ride_start` to `ride_end` (0: to the
 	// end): in the game it keeps its place against the carrier from then on.
 	void set_ride_on(const NodePath &p_actor);

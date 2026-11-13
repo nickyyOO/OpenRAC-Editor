@@ -838,6 +838,21 @@ static void feet_in_port() {
     CHECK(length(normal(drawn[2].z, {}) - normal(animated[2].z, {})) < 2e-3f);
 }
 
+// A pose file's frames: tick 2f is frame f, an odd tick halfway, the ends held.
+static void pose_frames_at() {
+    std::string bytes(2 * 2 * kPoseRecord, '\0');
+    auto put = [&](std::size_t frame, std::size_t j, std::int16_t w, std::int16_t x) {
+        unsigned char* b = reinterpret_cast<unsigned char*>(bytes.data()) + (frame * 2 + j) * kPoseRecord;
+        b[6] = static_cast<unsigned char>(w & 0xFF), b[7] = static_cast<unsigned char>((w >> 8) & 0xFF);
+        b[8] = static_cast<unsigned char>(x & 0xFF), b[9] = static_cast<unsigned char>((x >> 8) & 0xFF);
+    };
+    put(0, 1, 32767, 0), put(1, 1, 32767, 2048), put(0, 0, 32767, 0), put(1, 0, 32767, 0);
+    CHECK(pose_frames(bytes, 2) == 2 && pose_frames(bytes, 3) == 0);
+    CHECK(std::fabs(pose_at(bytes, 2, 1, 1).t.x - 1.0f) < 1e-5f);
+    CHECK(std::fabs(pose_at(bytes, 2, 1, 2).t.x - 2.0f) < 1e-5f && std::fabs(pose_at(bytes, 2, 1, 99).t.x - 2.0f) < 1e-5f);
+    CHECK(std::fabs(pose_at(bytes, 2, 1, -5).t.x) < 1e-5f && std::fabs(pose_at(bytes, 2, 1, 0).q[3] - 1.0f) < 1e-5f);
+}
+
 // Times and lengths far out of a scene's range: held, so no sum of two overflows.
 void extreme_ticks() {
     const Value v = parse(R"({"lo": -2147483648, "hi": 2147483647, "huge": 1e300})");
@@ -888,6 +903,7 @@ int main() {
     air_and_slow();
     feet();
     feet_in_port();
+    pose_frames_at();
     extreme_ticks();
     std::printf("timeline: %d check(s), %d failed\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -283,6 +283,9 @@ struct ActorRun {
     };
     std::vector<Layer> layers;
     bool joints_set = false;
+    // pose: the scene's own animation, every joint per frame (pose_at), set in place of the class's.
+    std::string pose;
+    std::size_t pose_joints = 0;
     // face: its talks' envelopes (start tick, bytes), the blink seed, and the head's share of a look.
     std::vector<std::pair<int, std::string>> talks;
     std::uint32_t blink_seed = 0;
@@ -508,6 +511,40 @@ void load_layers(Play& p, ActorRun& a) {
     }
 }
 
+// The actor's pose file; nothing (and a warning) if it is unusable or the port cannot set joints.
+void load_pose(Play& p, ActorRun& a) {
+    const Value& def = (*a.def)["pose"];
+    if (!API_HAS(moby_set_joint_poses)) {
+        warn_once(p, "a scene pose (the port cannot set a moby's joints)");
+        return;
+    }
+    const long long joints = def["joints"].integer();
+    std::string bytes = joints > 0 && joints < 256 ? pack_file(p, def["frames"].string()) : std::string();
+    if (pose_frames(bytes, static_cast<std::size_t>(std::max(0LL, joints))) == 0) {
+        log(OPENRAC_LOG_WARN, std::format("{}: actor \"{}\": its pose ({}) is not usable", p.scene->name, a.id,
+                                          def["frames"].string()));
+        return;
+    }
+    if (joints > OPENRAC_JOINT_OFFSETS_MAX) warn_once(p, "a pose with more joints than the port sets (the rest keep the class's)");
+    a.pose = std::move(bytes);
+    a.pose_joints = static_cast<std::size_t>(joints);
+}
+
+// The scene's pose at t on the actor: every joint's turn and place set, in place of the class's.
+void pose_tick(ActorRun& a, int t) {
+    const int slot = a.moby_slot();
+    if (slot < 0) return;
+    const std::size_t n = std::min<std::size_t>(a.pose_joints, OPENRAC_JOINT_OFFSETS_MAX);
+    std::vector<openrac_joint_offset> joints(n);
+    for (std::size_t j = 0; j < n; ++j) {
+        const PoseKey k = pose_at(a.pose, a.pose_joints, j, t);
+        joints[j].joint = static_cast<std::uint32_t>(j);
+        offset_of(k.q, joints[j].rotation);  // the game's keys keep glTF's turn with x, y, z negated
+        joints[j].translation[0] = k.t.x, joints[j].translation[1] = k.t.y, joints[j].translation[2] = k.t.z;
+    }
+    a.joints_set = g_api->moby_set_joint_poses(g_mod, slot, joints.data(), static_cast<int>(n)) == OPENRAC_HOOK_OK;
+}
+
 // The actor's face: its talks' envelopes decoded once, and a blink of its own.
 void load_face(Play& p, ActorRun& a) {
     const Value& face = (*a.def)["face"];
@@ -698,6 +735,10 @@ void feet_tick(ActorRun& a) {
 }
 
 void joints_tick(ActorRun& a, int t) {
+    if (!a.pose.empty()) {
+        pose_tick(a, t);
+        return;
+    }
     if (a.layers.empty() && a.legs.empty() && !(*a.def)["face"].is_object()) return;
     if (!API_HAS(moby_set_joints)) return;
     const int slot = a.moby_slot();
@@ -913,17 +954,23 @@ void actors_begin(Play& p) {
         if (a.kind == ActorRun::Kind::None) {
             log(OPENRAC_LOG_WARN, std::format("{}: actor \"{}\" is missing, skipped", p.scene->name, a.id));
         }
-        if (def.has("layers") && a.kind != ActorRun::Kind::None && a.kind != ActorRun::Kind::Prop) {
+        const bool jointed = a.kind != ActorRun::Kind::None && a.kind != ActorRun::Kind::Prop;
+        // A scene pose moves every joint: layers, a face and feet on it would be undone each tick.
+        if (def.has("pose") && jointed) load_pose(p, a);
+        if (!a.pose.empty() && (def.has("layers") || def.has("face") || def.has("feet"))) {
+            warn_once(p, "layers, a face or feet on an actor with a pose (the pose has every joint)");
+        }
+        if (def.has("layers") && jointed && a.pose.empty()) {
             load_layers(p, a);
         }
         for (const Value& leg : def["feet"]["legs"].items()) {
-            if ((leg.size() != 3 && leg.size() != 4) || a.kind == ActorRun::Kind::None || a.kind == ActorRun::Kind::Prop) continue;
+            if ((leg.size() != 3 && leg.size() != 4) || !jointed || !a.pose.empty()) continue;
             ActorRun::Leg l;
             for (std::size_t i = 0; i < 3; ++i) l.joints[i] = static_cast<int>(leg[i].integer());
             l.parent = leg.size() == 4 ? static_cast<int>(leg[3].integer()) : 0;
             a.legs.push_back(l);
         }
-        if (def.has("face") && a.kind != ActorRun::Kind::None && a.kind != ActorRun::Kind::Prop) {
+        if (def.has("face") && jointed && a.pose.empty()) {
             load_face(p, a);
         }
         p.actors.push_back(std::move(a));
@@ -957,8 +1004,9 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     track_at(def["track"], t, a.position, a.rotation, a.scale);
     path_at(def["path"], t, a.position, a.rotation);
     ride_tick(p, a, t);
+    if (!a.pose.empty()) a.rotation = {};  // the pose's root joint has the actor's turn
     if (!a.looking) a.look_yaw = a.rotation.z;
-    look_tick(p, a, t);
+    if (a.pose.empty()) look_tick(p, a, t);
     feet_tick(a);
 
     const int visible = visible_at(def["visible"], t) ? 1 : 0;
@@ -1019,7 +1067,12 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     std::uint32_t seq = now ? now->seq : 0, frame = now ? now->frame : 0;
     std::uint32_t next = now ? now->next_frame : 0;
     float anim_time = now ? now->anim_time : 0, speed = now ? now->anim_speed : 1;
-    if (gait >= 0) {
+    if (!a.pose.empty()) {
+        // The class's own animation plays on under the pose, which sets every joint (the port
+        // evaluates a moby's joints only once it has a frame of its own).
+        speed = 1;
+        gait = -1;
+    } else if (gait >= 0) {
         speed = 1;
         if (gait != a.gait) {
             seq = static_cast<std::uint32_t>(gait), frame = 0, next = 1, anim_time = 0;

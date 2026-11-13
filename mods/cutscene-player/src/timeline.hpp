@@ -1007,5 +1007,49 @@ inline LegTurns leg_ik(const JointFrame& parent, const JointFrame& hip, const Jo
     return out;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Scene poses: an actor's whole animation, every joint per 30 Hz frame (game_scenes.py writes them)
+
+// One joint in one frame of a pose file: its turn from its parent (x, y, z, w, int16 / 32767, as
+// glTF has it: its columns are the joint's axes in its parent's), its place in its parent (int16,
+// model units * 1024) and its scale (uint16 / 4096, the editor's only), all little-endian.
+constexpr std::size_t kPoseRecord = 20;
+struct PoseKey {
+    float q[4] = {0, 0, 0, 1};
+    V3 t;
+};
+inline std::size_t pose_frames(const std::string& bytes, std::size_t joints) {
+    return joints == 0 || bytes.size() % (joints * kPoseRecord) != 0 ? 0 : bytes.size() / (joints * kPoseRecord);
+}
+inline PoseKey pose_record(const std::string& bytes, std::size_t joints, std::size_t frame, std::size_t j) {
+    const auto* b = reinterpret_cast<const unsigned char*>(bytes.data()) + (frame * joints + j) * kPoseRecord;
+    const auto s16 = [&](int i) { return static_cast<float>(static_cast<std::int16_t>(b[2 * i] | b[2 * i + 1] << 8)); };
+    PoseKey k;
+    float n = 0;
+    for (int i = 0; i < 4; ++i) k.q[i] = s16(i) / 32767.0f, n += k.q[i] * k.q[i];
+    n = std::sqrt(n);
+    for (int i = 0; i < 4; ++i) k.q[i] = n > 1e-6f ? k.q[i] / n : (i == 3 ? 1.0f : 0.0f);
+    k.t = V3{s16(4), s16(5), s16(6)} * (1.0f / 1024.0f);
+    return k;
+}
+// Joint j at tick t (frame f is tick 2f; between two, the turn and place blended): the first frame
+// before the start, the last after the end.
+inline PoseKey pose_at(const std::string& bytes, std::size_t joints, std::size_t j, int t) {
+    const std::size_t frames = pose_frames(bytes, joints);
+    if (frames == 0 || j >= joints) return {};
+    const long long at = std::clamp<long long>(t, 0, 2 * (static_cast<long long>(frames) - 1));
+    const std::size_t f = static_cast<std::size_t>(at / 2);
+    PoseKey a = pose_record(bytes, joints, f, j);
+    if (at % 2 == 0) return a;
+    const PoseKey b = pose_record(bytes, joints, f + 1, j);
+    const float sign = a.q[0] * b.q[0] + a.q[1] * b.q[1] + a.q[2] * b.q[2] + a.q[3] * b.q[3] < 0 ? -1.0f : 1.0f;
+    float n = 0;
+    for (int i = 0; i < 4; ++i) a.q[i] = (a.q[i] + sign * b.q[i]) * 0.5f, n += a.q[i] * a.q[i];
+    n = std::sqrt(n);
+    for (int i = 0; i < 4; ++i) a.q[i] = n > 1e-6f ? a.q[i] / n : (i == 3 ? 1.0f : 0.0f);
+    a.t = lerp(a.t, b.t, 0.5f);
+    return a;
+}
+
 }  // namespace cutscene
 
