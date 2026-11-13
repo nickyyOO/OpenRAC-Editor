@@ -34,6 +34,13 @@ public:
         if (m_number <= -2147483648.0) return -2147483647 - 1;
         return static_cast<int>(m_number);
     }
+    // A time or a length in ticks: integer() held to about three days of ticks either way, so
+    // sums and differences of two of them never overflow.
+    static constexpr int kMaxTick = 1 << 24;
+    int tick(int fallback = 0) const {
+        const int v = integer(fallback);
+        return v > kMaxTick ? kMaxTick : v < -kMaxTick ? -kMaxTick : v;
+    }
     bool boolean(bool fallback = false) const { return m_kind == Kind::Bool ? m_bool : fallback; }
     const std::string& string() const { return m_string; }
     std::string string_or(const std::string& fallback) const {

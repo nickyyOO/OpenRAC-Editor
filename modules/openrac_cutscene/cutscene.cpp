@@ -679,6 +679,7 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 	Array events;
 	Dictionary camera;
 	HashSet<String> ids;
+	HashSet<String> layer_files;  // two layers never share a frames file
 	for (int i = 0; i < get_child_count(); i++) {
 		Node *child = get_child(i);
 		if (const CutsceneCamera *cam = Object::cast_to<CutsceneCamera>(child)) {
@@ -854,7 +855,12 @@ Dictionary Cutscene::to_cutscene(PackedStringArray *r_problems, Dictionary *r_fi
 						}
 					}
 				}
-				const String file = vformat("layers/%s_%s_%s.bin", get_cutscene_id(), id, String(l->get_name()).to_snake_case());
+				const String stem = vformat("%s_%s_%s", get_cutscene_id(), id, String(l->get_name()).to_snake_case()).validate_filename();
+				String file = vformat("layers/%s.bin", stem);
+				for (int n = 2; layer_files.has(file); n++) {
+					file = vformat("layers/%s_%d.bin", stem, n);
+				}
+				layer_files.insert(file);
 				Dictionary layer;
 				layer["name"] = String(l->get_name()).to_snake_case();
 				Array joint_list;
@@ -1192,6 +1198,24 @@ Error Cutscene::export_cutscene(String *r_path) const {
 // Import: a .cutscene as nodes
 
 namespace {
+
+// The same turn as `p_degrees` (Euler YXZ, as Basis::get_euler gives it) written nearest to
+// `p_before`: whole turns added, or the other way of writing it, so keys in a row interpolate the
+// short way (179 then -179 is two degrees, not a turn back through 0).
+Vector3 euler_near(const Vector3 &p_degrees, const Vector3 &p_before) {
+	const auto wrap = [](real_t p_a, real_t p_to) { return p_a + Math::round((p_to - p_a) / 360.0) * 360.0; };
+	Vector3 best = p_degrees;
+	real_t best_d = INFINITY;
+	for (const Vector3 &c : { p_degrees, Vector3(180 - p_degrees.x, p_degrees.y + 180, p_degrees.z + 180) }) {
+		const Vector3 n(wrap(c.x, p_before.x), wrap(c.y, p_before.y), wrap(c.z, p_before.z));
+		const real_t d = (n - p_before).length_squared();
+		if (d < best_d) {
+			best_d = d;
+			best = n;
+		}
+	}
+	return best;
+}
 
 int name_index(const char *const *p_names, int p_count, const String &p_name, int p_fallback) {
 	for (int i = 0; i < p_count; i++) {
@@ -1562,6 +1586,8 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 			const NodePath layer_path = root->get_path_to(layer);
 			const int count = bytes.size() / stride;
 			const uint8_t *r = bytes.ptr();
+			Vector<Vector3> before;
+			before.resize(joints.size());
 			for (int t = 0; t < count; t++) {
 				if (t % 2 != 0 && t != count - 1) {
 					continue;
@@ -1569,7 +1595,11 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 				for (int j = 0; j < joints.size(); j++) {
 					const uint8_t *q = r + t * stride + j * 16;
 					const Quaternion turn(decode_float(q), decode_float(q + 4), decode_float(q + 8), decode_float(q + 12));
-					const Vector3 degrees = Basis(turn.normalized()).get_euler() * (180.0 / Math::PI);
+					Vector3 degrees = Basis(turn.normalized()).get_euler() * (180.0 / Math::PI);
+					if (t > 0) {
+						degrees = euler_near(degrees, before[j]);
+					}
+					before.write[j] = degrees;
 					const String property = vformat("joint_%d", joints[j]);
 					if (t == 0) {
 						layer->set(property, degrees);
@@ -2583,6 +2613,14 @@ String CutsceneLayer::retarget(const Ref<Animation> &p_source, Node *p_skeleton,
 		if (link.track < 0) {
 			problems.push_back(vformat("the animation does not turn bone \"%s\": joint %d is kept still", bone, link.joint));
 		}
+		bool twice = false;
+		for (const Link &other : links) {
+			twice = twice || other.joint == link.joint;
+		}
+		if (twice) {
+			problems.push_back(vformat("bone \"%s\": joint %d has another bone already, left out", bone, link.joint));
+			continue;
+		}
 		links.push_back(link);
 	}
 	if (links.is_empty()) {
@@ -2601,11 +2639,23 @@ String CutsceneLayer::retarget(const Ref<Animation> &p_source, Node *p_skeleton,
 		const int track = track_for(anim, NodePath(String(self) + ":" + property), Animation::TYPE_VALUE);
 		const Quaternion rest = skeleton->get_bone_rest(link.bone).basis.get_rotation_quaternion();
 		const Basis to_joint = link.axes.orthonormalized();
+		// A bake again over the same time replaces the keys there.
+		for (int k = anim->track_get_key_count(track) - 1; k >= 0; k--) {
+			const double kt = anim->track_get_key_time(track, k);
+			if (kt >= p_start - 1e-6 && kt <= p_start + length + 1e-6) {
+				anim->track_remove_key(track, k);
+			}
+		}
+		Vector3 before;
 		for (int f = 0; f * frame <= length + 1e-6; f++) {
 			const double time = MIN(f * frame, length);
 			const Quaternion pose = link.track >= 0 ? p_source->rotation_track_interpolate(link.track, time) : rest;
 			const Basis turn = to_joint * Basis(rest.inverse() * pose) * to_joint.inverse();
-			const Vector3 degrees = turn.get_euler() * (180.0 / Math::PI);
+			Vector3 degrees = turn.get_euler() * (180.0 / Math::PI);
+			if (f > 0) {
+				degrees = euler_near(degrees, before);
+			}
+			before = degrees;
 			anim->track_insert_key(track, p_start + time, degrees);
 			if (f == 0) {
 				set_turn(link.joint, degrees);

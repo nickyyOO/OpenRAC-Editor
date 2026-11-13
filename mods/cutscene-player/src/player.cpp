@@ -40,6 +40,11 @@ openrac_mod* g_mod = nullptr;
 
 // A UTF-8 path as the file system's.
 fs::path utf8_path(const std::string& text) { return fs::path(std::u8string(text.begin(), text.end())); }
+// A path as UTF-8 text (path::string() throws on Windows for a name outside the code page).
+std::string utf8_text(const fs::path& path) {
+    const std::u8string u = path.u8string();
+    return std::string(u.begin(), u.end());
+}
 
 void log(int level, const std::string& text) { g_api->log(g_mod, level, text.c_str()); }
 
@@ -58,6 +63,7 @@ struct Cutscene {
     bool inside = false;  // volume: the hero was in it last tick
     bool present = false;  // pickup: the moby was there last tick
     bool flag_was = true;  // flag: last tick's value (true at load, so a flag set before is no start)
+    bool pending = false;  // its trigger fired: it starts once the hero is free and no other plays
 };
 
 struct Level {
@@ -102,19 +108,19 @@ void load_level(int level) {
         std::string error;
         Value doc = Value::parse(text.str(), error);
         if (!error.empty() || doc["format"].string() != "openrac-cutscene") {
-            log(OPENRAC_LOG_WARN, std::format("{}: not a cutscene ({})", file.filename().string(),
+            log(OPENRAC_LOG_WARN, std::format("{}: not a cutscene ({})", utf8_text(file.filename()),
                                               error.empty() ? "no \"format\"" : error));
             continue;
         }
         if (doc["version"].integer() > 1) {
             log(OPENRAC_LOG_INFO, std::format("{}: version {}, playing the parts this player knows",
-                                              file.filename().string(), doc["version"].integer()));
+                                              utf8_text(file.filename()), doc["version"].integer()));
         }
         if (doc["game"].is_string() && doc["game"].string() != g_api->game) continue;
         Cutscene c;
-        c.name = file.stem().string();
+        c.name = utf8_text(file.stem());
         c.pack_dir = rel;
-        c.length = std::max(1, doc["length"].integer(1));
+        c.length = std::max(1, doc["length"].tick(1));
         c.doc = std::move(doc);
         g_level.scenes.push_back(std::move(c));
     }
@@ -251,6 +257,7 @@ struct ActorRun {
     std::string id;
     enum class Kind { None, Moby, Spawned, Figure, Prop } kind = Kind::None;
     int slot = -1;
+    int oclass = -1;  // the class of the moby in `slot`: another class there, the actor's moby is gone
     int figure = -1;
     int prop = -1;
     openrac_moby original{};  // a level moby as it was, for "end": "restore"
@@ -266,6 +273,7 @@ struct ActorRun {
     // held, on an actor that is not a figure: a moby of the class, kept on the joint.
     int held_slot = -1;
     int held_class = -1;
+    int held_failed = -1;  // a class the level could not make: not tried again this cutscene
     bool held_hidden = false;
     // layers: each one's joints and frames, and whether any offsets were set.
     struct Layer {
@@ -350,6 +358,7 @@ struct Play {
     bool air_set = false;      // the scene's fog or background is on
     float last_stretch = 1;    // the slow motion last asked for
     std::vector<int> ties_hidden;  // ties hidden only for the scene
+    std::vector<int> mobys_hidden;  // level mobys hidden only for the scene (their slots)
     bool hud_hidden = false;
     std::string music = "keep";  // options.music, when the port can lower it
 };
@@ -409,7 +418,7 @@ bool target_point(Play& p, const Value& v, V3& out) {
             out = V3{at[0], at[1], at[2]} + vec(v["offset"], {0, 0, 0});
             return true;
         }
-        warn_once(p, "a joint as a look-at target (the port cannot place joints)");
+        if (!API_HAS(moby_joint_position)) warn_once(p, "a joint as a look-at target (the port cannot place joints)");
     }
     // "turn": the offset turns with the actor (in its own axes, x ahead), as a camera on it would.
     const V3 offset = vec(v["offset"], {0, 0, 1});
@@ -507,7 +516,7 @@ void load_face(Play& p, ActorRun& a) {
             log(OPENRAC_LOG_WARN, std::format("{}: actor \"{}\": a talk with no envelope", p.scene->name, a.id));
             continue;
         }
-        a.talks.emplace_back(talk["t"].integer(), std::move(bytes));
+        a.talks.emplace_back(talk["t"].tick(), std::move(bytes));
     }
     a.blink_seed = static_cast<std::uint32_t>(std::hash<std::string>{}(p.scene->name + "/" + a.id));
 }
@@ -715,7 +724,8 @@ void held_tick(Play& p, ActorRun& a, int t) {
         warn_once(p, "\"held\" from the hero on an actor that is not a figure");
         return;
     }
-    const int cls = none ? -1 : (*e)["class"].integer();
+    int cls = none ? -1 : (*e)["class"].integer();
+    if (cls == a.held_failed) cls = -1;
     if (cls != a.held_class && a.held_slot >= 0) {
         g_api->moby_kill(g_mod, a.held_slot);
         a.held_slot = -1;
@@ -737,7 +747,8 @@ void held_tick(Play& p, ActorRun& a, int t) {
         a.held_slot = g_api->moby_spawn(g_mod, cls, &pose);
         if (a.held_slot < 0) {
             warn_once(p, std::format("a held moby of class {} (the level cannot make one)", cls));
-            a.held_class = -2;  // not again this cutscene
+            a.held_failed = cls;
+            a.held_class = -1;
             return;
         }
     }
@@ -829,7 +840,14 @@ void actors_begin(Play& p) {
         first.scale = 0;  // the class's own size; the track's scale multiplies it from the first tick
         if (src.has("spawn_id")) {
             a.slot = g_api->moby_slot(src["spawn_id"].integer());
-            if (a.slot >= 0) {
+            const bool taken = std::any_of(p.actors.begin(), p.actors.end(), [&](const ActorRun& o) {
+                return o.kind == ActorRun::Kind::Moby && o.slot == a.slot;
+            });
+            if (a.slot >= 0 && taken) {
+                // Two actors on one level moby: the first has it.
+                log(OPENRAC_LOG_WARN, std::format("{}: actor \"{}\" is a moby another actor has", p.scene->name, a.id));
+                a.slot = -1;
+            } else if (a.slot >= 0) {
                 if (const openrac_moby* m = moby_at(a.slot)) a.original = *m;
                 a.kind = g_api->moby_drive(g_mod, a.slot, 1) == OPENRAC_HOOK_OK ? ActorRun::Kind::Moby
                                                                                  : ActorRun::Kind::None;
@@ -865,12 +883,31 @@ void actors_begin(Play& p) {
         }
         p.actors.push_back(std::move(a));
     }
-    // The new mobys' own size (their class's), for actor_tick's scale 1.
+    // The new mobys' own size (their class's), for actor_tick's scale 1, and their class.
     read_mobys();
+    for (ActorRun& a : p.actors) {
+        if (a.kind != ActorRun::Kind::Moby && a.kind != ActorRun::Kind::Spawned) continue;
+        const openrac_moby* m = moby_at(a.slot);
+        a.oclass = m != nullptr ? m->oclass : -1;
+    }
+}
+
+// Whether the moby in `slot` is still the one of class `oclass` (the game may kill one, and give its
+// slot to another).
+bool still_there(int slot, int oclass) {
+    const openrac_moby* m = moby_at(slot);
+    return m != nullptr && (oclass < 0 || m->oclass == oclass);
 }
 
 void actor_tick(Play& p, ActorRun& a, int t) {
     if (a.kind == ActorRun::Kind::None) return;
+    if ((a.kind == ActorRun::Kind::Moby || a.kind == ActorRun::Kind::Spawned) && !still_there(a.slot, a.oclass)) {
+        log(OPENRAC_LOG_WARN, std::format("{}: actor \"{}\" was taken out of the level", p.scene->name, a.id));
+        a.kind = ActorRun::Kind::None;
+        a.slot = -1;
+        return;
+    }
+    if (a.held_slot >= 0 && !still_there(a.held_slot, a.held_class)) a.held_slot = -1;
     const Value& def = *a.def;
     track_at(def["track"], t, a.position, a.rotation, a.scale);
     path_at(def["path"], t, a.position, a.rotation);
@@ -893,8 +930,8 @@ void actor_tick(Play& p, ActorRun& a, int t) {
         const int anim = anim_at(def["anims"], t);
         if (anim >= 0 && API_HAS(prop_animate)) {
             const Value& e = def["anims"].items()[static_cast<std::size_t>(anim)];
-            const double seconds = (t - e["t"].integer()) / 60.0 * e["speed"].number(1)
-                                   + e["frame"].integer() / 30.0;
+            const double seconds = (t - e["t"].tick()) / 60.0 * e["speed"].number(1)
+                                   + e["frame"].tick() / 30.0;
             g_api->prop_animate(g_mod, a.prop, static_cast<int>(e["seq"].integer()), static_cast<float>(seconds),
                                 e["loop"].boolean(true) ? 1 : 0);
         } else if (anim >= 0) {
@@ -916,7 +953,7 @@ void actor_tick(Play& p, ActorRun& a, int t) {
     // the walk did.
     const Value& path = def["path"];
     int gait = -1;
-    if (path["gaits"].is_array() && (anim < 0 || anims[static_cast<std::size_t>(anim)]["t"].integer() < path["t"].integer())) {
+    if (path["gaits"].is_array() && (anim < 0 || anims[static_cast<std::size_t>(anim)]["t"].tick() < path["t"].tick())) {
         gait = gait_at(path["gaits"], walk_state(path, t), path["speed"].number(8));
     }
     const int slot = a.kind == ActorRun::Kind::Figure ? g_api->figure_slot(g_mod, a.figure) : a.slot;
@@ -948,10 +985,10 @@ void actor_tick(Play& p, ActorRun& a, int t) {
         speed = static_cast<float>(e["speed"].number(1));
         if (anim != a.anim) {
             seq = static_cast<std::uint32_t>(e["seq"].integer());
-            frame = static_cast<std::uint32_t>(e["frame"].integer());
+            frame = static_cast<std::uint32_t>(e["frame"].tick());
             next = frame + 1;
             anim_time = 0;
-            if (e.has("blend") && e["blend"].integer() != 4) warn_once(p, "a blend other than 4 ticks");
+            if (e.has("blend") && e["blend"].tick() != 4) warn_once(p, "a blend other than 4 ticks");
         }
     }
     a.anim = anim;
@@ -1137,11 +1174,12 @@ void draw_overlay(void*, const openrac_overlay* o) {
 void subtitles_tick(Play& p, int t) {
     std::vector<openrac_hud_text> lines;
     std::vector<std::shared_ptr<const SubPicture>> pictures;
-    if (!g_subtitles) return;
-    const auto& list = (*p.doc)["subtitles"].items();
+    // Subtitles off: none (and the lines already up go).
+    static const std::vector<Value> kNone;
+    const auto& list = g_subtitles ? (*p.doc)["subtitles"].items() : kNone;
     for (std::size_t i = 0; i < list.size(); ++i) {
         const Value& s = list[i];
-        if (t < s["t"].integer() || t >= s["end"].integer(s["t"].integer() + 120)) continue;
+        if (t < s["t"].tick() || t >= s["end"].tick(s["t"].tick() + 120)) continue;
         const Value& text = s["text"];
         const std::string lang = text.is_string() ? std::string() : pick_language(text, (*p.doc)["languages"]);
         // A line the editor wrote as a picture (Japanese, and any the game's font cannot write).
@@ -1191,10 +1229,10 @@ void sounds_tick(Play& p, int t) {
     const auto& list = (*p.doc)["sounds"].items();
     for (std::size_t i = 0; i < list.size(); ++i) {
         const Value& s = list[i];
-        if (p.sounds_done[i] || t < s["t"].integer()) continue;
+        if (p.sounds_done[i] || t < s["t"].tick()) continue;
         p.sounds_done[i] = 1;
         if (p.skipped) continue;
-        const float volume = static_cast<float>(s["volume"].number(1));
+        const float volume = std::clamp(static_cast<float>(s["volume"].number(1)), 0.0f, 4.0f);
         if (s.has("game_sound")) {
             const std::string who = s["actor"].string_or("hero");
             ActorRun* a = who == "hero" ? nullptr : actor(p, who);
@@ -1218,10 +1256,10 @@ void sounds_tick(Play& p, int t) {
         const int id = sound_id(p, path);
         if (id < 0) continue;
         Voice v;
-        v.fade_in = s["fade_in"].integer();
-        v.fade_out = s["fade_out"].integer();
+        v.fade_in = s["fade_in"].tick();
+        v.fade_out = s["fade_out"].tick();
         v.start = t;
-        v.end = s.has("end") ? s["end"].integer() : (s["kind"].string() == "music" ? p.scene->length : -1);
+        v.end = s.has("end") ? s["end"].tick() : (s["kind"].string() == "music" ? p.scene->length : -1);
         v.volume = volume;
         v.voice = g_api->sound_play(g_mod, id, v.fade_in > 0 ? 0.0f : volume, 1.0f, 0);
         if (v.voice != 0) p.voices.push_back(v);
@@ -1287,8 +1325,13 @@ void event_run(Play& p, const Value& e) {
         if (slot < 0) return;
         if (what == "moby_kill") {
             g_api->moby_kill(g_mod, slot);
+            std::erase(p.mobys_hidden, slot);
         } else {
-            g_api->moby_hide(g_mod, slot, e["on"].boolean(true) ? 1 : 0);
+            const bool on = e["on"].boolean(true);
+            if (g_api->moby_hide(g_mod, slot, on ? 1 : 0) != OPENRAC_HOOK_OK) return;
+            // Not persistent: shown again when the scene ends.
+            std::erase(p.mobys_hidden, slot);
+            if (on && !e["persistent"].boolean()) p.mobys_hidden.push_back(slot);
         }
     } else if (what == "mission_flag") {
         std::uint8_t flags[OPENRAC_MISSION_STATE_SIZE] = {};
@@ -1309,7 +1352,7 @@ void event_run(Play& p, const Value& e) {
         std::memcpy(h.patch.position, &pos, sizeof(float) * 3);
         h.patch.radius = static_cast<float>(e["radius"].number(4));
         h.patch.strength = static_cast<float>(e["strength"].number(0.1));
-        h.until = e["t"].integer() + e["length"].integer(60);
+        h.until = e["t"].tick() + e["length"].tick(60);
         p.haze.push_back(h);
     } else if (what == "fade") {
         // Drawn from the events each tick (overlay_tick); without the port's overlay, not at all.
@@ -1336,11 +1379,15 @@ void event_run(Play& p, const Value& e) {
 void events_tick(Play& p, int t) {
     const auto& list = (*p.doc)["events"].items();
     for (std::size_t i = 0; i < list.size(); ++i) {
-        if (p.events_done[i] || t < list[i]["t"].integer()) continue;
+        if (p.events_done[i] || t < list[i]["t"].tick()) continue;
         p.events_done[i] = 1;
-        // A skip runs only what must last: persistent events, a next cutscene, a travel.
+        // A skip runs only what must last: persistent events, a next cutscene, a travel, and what
+        // cannot be undone (a kill, a mission flag), so a skip leaves the world as watching does.
         const std::string what = list[i]["do"].string();
-        if (p.skipped && !list[i]["persistent"].boolean() && what != "play" && what != "travel") continue;
+        if (p.skipped && !list[i]["persistent"].boolean() && what != "play" && what != "travel"
+            && what != "moby_kill" && what != "mission_flag") {
+            continue;
+        }
         event_run(p, list[i]);
     }
     std::erase_if(p.haze, [t](const Play::Haze& h) { return t >= h.until; });
@@ -1395,6 +1442,7 @@ void start(Cutscene& c, int hops = 0) {
 
 // Ends the cutscene: what it leaves stays, the rest goes back. With `level_gone` the level it played
 // in was reloaded or left, and its mobys with it: only the port's state is put back.
+std::set<std::string> g_chain;  // the cutscenes played one after the other since the hero was free
 void finish(bool level_gone) {
     Play& p = *g_play;
     if (!level_gone && p.skipped) {
@@ -1412,6 +1460,7 @@ void finish(bool level_gone) {
     stretch_set(p, 1);
     if (!level_gone) {
         for (int tie : p.ties_hidden) g_api->tie_hide(g_mod, tie, 0);
+        for (int slot : p.mobys_hidden) g_api->moby_hide(g_mod, slot, 0);
     }
     g_api->camera_set(g_mod, nullptr);
     g_api->hero_release(g_mod);
@@ -1438,26 +1487,35 @@ void finish(bool level_gone) {
     g_bars = 0;
     g_fade = 0;
     log(OPENRAC_LOG_INFO, std::format("{} ended", done));
-    if (level_gone) return;
+    g_chain.insert(done);
+    if (level_gone) {
+        g_chain.clear();
+        return;
+    }
     if (travel >= 0) {
+        g_chain.clear();
         g_api->play_travel(g_mod, travel);
         return;
     }
+    // One that played in this chain already does not play again (a loop of "play" or "after").
     if (!next.empty()) {
-        if (Cutscene* c = g_level.find(next)) {
+        if (Cutscene* c = g_level.find(next); c != nullptr && g_chain.count(next) == 0) {
             start(*c);
             return;
+        } else if (c != nullptr) {
+            log(OPENRAC_LOG_WARN, std::format("{}: \"play\" of {}, which played just before: a loop, stopped", done, next));
         }
     }
     // Cutscenes that start after this one.
     for (Cutscene& c : g_level.scenes) {
         const Value& tr = c.doc["trigger"];
         if (tr["kind"].string() == "after" && tr["cutscene"].string() == done && flag_holds(tr["flag"])
-            && !(tr["once"].boolean(true) && g_seen.has(seen_key(c)))) {
+            && !(tr["once"].boolean(true) && g_seen.has(seen_key(c))) && g_chain.count(c.name) == 0) {
             start(c);
             return;
         }
     }
+    g_chain.clear();
 }
 
 void play_tick() {
@@ -1555,12 +1613,17 @@ void play_tick() {
 // ---------------------------------------------------------------------------------------------
 // Triggers
 
-// The game would start a scene of its own now: the player in control, on foot, alive.
+// The game would start a scene of its own now: the player in control, on foot, alive; on a port that
+// says when he stands steady (not hurt, not on a ride, a lift or in water), once he does.
+bool g_port_steady = false;  // the port has said the hero stands steady
 bool can_start(const openrac_play_status& s, const openrac_pose& hero) {
+    if (hero.flags & OPENRAC_POSE_STEADY) g_port_steady = true;
     return s.phase == OPENRAC_PLAY_PLAYING && g_api->scene_playing(nullptr) < 0 && hero.health > 0
-           && !(hero.flags & OPENRAC_POSE_AIRBORNE);
+           && !(hero.flags & OPENRAC_POSE_AIRBORNE) && (!g_port_steady || (hero.flags & OPENRAC_POSE_STEADY));
 }
 
+// Each trigger's start is kept until it can play: two at once play one after the other, and one
+// that fires while the hero is busy (in the air, hurt, a scene of the game's) plays once he is free.
 void triggers_tick(const openrac_play_status& s) {
     openrac_pose hero;
     const bool has_hero = hero_pose(hero);
@@ -1568,19 +1631,20 @@ void triggers_tick(const openrac_play_status& s) {
     const bool ready = has_hero && can_start(s, hero);
     bool talk_ready = false;
     bool mobys_read = false;
-    Cutscene* fire = nullptr;
     for (Cutscene& c : g_level.scenes) {
         const Value& tr = c.doc["trigger"];
         const std::string kind = tr["kind"].string();
-        if (tr["once"].boolean(true) && g_seen.has(seen_key(c))) continue;
+        if (tr["once"].boolean(true) && g_seen.has(seen_key(c))) {
+            c.pending = false;
+            continue;
+        }
         bool now = false;
         if (kind == "level_start") {
             now = !g_level.started;
         } else if (kind == "volume") {
-            // Entering fires; entered while the player is not in control, it fires once he is.
             const bool in = has_hero && inside(tr, at);
             now = in && !c.inside;
-            if (!now || ready) c.inside = in;
+            c.inside = in;
         } else if (kind == "talk") {
             const int slot = g_api->moby_slot(tr["spawn_id"].integer(-1));
             if (!mobys_read) read_mobys(), mobys_read = true;
@@ -1594,23 +1658,25 @@ void triggers_tick(const openrac_play_status& s) {
         } else if (kind == "pickup") {
             const bool here = g_api->moby_slot(tr["spawn_id"].integer(-1)) >= 0;
             now = c.present && !here;
-            if (!now || ready) c.present = here;
+            c.present = here;
         } else if (kind == "flag") {
             const bool holds = flag_holds(tr["flag"]);
             now = holds && !c.flag_was;
-            if (!now || ready) c.flag_was = holds;
-            if (now) {
-                if (ready && !fire) fire = &c;
-                continue;
-            }
+            c.flag_was = holds;
         }
-        if (now && kind != "flag" && !flag_holds(tr["flag"])) now = false;
-        if (now && ready && !fire) fire = &c;
+        if (now && (kind == "flag" || flag_holds(tr["flag"]))) c.pending = true;
     }
     g_talk_ready = talk_ready;
     g_talk_pressed = false;
-    if (ready) g_level.started = true;
-    if (fire) start(*fire);
+    g_level.started = true;
+    if (!ready) return;
+    for (Cutscene& c : g_level.scenes) {
+        if (c.pending) {
+            c.pending = false;
+            start(c);
+            return;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1629,6 +1695,7 @@ void frame() {
         }
         for (Cutscene& c : g_level.scenes) {
             c.inside = false;
+            c.pending = false;
             c.present = g_api->moby_slot(c.doc["trigger"]["spawn_id"].integer(-1)) >= 0;
             c.flag_was = flag_holds(c.doc["trigger"]["flag"]);
         }

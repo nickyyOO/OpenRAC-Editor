@@ -767,6 +767,31 @@ static void feet() {
     CHECK(std::fabs(local[1] - std::sin(0.5f)) < 1e-5f && std::fabs(local[0]) < 1e-6f && std::fabs(local[2]) < 1e-6f);
 }
 
+// Times and lengths far out of a scene's range: held, so no sum of two overflows.
+void extreme_ticks() {
+    const Value v = parse(R"({"lo": -2147483648, "hi": 2147483647, "huge": 1e300})");
+    CHECK(v["lo"].tick() == -Value::kMaxTick && v["hi"].tick() == Value::kMaxTick && v["huge"].tick() == Value::kMaxTick);
+    CHECK(v["lo"].integer() == -2147483647 - 1);
+    const Value keys = parse(R"([{"t": -2147483648, "position": [0, 0, 0]}, {"t": 2147483647, "position": [8, 0, 0]}])");
+    V3 pos, rot;
+    float scale = 1;
+    track_at(keys, 60, pos, rot, scale);
+    CHECK(pos.x >= 0 && pos.x <= 8);
+    const Value events = parse(R"([{"t": -2147483648, "do": "fade", "to": [1, 0, 0], "length": 2147483647},
+        {"t": -2147483648, "do": "air", "background": [1, 0, 0], "length": 2147483647},
+        {"t": -2147483648, "do": "slow", "stretch": 2, "length": 2147483647}])");
+    CHECK(near(fade_at(events, 60).a, 1));  // both held to the same reach: over by tick 0
+    CHECK(near(air_at(events, 60).weight, 1));
+    CHECK(near(stretch_at(events, 60), 2));
+    CHECK(near3(shake_at(parse(R"([{"t": 2147483647, "length": 2147483647}])"), 60), V3{}));
+    CHECK(fov_at(parse(R"([{"t": -2147483648, "fov": 10}, {"t": 2147483647, "fov": 90}])"), 60) > 10);
+    CHECK(look_at(parse(R"([{"t": -2147483648, "target": [1, 0, 0], "blend": 2147483647}])"), 60).weight > 0.99f);
+    CHECK(weight_at(parse(R"([{"t": -2147483648, "w": 0}, {"t": 2147483647, "w": 1}])"), 60) < 0.6f);
+    CHECK(walk_state(parse(R"({"t": -2147483648, "points": [[0, 0, 0], [1, 0, 0]]})"), 60) == 2);
+    CHECK(moods_at(parse(R"([{"t": -2147483648, "mood": "a", "blend": 2147483647}])"), 60).size() == 1);
+    CHECK(path_at(parse(R"({"t": -2147483648, "points": [[0, 0, 0], [1, 0, 0]]})"), 60, pos, rot) && near(pos.x, 1));
+}
+
 int main() {
     json_values();
     json_numbers();
@@ -791,6 +816,7 @@ int main() {
     rides_and_eyes();
     air_and_slow();
     feet();
+    extreme_ticks();
     std::printf("timeline: %d check(s), %d failed\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

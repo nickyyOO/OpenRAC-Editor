@@ -92,7 +92,7 @@ inline std::vector<std::size_t> by_time(const std::vector<Value>& keys) {
     std::vector<std::size_t> order(keys.size());
     for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
     std::stable_sort(order.begin(), order.end(),
-                     [&](std::size_t a, std::size_t b) { return keys[a]["t"].integer() < keys[b]["t"].integer(); });
+                     [&](std::size_t a, std::size_t b) { return keys[a]["t"].tick() < keys[b]["t"].tick(); });
     return order;
 }
 
@@ -115,7 +115,7 @@ inline void track_at(const Value& track, int t, V3& pos, V3& rot, float& scale) 
         P[i] = vec(k["position"], i ? P[i - 1] : pos);
         R[i] = vec(k["rotation"], i ? R[i - 1] : rot);
         S[i] = static_cast<float>(k["scale"].number(i ? S[i - 1] : scale));
-        T[i] = k["t"].integer();
+        T[i] = k["t"].tick();
     }
     if (t <= T[0]) {
         pos = P[0], rot = R[0], scale = S[0];
@@ -142,7 +142,7 @@ inline void track_at(const Value& track, int t, V3& pos, V3& rot, float& scale) 
 // starts, or with fewer than two points.
 inline bool path_at(const Value& path, int t, V3& pos, V3& rot) {
     const auto& pts = path["points"].items();
-    const int start = path["t"].integer();
+    const int start = path["t"].tick();
     if (pts.size() < 2 || t < start) return false;
     float left = static_cast<float>((t - start) / kTickRate * std::max(0.0, path["speed"].number(8)));
     for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
@@ -166,7 +166,7 @@ inline bool visible_at(const Value& keys, int t) {
     bool visible = true;
     int at = -1;
     for (const Value& k : keys.items()) {
-        const int kt = k["t"].integer();
+        const int kt = k["t"].tick();
         if (kt <= t && kt >= at) {
             visible = k["on"].boolean(true);
             at = kt;
@@ -180,7 +180,7 @@ inline int anim_at(const Value& anims, int t) {
     int found = -1, at = -1;
     const auto& list = anims.items();
     for (std::size_t i = 0; i < list.size(); ++i) {
-        const int kt = list[i]["t"].integer();
+        const int kt = list[i]["t"].tick();
         if (kt <= t && kt >= at) {
             found = static_cast<int>(i);
             at = kt;
@@ -215,7 +215,7 @@ struct CamKey {
 // `eye` is where an eye on an actor is now; an eye that is neither carries from the key before.
 inline CamKey camera_key(const Value& k, const CamKey* before, const V3* target, const V3* eye = nullptr) {
     CamKey c;
-    c.t = k["t"].integer();
+    c.t = k["t"].tick();
     c.eye = eye != nullptr ? *eye : vec(k["eye"], before ? before->eye : V3{});
     c.has_target = target != nullptr;
     if (target) c.target = *target;
@@ -282,7 +282,7 @@ inline bool camera_pose(const std::vector<CamKey>& keys, int t, CameraPose& out)
 inline V3 shake_at(const Value& shakes, int t) {
     V3 sum;
     for (const Value& s : shakes.items()) {
-        const int st = s["t"].integer(), len = std::max(1, s["length"].integer(30));
+        const int st = s["t"].tick(), len = std::max(1, s["length"].tick(30));
         if (t < st || t >= st + len) continue;
         const float k = static_cast<float>(s["strength"].number(0.3)) * (1.0f - float(t - st) / float(len));
         const float ft = static_cast<float>(t);
@@ -411,13 +411,13 @@ inline Rgba fade_at(const Value& events, int t) {
     for (std::size_t i : by_time(list)) {
         const Value& e = list[i];
         if (e["do"].string() != "fade") continue;
-        const int t0 = e["t"].integer();
+        const int t0 = e["t"].tick();
         if (t < t0) break;
         const Value& to = e["to"];
         auto part = [&](int k, float fallback) { return std::clamp(static_cast<float>(to[k].number(fallback)), 0.0f, 1.0f); };
         const Rgba target = to.is_array() ? Rgba{part(0, 0), part(1, 0), part(2, 0), part(3, 1)}
                                           : Rgba{now.r, now.g, now.b, 0};
-        const int len = std::max(0, e["length"].integer(30));
+        const int len = std::max(0, e["length"].tick(30));
         const float u = len > 0 ? std::min(1.0f, static_cast<float>(t - t0) / static_cast<float>(len)) : 1.0f;
         now = {now.r + (target.r - now.r) * u, now.g + (target.g - now.g) * u, now.b + (target.b - now.b) * u,
                now.a + (target.a - now.a) * u};
@@ -444,7 +444,7 @@ inline Air air_at(const Value& events, int t) {
     for (std::size_t i : by_time(list)) {
         const Value& e = list[i];
         if (e["do"].string() != "air") continue;
-        const int t0 = e["t"].integer();
+        const int t0 = e["t"].tick();
         if (t < t0) break;
         Air to = now;
         const Value& fog = e["fog"];
@@ -471,7 +471,7 @@ inline Air air_at(const Value& events, int t) {
             to.background = true;
             for (int k = 0; k < 3; ++k) to.back[k] = unit(back[k], 0);
         }
-        const int len = std::max(0, e["length"].integer(30));
+        const int len = std::max(0, e["length"].tick(30));
         const float u = len > 0 ? std::min(1.0f, static_cast<float>(t - t0) / static_cast<float>(len)) : 1.0f;
         const auto mix = [u](float a, float b) { return a + (b - a) * u; };
         Air out = to;
@@ -498,10 +498,10 @@ inline float stretch_at(const Value& events, int t) {
     for (std::size_t i : by_time(list)) {
         const Value& e = list[i];
         if (e["do"].string() != "slow") continue;
-        const int t0 = e["t"].integer();
+        const int t0 = e["t"].tick();
         if (t < t0) break;
         const float to = std::clamp(static_cast<float>(e["stretch"].number(1)), 1.0f, 8.0f);
-        const int len = std::max(0, e["length"].integer(0));
+        const int len = std::max(0, e["length"].tick(0));
         const float u = len > 0 ? std::min(1.0f, static_cast<float>(t - t0) / static_cast<float>(len)) : 1.0f;
         now += (to - now) * u;
     }
@@ -551,7 +551,7 @@ inline float fov_at(const Value& keys, int t) {
         if (!k["fov"].is_number()) continue;
         const double f = k["fov"].number();
         if (!std::isfinite(f)) continue;
-        stops.emplace_back(k["t"].integer(), static_cast<float>(std::clamp(f, 1.0, 150.0)));
+        stops.emplace_back(k["t"].tick(), static_cast<float>(std::clamp(f, 1.0, 150.0)));
         cuts.push_back(k["cut"].boolean() ? 1 : 0);
     }
     if (stops.empty()) return 0.0f;
@@ -586,11 +586,11 @@ inline Look look_at(const Value& keys, int t) {
     float before = 0;
     for (std::size_t n = 0; n < order.size(); ++n) {
         const Value& k = all[order[n]];
-        const int kt = k["t"].integer();
+        const int kt = k["t"].tick();
         if (kt > t) break;
         const bool has_target = !k["target"].is_null() && (k["target"].is_array() || k["target"].is_object());
         const float w = has_target ? static_cast<float>(std::clamp(k["weight"].number(1), 0.0, 1.0)) : 0.0f;
-        const int blend = std::max(0, k["blend"].integer(10));
+        const int blend = std::max(0, k["blend"].tick(10));
         const float u = blend > 0 ? std::min(1.0f, static_cast<float>(t - kt) / static_cast<float>(blend)) : 1.0f;
         const float start = n == 0 ? 0.0f : before;
         look.key = has_target ? static_cast<int>(order[n]) : -1;
@@ -620,7 +620,7 @@ inline float weight_at(const Value& keys, int t) {
     const auto w = [&](std::size_t n) {
         return static_cast<float>(std::clamp(all[order[n]]["w"].number(1), 0.0, 1.0));
     };
-    const auto at = [&](std::size_t n) { return all[order[n]]["t"].integer(); };
+    const auto at = [&](std::size_t n) { return all[order[n]]["t"].tick(); };
     if (t <= at(0)) return w(0);
     std::size_t i = 0;
     while (i + 1 < order.size() && at(i + 1) <= t) ++i;
@@ -693,7 +693,7 @@ inline float music_gain(const std::string& mode, int t, float k) {
 // Where a walk is at t: 0 not started, 1 walking, 2 arrived (or a walk of no length).
 inline int walk_state(const Value& path, int t) {
     const auto& pts = path["points"].items();
-    const int start = path["t"].integer();
+    const int start = path["t"].tick();
     if (pts.size() < 2 || t < start) return 0;
     float total = 0;
     for (std::size_t i = 0; i + 1 < pts.size(); ++i) total += length(vec(pts[i + 1]) - vec(pts[i]));
@@ -780,7 +780,7 @@ inline std::vector<std::pair<std::string, float>> moods_at(const Value& keys, in
     const std::vector<std::size_t> order = by_time(all);
     int i = -1;
     for (std::size_t n = 0; n < order.size(); ++n) {
-        if (all[order[n]]["t"].integer() <= t) i = static_cast<int>(n);
+        if (all[order[n]]["t"].tick() <= t) i = static_cast<int>(n);
     }
     if (i < 0) return out;
     const auto add = [&](const Value& k, float w) {
@@ -796,8 +796,8 @@ inline std::vector<std::pair<std::string, float>> moods_at(const Value& keys, in
         out.emplace_back(mood, w);
     };
     const Value& now = all[order[static_cast<std::size_t>(i)]];
-    const int blend = std::max(0, now["blend"].integer(10));
-    const float u = blend == 0 ? 1.0f : std::clamp(static_cast<float>(t - now["t"].integer()) / blend, 0.0f, 1.0f);
+    const int blend = std::max(0, now["blend"].tick(10));
+    const float u = blend == 0 ? 1.0f : std::clamp(static_cast<float>(t - now["t"].tick()) / blend, 0.0f, 1.0f);
     add(now, u);
     if (i > 0 && u < 1) add(all[order[static_cast<std::size_t>(i - 1)]], 1 - u);
     return out;

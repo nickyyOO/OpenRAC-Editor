@@ -58,13 +58,17 @@ in the world still happens, as with a skip); in a party the host's setting count
 and each game plays the party's cutscenes on its own triggers.
 
 The player starts a cutscene only when the game would start one of its own: the player in
-control, on foot, alive, with no menu and no game scene playing. Until then it waits.
+control, on foot, alive, with no menu and no game scene playing (on a port that says so, also
+standing steady: not hurt, not on a ride, a lift or in water). Until then it waits, and a trigger
+that fired in the meantime still plays. Two that fire together play one after the other, in the
+order of their file names. A chain of `play` events and `after` triggers does not play a cutscene
+twice: a loop stops there.
 
 ## `options`
 
 | Key | Default | Meaning |
 |---|---|---|
-| `skippable` | true | Start skips it. On a skip the player applies the end state of every `persistent` event and puts actors where the cutscene leaves them |
+| `skippable` | true | Start skips it. On a skip the player applies the end state of every `persistent` event (and every `moby_kill` and `mission_flag`, which cannot be undone) and puts actors where the cutscene leaves them |
 | `letterbox` | true | Black bars, as the game's scenes |
 | `hide_hud` | true | The game's HUD is hidden while it plays (subtitles stay) |
 | `world` | `"run"` | `"run"`: the level goes on; `"hold"`: mobys that are not actors (nor the hero) do not update while it plays |
@@ -293,7 +297,9 @@ uses. `game_sound` is an entry of the actor's class's sound table (the hero's wh
 { "t": 0,   "do": "tie_hide", "tie": 42, "on": true }
 ```
 
-`persistent` events are the ones a skip must still apply.
+`persistent` events are the ones a skip must still apply. A `moby_hide` or `tie_hide` that is
+not `persistent` lasts only for the scene: what it hid shows again when the scene ends, so a skip
+leaves the level as watching does. A `moby_kill` and a `mission_flag` always last.
 
 A `fade` goes from the colour before it (none at first) to `to`, `[r, g, b]` or `[r, g, b, a]`
 from 0 to 1, over `length` ticks (30 if not given, 0 at once). `to` as `null` or with `a` 0 clears

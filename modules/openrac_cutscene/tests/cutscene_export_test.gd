@@ -911,6 +911,33 @@ func test_retarget() -> void:
 	back.from_cutscene(d)
 	var again = back.get_node_or_null("Dancer")
 	check(again != null and again.feet_on_ground, "feet on the ground again")
+	# A bake again over the same time replaces its keys, not adds to them.
+	layer.retarget(source, skeleton, {"UpperArm": 52}, 0.5)
+	check(anim.track_get_key_count(k) == 31, "baked again: %d keys" % anim.track_get_key_count(k))
+	# A turn all the way round: each key near the one before (no jump from 179 to -179).
+	var spin := Animation.new()
+	spin.length = 1.0
+	var sr := spin.add_track(Animation.TYPE_ROTATION_3D)
+	spin.track_set_path(sr, NodePath("Skeleton3D:UpperArm"))
+	for i in 9:
+		spin.rotation_track_insert_key(sr, i / 8.0, (rest * Basis(Vector3(0, 1, 0).rotated(Vector3(1, 0, 0), 0.3), i * PI / 4)).get_rotation_quaternion())
+	var spun = add(actor, CutsceneLayer.new(), root)
+	spun.name = "Spun"
+	spun.retarget(spin, skeleton, {"UpperArm": 80}, 0.0)
+	var ks := anim.find_track(NodePath(String(cs.get_path_to(spun)) + ":joint_80"), Animation.TYPE_VALUE)
+	var worst := 0.0
+	for i in range(1, anim.track_get_key_count(ks)):
+		var step: Vector3 = anim.track_get_key_value(ks, i) - anim.track_get_key_value(ks, i - 1)
+		worst = max(worst, max(abs(step.x), max(abs(step.y), abs(step.z))))
+	check(worst < 30.0, "a whole turn in small steps: worst %.1f degrees" % worst)
+	# Two layers whose names are one file name: two files.
+	var twin_layer = add(actor, CutsceneLayer.new(), root)
+	twin_layer.name = "turned"
+	twin_layer.joints = PackedInt32Array([5])
+	var files: Dictionary = {}
+	for l in cs.to_cutscene()["actors"][0].get("layers", []):
+		files[l["frames"]] = true
+	check(files.size() == 4, "one frames file a layer: %s" % [files.keys()])
 	skeleton.free()
 	root.queue_free()
 
