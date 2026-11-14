@@ -228,7 +228,8 @@ takes). The scale is shown in the editor only.
 mod's actor moves as smoothly as the game's scenes:
 
 - **Pose Source**: a scene or `.glb` with a Skeleton3D and an AnimationPlayer. **Pose Animation**:
-  its animation (the first if empty). **Pose Start**: where it starts on the timeline.
+  its animation (the first that is not `RESET` if empty). **Pose Start**: where it starts on the
+  timeline.
 - **Pose Map** empty: the skeleton's `joint_NNN` bones are the joints, and their turn, place and scale
   go across as they are. Use this for an animation keyed in Godot: make a new scene, instance the
   actor's `mobys/moby_<class>.tscn` in it, turn on **Editable Children**, and key the bones of its
@@ -243,7 +244,10 @@ mod's actor moves as smoothly as the game's scenes:
   target)`.
 
 A joint's place must stay within 32 units of its parent and its scale under 16; the bake clamps it
-and says so. To chain moves, put them one after the other in one animation before baking.
+and says so. Empty or switched-off tracks are skipped, and a broken key (NaN) keeps the joint's
+rest. The pose must end within ten minutes. A prop cannot take a pose: it plays its own `.glb`
+animations. Undo goes back to the pose file before. To chain moves, put them one after the other
+in one animation before baking.
 
 ### Face and gaits (version 1.2)
 

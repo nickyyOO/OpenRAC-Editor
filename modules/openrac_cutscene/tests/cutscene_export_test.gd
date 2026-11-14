@@ -1036,6 +1036,81 @@ func test_bake_pose() -> void:
 	var still := Animation.new()
 	still.length = 1.0
 	check(actor.bake_pose(still, skeleton).contains("nothing baked"), "an animation that moves nothing")
+	# Odd input: an empty track, a switched-off one and a NaN key make no engine error and no garbage.
+	var odd := Animation.new()
+	odd.length = 0.5
+	var empty := odd.add_track(Animation.TYPE_ROTATION_3D)
+	odd.track_set_path(empty, NodePath("Skeleton3D:joint_001"))
+	var off := odd.add_track(Animation.TYPE_POSITION_3D)
+	odd.track_set_path(off, NodePath("Skeleton3D:joint_002"))
+	odd.position_track_insert_key(off, 0.0, Vector3(9, 9, 9))
+	odd.track_set_enabled(off, false)
+	var nan_track := odd.add_track(Animation.TYPE_POSITION_3D)
+	odd.track_set_path(nan_track, NodePath("Skeleton3D:joint_000"))
+	odd.position_track_insert_key(nan_track, 0.0, Vector3(NAN, 0, 0))
+	odd.position_track_insert_key(nan_track, 0.5, Vector3(NAN, 0, 0))
+	actor.bake_pose(odd, skeleton)
+	bytes = FileAccess.get_file_as_bytes(actor.pose_file)
+	check(bytes.size() == 16 * 3 * 20, "16 frames: %d bytes" % bytes.size())
+	if bytes.size() == 16 * 3 * 20:
+		check(pose_record(bytes, 3, 15, 0)["place"].is_equal_approx(Vector3.ZERO), "a NaN place is the rest")
+		check(pose_record(bytes, 3, 15, 2)["place"].is_equal_approx(Vector3.ZERO), "a switched-off track does nothing")
+		check(near3([pose_record(bytes, 3, 15, 1)["place"].x, pose_record(bytes, 3, 15, 1)["place"].y, pose_record(bytes, 3, 15, 1)["place"].z], Vector3(0, 0, 1)), "an empty track keeps the rest")
+	# A map with a joint given as text, a joint past the model, or axes that are no axes: left out, said.
+	problems = actor.bake_pose(mocap, arm, {"Arm": "2"}, 0.0, model)
+	check(problems.contains("is not a joint"), "a joint as text: %s" % problems)
+	problems = actor.bake_pose(mocap, arm, {"Arm": {"joint": 2, "axes": Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO)}}, 0.0, model)
+	check(problems.contains("not a Basis"), "flat axes: %s" % problems)
+	problems = actor.bake_pose(mocap, arm, {"Arm": 7}, 0.0, model)
+	check(problems.contains("0 to 2"), "a joint past the model: %s" % problems)
+	# Too long, or on a prop: refused before anything is written.
+	check(actor.bake_pose(anim, skeleton, {}, 599.5).contains("ten minutes"), "past ten minutes")
+	actor.source = CutsceneActor.SOURCE_PROP
+	check(actor.bake_pose(anim, skeleton).contains("prop"), "a prop plays its own animations")
+	actor.source = CutsceneActor.SOURCE_NEW_MOBY
+	# The button: a saved scene whose first animation is RESET bakes the real one after it.
+	var rig := Node3D.new()
+	rig.name = "Rig"
+	var bones := Skeleton3D.new()
+	bones.name = "Skeleton3D"
+	for n in ["joint_000", "joint_001"]:
+		bones.add_bone(n)
+	rig.add_child(bones)
+	bones.owner = rig
+	var player := AnimationPlayer.new()
+	player.name = "AnimationPlayer"
+	rig.add_child(player)
+	player.owner = rig
+	var lib := AnimationLibrary.new()
+	var reset := Animation.new()
+	var rr := reset.add_track(Animation.TYPE_ROTATION_3D)
+	reset.track_set_path(rr, NodePath("Skeleton3D:joint_001"))
+	reset.rotation_track_insert_key(rr, 0.0, Quaternion())
+	lib.add_animation("RESET", reset)
+	var wave := Animation.new()
+	wave.length = 0.5
+	var wr := wave.add_track(Animation.TYPE_ROTATION_3D)
+	wave.track_set_path(wr, NodePath("Skeleton3D:joint_001"))
+	wave.rotation_track_insert_key(wr, 0.0, Quaternion(Vector3(0, 0, 1), PI / 2))
+	lib.add_animation("wave", wave)
+	player.add_animation_library("", lib)
+	var packed := PackedScene.new()
+	packed.pack(rig)
+	DirAccess.make_dir_recursive_absolute("user://t/level_15/cutscenes/anims")
+	ResourceSaver.save(packed, "user://t/level_15/cutscenes/anims/wave.tscn")
+	rig.free()
+	actor.pose_source = "user://t/level_15/cutscenes/anims/wave.tscn"
+	actor.pose_animation = ""
+	actor.pose_map = {}
+	actor.pose_start = 0.0
+	actor.get_bake_pose_action().call()
+	bytes = FileAccess.get_file_as_bytes(actor.pose_file)
+	check(actor.pose_joints == 2 and bytes.size() == 16 * 2 * 20, "the button baked the scene: %d joints, %d bytes" % [actor.pose_joints, bytes.size()])
+	if bytes.size() == 16 * 2 * 20:
+		check(pose_record(bytes, 2, 0, 1)["turn"].angle_to(Quaternion(Vector3(0, 0, 1), PI / 2)) < 0.001, "the real animation, not RESET")
+	# A pose file that went missing is said on export, not left out quietly.
+	actor.pose_file = "user://t/level_15/cutscenes/poses/gone.bin"
+	check("\n".join(cs.export_problems()).contains("pose file"), "a missing pose file is said")
 	skeleton.free()
 	model.free()
 	arm.free()

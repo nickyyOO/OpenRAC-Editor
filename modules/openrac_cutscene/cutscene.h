@@ -266,6 +266,7 @@ private:
 	String pose_animation;
 	Dictionary pose_map;
 	double pose_start = 0.0;
+	uint64_t pose_bakes = 0;  // how many bakes wrote a file
 	NodePath ride_on;
 	double ride_start = 0.0;
 	double ride_end = 0.0;
