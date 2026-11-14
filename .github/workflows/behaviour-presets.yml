@@ -1,0 +1,27 @@
+# The behaviour presets' tests (mods/behaviour-presets/tests): the presets' sums and the JSON reader,
+# with the address and undefined-behaviour sanitizers. They need no mod SDK and no game.
+name: behaviour-presets
+
+on:
+  pull_request:
+    paths: ["mods/behaviour-presets/**", ".github/workflows/behaviour-presets.yml"]
+  push:
+    branches: [main, master]
+    paths: ["mods/behaviour-presets/**", ".github/workflows/behaviour-presets.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Build
+        run: cmake -S mods/behaviour-presets/tests -B build/tests && cmake --build build/tests
+      - name: Test
+        run: ctest --test-dir build/tests --output-on-failure

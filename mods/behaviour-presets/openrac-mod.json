@@ -1,0 +1,16 @@
+{
+  "format": 2,
+  "id": "behaviour-presets",
+  "name": "Behaviour presets",
+  "version": "0.1.0",
+  "author": "OpenRAC",
+  "description": "Plays the behaviours given to mobys in OpenRAC Editor: spin, bob, patrol, orbit, face the hero, follow the hero.",
+  "license": "MIT",
+  "api": "1.15",
+  "games": {
+    "rac1": [
+      "pal",
+      "ntsc"
+    ]
+  }
+}

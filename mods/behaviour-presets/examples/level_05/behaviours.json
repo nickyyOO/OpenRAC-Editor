@@ -1,0 +1,4 @@
+{"format": 1, "mobys": [
+ {"spawn_id": 181, "preset": "spin", "speed": 180},
+ {"spawn_id": 469, "preset": "bob", "height": 3, "period": 1}
+]}

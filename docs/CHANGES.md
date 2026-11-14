@@ -54,6 +54,9 @@ These are deleted from the source:
   the file as pictures. Tests: `modules/openrac_cutscene/tests/run_tests.sh`.
 - **Cutscene player** (`mods/cutscene-player/`): the OpenRAC mod that plays the editor's
   cutscenes. See [CUTSCENE_FORMAT.md](CUTSCENE_FORMAT.md).
+- **Behaviour presets** (`mods/behaviour-presets/`): the OpenRAC mod that plays the simple
+  behaviours set in a moby's Inspector (spin, bob, patrol, orbit, face or follow the hero). See
+  [BEHAVIOUR_FORMAT.md](BEHAVIOUR_FORMAT.md).
 
 ## Build options
 
