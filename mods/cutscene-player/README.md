@@ -5,7 +5,7 @@ The editor packs each cutscene with its level (`level_NN/cutscenes/<name>.cutsce
 reads them when the level loads and starts each one when its trigger happens. The format is in
 [docs/CUTSCENE_FORMAT.md](../../docs/CUTSCENE_FORMAT.md).
 
-It uses only the port's mod interface (1.14; SDK 1.14.8 for the field of view, the hidden HUD, the
+It uses only the port's mod interface (1.15; SDK 1.15.1 for the field of view, the hidden HUD, the
 music, joint layers, joints as targets, sounds on actors, the air, slow motion, hidden ties, animated
 props and feet on the ground, which it skips on an older port), so
 the game's own logic is not changed. Start skips a cutscene that allows it.

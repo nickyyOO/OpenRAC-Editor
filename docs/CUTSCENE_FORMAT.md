@@ -326,7 +326,7 @@ again, when the scene ends, so a skip leaves the level as watching does. While t
 `moby_hide` holds: the player sets it again each tick, so a class whose own code hides or shows
 the moby (an amoeboid until Ratchet comes near) does not undo it. `spawn_id` is the record's uid
 (the editor's `rc1_spawn_id`), not its place in the level; the player maps one to the other with
-the port's `moby_uid` (SDK 1.14.9; an older port takes it as the place). A `moby_kill` and a
+the port's `moby_uid` (SDK 1.15.1). A `moby_kill` and a
 `mission_flag` always last.
 
 A `fade` goes from the colour before it (none at first) to `to`, `[r, g, b]` or `[r, g, b, a]`
@@ -401,8 +401,8 @@ Not kept: the actors' own joint animation, so they stand in their class's first 
 
 ## What the player does today (version 0.3)
 
-The player is a mod on the port's mod interface (1.14, with `pack_folder` and `game_language`; SDK
-1.14.8 adds what a scene needs: `camera_fov`, `hud_hide`, `music_volume`, `moby_set_joints`,
+The player is a mod on the port's mod interface (1.15, SDK 1.15.1: `pack_folder` and `game_language`, and
+what a scene needs: `camera_fov`, `hud_hide`, `music_volume`, `moby_set_joints`,
 `moby_joint_position`, `moby_sound_play`, `scene_air`, `time_stretch`, `tie_hide`, `prop_animate`,
 `moby_joint_frame`, `moby_set_joint_poses`). It plays all of this format: the triggers, `once` (per
 save, in the mod's data folder), variants, the hero held, hidden or an actor, camera keys (linear,
