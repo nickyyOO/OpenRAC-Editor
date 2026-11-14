@@ -1,13 +1,13 @@
-# The cutscene player's tests (mods/cutscene-player/tests): its JSON reader and the timeline's sums,
-# with the address and undefined-behaviour sanitizers. They need no mod SDK and no game.
-name: cutscene-player
+# editor-runtime's tests (mods/editor-runtime/tests): the JSON reader, the cutscene timeline and the
+# behaviour presets, with the address and undefined-behaviour sanitizers. No mod SDK and no game.
+name: editor-runtime
 
 on:
   pull_request:
-    paths: ["mods/cutscene-player/**", ".github/workflows/cutscene-player.yml"]
+    paths: ["mods/editor-runtime/**", ".github/workflows/editor-runtime.yml"]
   push:
     branches: [main, master]
-    paths: ["mods/cutscene-player/**", ".github/workflows/cutscene-player.yml"]
+    paths: ["mods/editor-runtime/**", ".github/workflows/editor-runtime.yml"]
 
 permissions:
   contents: read
@@ -22,6 +22,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Build
-        run: cmake -S mods/cutscene-player/tests -B build/tests && cmake --build build/tests
+        run: cmake -S mods/editor-runtime/tests -B build/tests && cmake --build build/tests
       - name: Test
         run: ctest --test-dir build/tests --output-on-failure

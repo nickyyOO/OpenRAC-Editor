@@ -12,7 +12,7 @@
 
 namespace behaviour {
 
-using json::Value;
+using cutscene::json::Value;
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kTicksPerSecond = 60.0;  // the port runs every disc at 60 ticks a second

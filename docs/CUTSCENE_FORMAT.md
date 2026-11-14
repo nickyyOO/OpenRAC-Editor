@@ -1,7 +1,7 @@
 # The .cutscene format (draft, version 1)
 
 One cutscene is one JSON file, `<name>.cutscene`, written by OpenRAC Editor and played by the
-OpenRAC cutscene player (`mods/cutscene-player`). The editor packs it with its level as
+cutscene player of the editor-runtime mod (`mods/editor-runtime`). The editor packs it with its level as
 `level_NN/cutscenes/<name>.cutscene`; files it names (voices, music, meshes) are paths beside it. It does not depend on the game: anything game-specific (class ids, joint
 numbers, sequence numbers, sound ids) is a number the game's own data gives, and the player maps
 it through the game's `openrac_api`.

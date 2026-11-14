@@ -1,10 +1,10 @@
 {
   "format": 2,
-  "id": "cutscene-player",
-  "name": "Cutscene player",
-  "version": "0.3.0",
+  "id": "editor-runtime",
+  "name": "OpenRAC Editor runtime",
+  "version": "0.4.0",
   "author": "OpenRAC",
-  "description": "Plays the cutscenes made in OpenRAC Editor: camera, characters, subtitles in the disc's language, voices and music. Start skips one.",
+  "description": "Plays what OpenRAC Editor packs with a level: its cutscenes (camera, characters, subtitles in the disc's language, voices, music; Start skips one) and the behaviours given to mobys (spin, bob, patrol, orbit, face or follow the hero). A level made in the editor needs it on.",
   "license": "MIT",
   "api": "1.15",
   "games": {

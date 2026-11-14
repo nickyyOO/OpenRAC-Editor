@@ -2,8 +2,8 @@
 
 A moby's Inspector in the editor has a **Behaviour** section: a simple movement the moby makes in
 the game instead of running its own logic. The level's pack writes them to
-`level_NN/behaviours.json`, beside the level's placements, and the behaviour presets mod
-(`mods/behaviour-presets`) plays them.
+`level_NN/behaviours.json`, beside the level's placements, and the editor-runtime mod
+(`mods/editor-runtime`) plays them.
 
 ```json
 {"format": 1, "mobys": [
@@ -30,4 +30,4 @@ The game's axes: z up, the yaw is a rotation about z, a yaw of 0 faces +x. Times
 game's ticks, 60 a second. A moby with a behaviour is driven by the mod (its own update does not
 run) from the tick it is first seen in a level load; a new load (a death too) starts it again
 from its place. It has no collision of its own: it goes through walls and floors. A moby that
-another mod drives (a cutscene's actor) keeps that one.
+another mod or a cutscene already drives keeps that one.

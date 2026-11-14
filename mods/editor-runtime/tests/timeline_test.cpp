@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Tests of the cutscene player's JSON reader and timeline sums, without the port:
+// Tests of editor-runtime's JSON reader and timeline sums, without the port:
 //   cmake -S tests -B build/tests && cmake --build build/tests && ctest --test-dir build/tests
 #include <clocale>
 #include <cmath>

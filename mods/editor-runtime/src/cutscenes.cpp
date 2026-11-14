@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenRAC cutscene player: plays the .cutscene files OpenRAC Editor packs with a level
+// The cutscene player of editor-runtime: plays the .cutscene files OpenRAC Editor packs with a level
 // (docs/CUTSCENE_FORMAT.md), through the port's mod interface only. It reads
 // <pack>/level_NN/cutscenes/*.cutscene when a level loads, starts each one when its trigger
 // happens, and drives the camera, the actors, the subtitles, the sounds and the events tick by tick.
@@ -1890,9 +1890,10 @@ void load(openrac::Mod& mod) {
     g_has_gate = g_api->on_moby_update(g_mod, moby_gate, nullptr) == OPENRAC_HOOK_OK;
     mod.on_frame(frame);
     mod.on_pad(on_pad);
-    mod.info("ready");
 }
 
 }  // namespace
 
-OPENRAC_MOD_CPP("cutscene-player", "0.3.0", load)
+namespace editor_runtime {
+void cutscenes_load(openrac::Mod& mod) { load(mod); }
+}  // namespace editor_runtime

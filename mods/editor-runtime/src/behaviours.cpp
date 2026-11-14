@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenRAC behaviour presets: simple behaviours given in OpenRAC Editor to mobys of a level (spin,
+// The behaviour presets of editor-runtime: simple behaviours given in OpenRAC Editor to mobys of a level (spin,
 // bob, patrol, orbit, face the hero, follow the hero), played through the port's mod interface only.
 // It reads <pack>/level_NN/behaviours.json when a level loads (docs/BEHAVIOUR_FORMAT.md), drives
 // each moby named there (its own update no longer runs) and poses it every tick.
@@ -180,9 +180,10 @@ void load(openrac::Mod& mod) {
         throw openrac::Error("behaviour presets need a newer OpenRAC (mod interface 1.15 with pack_folder)");
     }
     mod.on_frame(frame);
-    mod.info("ready");
 }
 
 }  // namespace
 
-OPENRAC_MOD_CPP("behaviour-presets", "0.1.0", load)
+namespace editor_runtime {
+void behaviours_load(openrac::Mod& mod) { load(mod); }
+}  // namespace editor_runtime

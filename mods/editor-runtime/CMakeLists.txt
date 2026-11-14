@@ -1,12 +1,12 @@
-# OpenRAC behaviour presets: an official mod of OpenRAC Editor that plays the simple behaviours
-# (spin, bob, patrol, orbit, face the hero, follow) the editor packs with a level.
+# editor-runtime: the official mod of OpenRAC Editor that plays what the editor packs with a level
+# (its cutscenes, docs/CUTSCENE_FORMAT.md, and its mobys' behaviours, docs/BEHAVIOUR_FORMAT.md).
 #
 #   python3 tools/fetch_sdk.py                     # the SDK sdk.lock pins, into .sdk/
 #   cmake -S . -B build -G Ninja                   # or -DOPENRAC_SDK=<OpenRAC checkout>/sdk
 #   cmake --build build
-#   python3 .sdk/openrac-mod-sdk-*/tools/package_mod.py build/package/behaviour_presets
+#   python3 .sdk/openrac-mod-sdk-*/tools/package_mod.py build/package/editor_runtime
 cmake_minimum_required(VERSION 3.20)
-project(behaviour_presets LANGUAGES C CXX)
+project(editor_runtime LANGUAGES C CXX)
 
 if(NOT OpenRACMod_DIR)
   if(DEFINED OPENRAC_SDK)
@@ -23,8 +23,8 @@ if(NOT OpenRACMod_DIR)
 endif()
 find_package(OpenRACMod 1.0 REQUIRED)
 
-openrac_add_mod(behaviour_presets MANIFEST openrac-mod.json SOURCES src/behaviours.cpp)
-target_compile_features(behaviour_presets PRIVATE cxx_std_20)
+openrac_add_mod(editor_runtime MANIFEST openrac-mod.json SOURCES src/main.cpp src/cutscenes.cpp src/behaviours.cpp)
+target_compile_features(editor_runtime PRIVATE cxx_std_20)
 if(NOT MSVC)
-  target_compile_options(behaviour_presets PRIVATE -Wall -Wextra)
+  target_compile_options(editor_runtime PRIVATE -Wall -Wextra)
 endif()
