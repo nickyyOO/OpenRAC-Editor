@@ -50,6 +50,9 @@ you put them.
   <img src="docs/assets/imported-turret.gif" alt="A Blarg turret from Gemlik placed on Eudora, turning to Ratchet and hitting him with its laser bolts" width="100%">
 </p>
 
+Mix characters from many planets in one level. Each one keeps its own animations and moves as it
+does at home.
+
 <p align="center">
   <img src="docs/assets/other-planets.gif" alt="Characters from other planets standing and moving around Ratchet on Kerwan" width="100%">
 </p>
