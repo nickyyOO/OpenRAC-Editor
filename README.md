@@ -80,7 +80,7 @@ Find any object of the game in the Assets dock, by name or class number, and dra
 level. It comes with its own logic, ready to play.
 
 <p align="center">
-  <img src="docs/assets/drag-asset.gif" alt="A vendor dragged from the Assets dock and dropped near Ratchet's start on Novalis" width="100%">
+  <img src="docs/assets/drag-asset.gif" alt="Searching the Assets dock for turret and dragging the Blarg turret in next to Ratchet on Novalis" width="100%">
 </p>
 
 ### Edit everything in the level
