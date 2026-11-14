@@ -47,6 +47,10 @@ keep their own logic: they walk their paths, guard their zones and fire their ow
 you put them.
 
 <p align="center">
+  <img src="docs/assets/imported-turret.gif" alt="A Blarg turret from Gemlik placed on Kerwan, turning and firing its laser bolts past Ratchet" width="100%">
+</p>
+
+<p align="center">
   <img src="docs/assets/other-planets.gif" alt="Characters from other planets standing and moving around Ratchet on Kerwan" width="100%">
 </p>
 
