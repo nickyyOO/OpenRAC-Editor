@@ -47,7 +47,7 @@ keep their own logic: they walk their paths, guard their zones and fire their ow
 you put them.
 
 <p align="center">
-  <img src="docs/assets/imported-turret.gif" alt="A Blarg turret from Gemlik placed on Kerwan, turning and firing its laser bolts past Ratchet" width="100%">
+  <img src="docs/assets/imported-turret.gif" alt="A Blarg turret from Gemlik placed on Eudora, turning to Ratchet and hitting him with its laser bolts" width="100%">
 </p>
 
 <p align="center">
@@ -68,12 +68,17 @@ in the Inspector and see it in the game.
 Key the camera, place characters, give them lines, voices and music, all on one timeline. The game
 plays your scene when its trigger happens, and Start skips it.
 
-<p align="center">
-  <img src="docs/assets/foot-ik.gif" alt="Ratchet standing on the edge of a step: without foot IK one foot floats over the grass, with foot IK one foot stands on the grass and the other on the step" width="80%">
-</p>
-
 Characters keep their feet on steps and slopes (foot IK), their mouths follow the voice, and
 subtitles come in every language your disc has. See [the cutscene format](docs/CUTSCENE_FORMAT.md).
+
+### Drag in any asset
+
+Find any object of the game in the Assets dock, by name or class number, and drag it into the
+level. It comes with its own logic, ready to play.
+
+<p align="center">
+  <img src="docs/assets/drag-asset.gif" alt="A vendor dragged from the Assets dock and dropped near Ratchet's start on Novalis" width="100%">
+</p>
 
 ### Edit everything in the level
 
