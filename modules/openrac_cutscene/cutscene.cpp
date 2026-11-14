@@ -2767,6 +2767,272 @@ String CutsceneActor::get_pose_file() const { return pose_file; }
 void CutsceneActor::set_pose_joints(int p_joints) { pose_joints = CLAMP(p_joints, 0, 255); }
 int CutsceneActor::get_pose_joints() const { return pose_joints; }
 void CutsceneActor::set_feet_on_ground(bool p_on) { feet_on_ground = p_on; }
+
+void CutsceneActor::set_pose_source(const String &p_path) { pose_source = p_path; }
+String CutsceneActor::get_pose_source() const { return pose_source; }
+void CutsceneActor::set_pose_animation(const String &p_name) { pose_animation = p_name; }
+String CutsceneActor::get_pose_animation() const { return pose_animation; }
+void CutsceneActor::set_pose_map(const Dictionary &p_map) { pose_map = p_map; }
+Dictionary CutsceneActor::get_pose_map() const { return pose_map; }
+void CutsceneActor::set_pose_start(double p_seconds) { pose_start = MAX(0.0, p_seconds); }
+double CutsceneActor::get_pose_start() const { return pose_start; }
+Callable CutsceneActor::get_bake_pose_action() { return callable_mp(this, &CutsceneActor::_bake_pose_from_source); }
+
+// The track of `p_type` that moves bone `p_bone` (its path's last part is the bone's name), or -1.
+static int bone_track(const Ref<Animation> &p_anim, const String &p_bone, Animation::TrackType p_type) {
+	for (int t = 0; t < p_anim->get_track_count(); t++) {
+		const NodePath path = p_anim->track_get_path(t);
+		if (p_anim->track_get_type(t) == p_type && path.get_subname_count() > 0 && String(path.get_subname(path.get_subname_count() - 1)) == p_bone) {
+			return t;
+		}
+	}
+	return -1;
+}
+
+// How many joints a skeleton has: one past its highest joint_NNN bone, 0 for none.
+static int joint_count(const Skeleton3D *p_skeleton) {
+	int count = 0;
+	for (int b = 0; b < p_skeleton->get_bone_count(); b++) {
+		const String name = p_skeleton->get_bone_name(b);
+		if (name.begins_with("joint_") && name.length() == 9 && name.substr(6).is_valid_int()) {
+			count = MAX(count, name.substr(6).to_int() + 1);
+		}
+	}
+	return count;
+}
+
+String CutsceneActor::bake_pose(const Ref<Animation> &p_source, Node *p_skeleton, const Dictionary &p_map, double p_start, Node *p_target) {
+	const Skeleton3D *source = Object::cast_to<Skeleton3D>(p_skeleton);
+	if (p_source.is_null() || source == nullptr) {
+		return "Bake Pose needs an animation and the Skeleton3D it moves.";
+	}
+	Cutscene *cutscene = cutscene_above(this);
+	const String dir = scene_dir_of(this);
+	if (cutscene == nullptr || dir.is_empty()) {
+		return "Bake Pose needs this actor in a Cutscene of a saved level scene.";
+	}
+	// The joints it turns: the actor's model's (or the given skeleton's), else the source's own.
+	const Skeleton3D *target = Object::cast_to<Skeleton3D>(p_target);
+	if (target == nullptr && preview != nullptr) {
+		TypedArray<Node> found = preview->find_children("*", "Skeleton3D", true, false);
+		target = found.is_empty() ? nullptr : Object::cast_to<Skeleton3D>(found[0]);
+	}
+	if (target == nullptr && p_map.is_empty()) {
+		target = source;
+	}
+	if (target == nullptr) {
+		return "Bake Pose with a map needs the actor's model (set its moby class) to know its joints.";
+	}
+	const int joints = joint_count(target);
+	if (joints == 0) {
+		return "The skeleton has no joint_NNN bones: map its bones to joints in Pose Map.";
+	}
+	PackedStringArray problems;
+	if (joints > 128) {
+		problems.push_back(vformat("the skeleton has %d joints: the game sets only the first 128", joints));
+	}
+
+	// Each joint's source: a bone of the same name, or the map's bone (and its axes).
+	struct Link {
+		int bone = -1;
+		bool direct = false;  // the bone's own turn, place and scale, as they are
+		Basis axes;
+		int rotation = -1, position = -1, scale = -1;
+	};
+	Vector<Link> links;
+	links.resize(joints);
+	if (p_map.is_empty()) {
+		for (int j = 0; j < joints; j++) {
+			Link &link = links.write[j];
+			const String name = vformat("joint_%03d", j);
+			link.bone = source->find_bone(name);
+			link.direct = link.bone >= 0;
+			link.rotation = bone_track(p_source, name, Animation::TYPE_ROTATION_3D);
+			link.position = bone_track(p_source, name, Animation::TYPE_POSITION_3D);
+			link.scale = bone_track(p_source, name, Animation::TYPE_SCALE_3D);
+		}
+	} else {
+		for (const Variant *key = p_map.next(nullptr); key != nullptr; key = p_map.next(key)) {
+			const String bone = *key;
+			const Variant value = p_map[*key];
+			int joint = -1;
+			Basis axes;
+			if (value.get_type() == Variant::DICTIONARY) {
+				const Dictionary d = value;
+				joint = d.get("joint", -1);
+				axes = d.get("axes", Basis());
+			} else {
+				joint = value;
+			}
+			const int b = source->find_bone(bone);
+			if (b < 0) {
+				problems.push_back(vformat("the skeleton has no bone \"%s\"", bone));
+				continue;
+			}
+			if (joint < 0 || joint >= joints) {
+				problems.push_back(vformat("bone \"%s\": %s is not a joint of the actor (0 to %d)", bone, String(value), joints - 1));
+				continue;
+			}
+			if (links[joint].bone >= 0) {
+				problems.push_back(vformat("bone \"%s\": joint %d has another bone already, left out", bone, joint));
+				continue;
+			}
+			Link &link = links.write[joint];
+			link.bone = b;
+			link.axes = axes.orthonormalized();
+			link.rotation = bone_track(p_source, bone, Animation::TYPE_ROTATION_3D);
+			if (link.rotation < 0) {
+				problems.push_back(vformat("the animation does not turn bone \"%s\": joint %d is kept still", bone, joint));
+			}
+		}
+	}
+	bool moved = false;
+	for (const Link &link : links) {
+		moved = moved || link.rotation >= 0 || link.position >= 0 || link.scale >= 0;
+	}
+	if (!moved) {
+		problems.push_back("the animation moves none of the joints: nothing baked");
+		return String("\n").join(problems);
+	}
+
+	// One frame per 30 Hz frame up to the animation's end; before its start the first holds.
+	const double length = p_source->get_length();
+	const int frames = int(Math::ceil((p_start + length) * 30.0 - 1e-6)) + 1;
+	PackedByteArray out;
+	out.resize(frames * joints * 20);
+	uint8_t *w = out.ptrw();
+	Vector<Quaternion> before;
+	before.resize(joints);
+	bool too_far = false, too_big = false;
+	auto put = [&](int p_value) {
+		encode_uint16(uint16_t(p_value), w);
+		w += 2;
+	};
+	for (int f = 0; f < frames; f++) {
+		const double time = CLAMP(f / 30.0 - p_start, 0.0, length);
+		for (int j = 0; j < joints; j++) {
+			const Link &link = links[j];
+			const int tb = target->find_bone(vformat("joint_%03d", j));
+			const Transform3D rest = tb >= 0 ? target->get_bone_rest(tb) : Transform3D();
+			Quaternion q = rest.basis.get_rotation_quaternion();
+			Vector3 t = rest.origin;
+			Vector3 sc = rest.basis.get_scale();
+			if (link.direct) {
+				const Transform3D own = source->get_bone_rest(link.bone);
+				q = link.rotation >= 0 ? p_source->rotation_track_interpolate(link.rotation, time) : own.basis.get_rotation_quaternion();
+				t = link.position >= 0 ? p_source->position_track_interpolate(link.position, time) : own.origin;
+				sc = link.scale >= 0 ? p_source->scale_track_interpolate(link.scale, time) : own.basis.get_scale();
+			} else if (link.bone >= 0 && link.rotation >= 0) {
+				// The bone's turn from its rest, in the joint's axes, on top of the joint's rest.
+				const Quaternion from = source->get_bone_rest(link.bone).basis.get_rotation_quaternion();
+				const Quaternion pose = p_source->rotation_track_interpolate(link.rotation, time);
+				q = q * Quaternion(link.axes * Basis(from.inverse() * pose) * link.axes.inverse());
+			}
+			q = q.normalized();
+			// Keep neighbours in one hemisphere (q and -q are the same turn), so the blend between frames is short.
+			if (f > 0 && q.dot(before[j]) < 0) {
+				q = -q;
+			}
+			before.write[j] = q;
+			for (int k = 0; k < 4; k++) {
+				put(CLAMP(int(Math::round(q[k] * 32767.0)), -32767, 32767));
+			}
+			for (int k = 0; k < 3; k++) {
+				const int v = int(Math::round(t[k] * 1024.0));
+				too_far = too_far || v < -32768 || v > 32767;
+				put(CLAMP(v, -32768, 32767));
+			}
+			for (int k = 0; k < 3; k++) {
+				const int v = int(Math::round(sc[k] * 4096.0));
+				too_big = too_big || v < 0 || v > 65535;
+				put(CLAMP(v, 0, 65535));
+			}
+		}
+	}
+	if (too_far) {
+		problems.push_back("a joint goes more than 32 units from its parent: it stops there");
+	}
+	if (too_big) {
+		problems.push_back("a joint scales above 16 times (or below 0): it stops there");
+	}
+
+	const String file = dir.path_join("cutscenes/poses").path_join(vformat("%s_%s.bin", cutscene->get_cutscene_id(), get_effective_id()).validate_filename());
+	DirAccess::make_dir_recursive_absolute(file.get_base_dir());
+	Ref<FileAccess> fa = FileAccess::open(file, FileAccess::WRITE);
+	if (fa.is_null()) {
+		problems.push_back(vformat("cannot write %s", file));
+		return String("\n").join(problems);
+	}
+	fa->store_buffer(out);
+	fa.unref();
+	set_pose_file(file);
+	set_pose_joints(joints);
+	pose_loaded = String();  // read the new frames on the next preview
+	const Ref<Animation> timeline = cutscene->get_timeline_animation();
+	const double cutscene_length = timeline.is_valid() ? timeline->get_length() : cutscene->get_length();
+	if (p_start + length > cutscene_length + 1e-6) {
+		problems.push_back(vformat("the animation ends at %.2f s, after the cutscene's %.2f s: lengthen the cutscene to see the end", p_start + length, cutscene_length));
+	}
+	notify_property_list_changed();
+	return String("\n").join(problems);
+}
+
+// Loads a scene with a Skeleton3D and an AnimationPlayer and finds its animation `p_name` (the first
+// if empty). The caller frees `r_instance`.
+static String load_animated_skeleton(const String &p_path, const String &p_name, Node *&r_instance, Skeleton3D *&r_skeleton, Ref<Animation> &r_animation) {
+	r_instance = nullptr;
+	r_skeleton = nullptr;
+	Ref<PackedScene> scene = p_path.is_empty() ? Ref<PackedScene>() : Ref<PackedScene>(ResourceLoader::load(p_path));
+	if (scene.is_null()) {
+		return vformat("Cannot load \"%s\" as a scene: give a .glb or scene with a Skeleton3D and its animation.", p_path);
+	}
+	r_instance = scene->instantiate();
+	if (r_instance == nullptr) {
+		return vformat("Cannot make an instance of %s.", p_path);
+	}
+	TypedArray<Node> found = r_instance->find_children("*", "Skeleton3D", true, false);
+	if (!found.is_empty()) {
+		r_skeleton = Object::cast_to<Skeleton3D>(found[0]);
+	}
+	found = r_instance->find_children("*", "AnimationPlayer", true, false);
+	for (int i = 0; i < found.size() && r_animation.is_null(); i++) {
+		const AnimationPlayer *player = Object::cast_to<AnimationPlayer>(found[i]);
+		LocalVector<StringName> names;
+		player->get_animation_list(&names);
+		for (const StringName &name : names) {
+			if (p_name.is_empty() || String(name) == p_name || String(name).get_slice("/", 1) == p_name) {
+				r_animation = player->get_animation(name);
+				break;
+			}
+		}
+	}
+	if (r_skeleton == nullptr || r_animation.is_null()) {
+		return vformat("%s has no Skeleton3D, or no animation \"%s\".", p_path, p_name);
+	}
+	return String();
+}
+
+void CutsceneActor::_bake_pose_from_source() {
+	Node *instance = nullptr;
+	Skeleton3D *skeleton = nullptr;
+	Ref<Animation> animation;
+	const String error = load_animated_skeleton(pose_source, pose_animation, instance, skeleton, animation);
+	if (!error.is_empty()) {
+		if (instance != nullptr) {
+			memdelete(instance);
+		}
+		ERR_FAIL_MSG("Bake Pose: " + error);
+	}
+	const String problems = bake_pose(animation, skeleton, pose_map, pose_start, nullptr);
+	memdelete(instance);
+	if (!problems.is_empty()) {
+		WARN_PRINT("Bake Pose: " + problems);
+	}
+	if (!pose_file.is_empty()) {
+		print_line(vformat("Actor \"%s\" plays %s (%d joints).", get_effective_id(), pose_file, pose_joints));
+	}
+}
+
 bool CutsceneActor::get_feet_on_ground() const { return feet_on_ground; }
 
 Dictionary CutsceneActor::known_rig(const String &p_game, int p_class) {
@@ -2888,8 +3154,24 @@ void CutsceneActor::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_pose_file"), &CutsceneActor::get_pose_file);
 	ClassDB::bind_method(D_METHOD("set_pose_joints", "joints"), &CutsceneActor::set_pose_joints);
 	ClassDB::bind_method(D_METHOD("get_pose_joints"), &CutsceneActor::get_pose_joints);
+	ClassDB::bind_method(D_METHOD("set_pose_source", "path"), &CutsceneActor::set_pose_source);
+	ClassDB::bind_method(D_METHOD("get_pose_source"), &CutsceneActor::get_pose_source);
+	ClassDB::bind_method(D_METHOD("set_pose_animation", "name"), &CutsceneActor::set_pose_animation);
+	ClassDB::bind_method(D_METHOD("get_pose_animation"), &CutsceneActor::get_pose_animation);
+	ClassDB::bind_method(D_METHOD("set_pose_map", "map"), &CutsceneActor::set_pose_map);
+	ClassDB::bind_method(D_METHOD("get_pose_map"), &CutsceneActor::get_pose_map);
+	ClassDB::bind_method(D_METHOD("set_pose_start", "seconds"), &CutsceneActor::set_pose_start);
+	ClassDB::bind_method(D_METHOD("get_pose_start"), &CutsceneActor::get_pose_start);
+	ClassDB::bind_method(D_METHOD("get_bake_pose_action"), &CutsceneActor::get_bake_pose_action);
+	ClassDB::bind_method(D_METHOD("bake_pose", "source", "skeleton", "map", "start", "target"), &CutsceneActor::bake_pose, DEFVAL(Dictionary()), DEFVAL(0.0), DEFVAL(Variant()));
+	ADD_GROUP("Pose", "pose_");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "pose_file", PROPERTY_HINT_FILE, "*.bin"), "set_pose_file", "get_pose_file");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "pose_joints", PROPERTY_HINT_RANGE, "0,255,1"), "set_pose_joints", "get_pose_joints");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "pose_source", PROPERTY_HINT_FILE, "*.glb,*.gltf,*.tscn,*.scn"), "set_pose_source", "get_pose_source");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "pose_animation", PROPERTY_HINT_PLACEHOLDER_TEXT, "the first"), "set_pose_animation", "get_pose_animation");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "pose_map", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_pose_map", "get_pose_map");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pose_start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_pose_start", "get_pose_start");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "pose_bake", PROPERTY_HINT_TOOL_BUTTON, "Bake Pose,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_bake_pose_action");
 	ADD_GROUP("Advanced", "");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "advanced", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_advanced", "get_advanced");
 
@@ -3343,35 +3625,17 @@ String CutsceneLayer::copy_keys_from(Node *p_layer, double p_offset) {
 
 void CutsceneLayer::_retarget_from_source() {
 	ERR_FAIL_COND_MSG(retarget_source.is_empty(), "Set Retarget Source: a .glb or scene with a Skeleton3D and its animation.");
-	Ref<PackedScene> scene = ResourceLoader::load(retarget_source);
-	ERR_FAIL_COND_MSG(scene.is_null(), vformat("Cannot load %s as a scene.", retarget_source));
-	Node *instance = scene->instantiate();
-	ERR_FAIL_NULL(instance);
+	Node *instance = nullptr;
 	Skeleton3D *skeleton = nullptr;
-	AnimationPlayer *player = nullptr;
-	TypedArray<Node> found = instance->find_children("*", "Skeleton3D", true, false);
-	if (!found.is_empty()) {
-		skeleton = Object::cast_to<Skeleton3D>(found[0]);
-	}
-	found = instance->find_children("*", "AnimationPlayer", true, false);
-	if (!found.is_empty()) {
-		player = Object::cast_to<AnimationPlayer>(found[0]);
-	}
 	Ref<Animation> source;
-	if (player != nullptr) {
-		LocalVector<StringName> names;
-		player->get_animation_list(&names);
-		for (const StringName &name : names) {
-			if (retarget_animation.is_empty() || String(name) == retarget_animation || String(name).get_slice("/", 1) == retarget_animation) {
-				source = player->get_animation(name);
-				break;
-			}
+	const String error = load_animated_skeleton(retarget_source, retarget_animation, instance, skeleton, source);
+	if (!error.is_empty()) {
+		if (instance != nullptr) {
+			memdelete(instance);
 		}
+		ERR_FAIL_MSG(error);
 	}
-	if (skeleton == nullptr || source.is_null()) {
-		memdelete(instance);
-		ERR_FAIL_MSG(vformat("%s has no Skeleton3D, or no animation \"%s\".", retarget_source, retarget_animation));
-	}
+	const Ref<PackedScene> scene = ResourceLoader::load(retarget_source);
 	const String problems = retarget(source, skeleton, retarget_map, retarget_start);
 	memdelete(instance);
 	if (!problems.is_empty()) {

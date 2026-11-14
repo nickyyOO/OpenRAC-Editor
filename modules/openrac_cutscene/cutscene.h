@@ -260,12 +260,19 @@ private:
 	int pose_joints = 0;
 	PackedByteArray pose_bytes;
 	String pose_loaded;
+	// Bake Pose: a skeleton's animation (a scene or .glb), how its bones map to the joints, and
+	// where it starts on the timeline.
+	String pose_source;
+	String pose_animation;
+	Dictionary pose_map;
+	double pose_start = 0.0;
 	NodePath ride_on;
 	double ride_start = 0.0;
 	double ride_end = 0.0;
 
 	void _take_selected_moby();
 	void _use_known_rig();
+	void _bake_pose_from_source();
 
 	// In the editor: the actor's model (its moby class's scene, or the prop), not saved, posed in
 	// the game's sequence at the timeline's time, so the 3D view shows what the game will play.
@@ -322,6 +329,22 @@ public:
 	String get_pose_file() const;
 	void set_pose_joints(int p_joints);
 	int get_pose_joints() const;
+	// Bakes `p_source` (an animation of the Skeleton3D `p_skeleton`) into the actor's pose file,
+	// one frame per 30 Hz frame from 0 to its end at `p_start` seconds. With an empty `p_map` the
+	// skeleton's joint_NNN bones are the joints and give their turn, place and scale as they are;
+	// else the map's bones turn the joints of `p_target` (the actor's model if null) from their rest,
+	// as a layer's retarget does. Writes cutscenes/poses/<cutscene>_<actor>.bin beside the level
+	// scene and returns what it could not do (empty when all went well).
+	String bake_pose(const Ref<Animation> &p_source, Node *p_skeleton, const Dictionary &p_map, double p_start, Node *p_target);
+	void set_pose_source(const String &p_path);
+	String get_pose_source() const;
+	void set_pose_animation(const String &p_name);
+	String get_pose_animation() const;
+	void set_pose_map(const Dictionary &p_map);
+	Dictionary get_pose_map() const;
+	void set_pose_start(double p_seconds);
+	double get_pose_start() const;
+	Callable get_bake_pose_action();
 	// Another actor (or the hero's figure) this one rides on from `ride_start` to `ride_end` (0: to the
 	// end): in the game it keeps its place against the carrier from then on.
 	void set_ride_on(const NodePath &p_actor);

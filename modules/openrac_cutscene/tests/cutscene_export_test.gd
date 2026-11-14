@@ -956,6 +956,92 @@ func test_retarget() -> void:
 	root.queue_free()
 
 
+# A joint's pose record in a pose file: frame f, joint j of `joints`.
+func pose_record(bytes: PackedByteArray, joints: int, f: int, j: int) -> Dictionary:
+	var at := (f * joints + j) * 20
+	var q := Quaternion(bytes.decode_s16(at), bytes.decode_s16(at + 2), bytes.decode_s16(at + 4), bytes.decode_s16(at + 6)).normalized()
+	var t := Vector3(bytes.decode_s16(at + 8), bytes.decode_s16(at + 10), bytes.decode_s16(at + 12)) / 1024.0
+	var s := Vector3(bytes.decode_u16(at + 14), bytes.decode_u16(at + 16), bytes.decode_u16(at + 18)) / 4096.0
+	return {"turn": q, "place": t, "scale": s}
+
+
+func test_bake_pose() -> void:
+	var root := make_level("user://t/level_15", {"level": 15, "version": "pal"})
+	var cs = add(root.get_node("Game"), Cutscene.new(), root)
+	cs.name = "Dance"
+	timeline(cs, 1.0)
+	var actor = add(cs, CutsceneActor.new(), root)
+	actor.name = "Vendor"
+	actor.source = CutsceneActor.SOURCE_NEW_MOBY
+	actor.moby_class = 500
+	# Keyed in Godot on the class's own skeleton: joint_NNN bones, taken as they are.
+	var skeleton := Skeleton3D.new()
+	for n in ["joint_000", "joint_001", "joint_002"]:
+		skeleton.add_bone(n)
+	skeleton.set_bone_parent(1, 0)
+	skeleton.set_bone_rest(1, Transform3D(Basis(), Vector3(0, 0, 1)))
+	var anim := Animation.new()
+	anim.length = 1.0
+	var r := anim.add_track(Animation.TYPE_ROTATION_3D)
+	anim.track_set_path(r, NodePath("Skeleton3D:joint_001"))
+	anim.rotation_track_insert_key(r, 0.0, Quaternion())
+	anim.rotation_track_insert_key(r, 1.0, Quaternion(Vector3(1, 0, 0), PI / 2))
+	var p := anim.add_track(Animation.TYPE_POSITION_3D)
+	anim.track_set_path(p, NodePath("Skeleton3D:joint_000"))
+	anim.position_track_insert_key(p, 0.0, Vector3.ZERO)
+	anim.position_track_insert_key(p, 1.0, Vector3(2, 0, 0))
+	var problems: String = actor.bake_pose(anim, skeleton, {}, 0.5)
+	check(problems.contains("after the cutscene's 1.00 s"), "told it ends after the cutscene: %s" % problems)
+	check(actor.pose_file == "user://t/level_15/cutscenes/poses/dance_vendor.bin", "the pose file beside the level: %s" % actor.pose_file)
+	check(actor.pose_joints == 3, "three joints: %d" % actor.pose_joints)
+	var bytes := FileAccess.get_file_as_bytes(actor.pose_file)
+	check(bytes.size() == 46 * 3 * 20, "a frame each 30 Hz frame to 1.5 s: %d bytes" % bytes.size())
+	if bytes.size() == 46 * 3 * 20:
+		var first := pose_record(bytes, 3, 0, 1)
+		var last := pose_record(bytes, 3, 45, 1)
+		check(first["turn"].is_equal_approx(Quaternion()) and near3([first["place"].x, first["place"].y, first["place"].z], Vector3(0, 0, 1)), "before its start the first frame holds: %s" % [first])
+		check(last["turn"].angle_to(Quaternion(Vector3(1, 0, 0), PI / 2)) < 0.001, "turned 90 degrees at the end: %s" % [last["turn"]])
+		var mid := pose_record(bytes, 3, 30, 0)
+		check(near3([mid["place"].x, mid["place"].y, mid["place"].z], Vector3(1, 0, 0), 0.002), "half way there at 1.0 s: %s" % [mid["place"]])
+		check(pose_record(bytes, 3, 45, 2)["scale"].is_equal_approx(Vector3.ONE), "a joint it does not move keeps its rest")
+	var d: Dictionary = cs.to_cutscene()
+	check(same(d["actors"][0].get("pose", {}), {"frames": "poses/dance_vendor.bin", "joints": 3}), "the file names it: %s" % [d["actors"][0].get("pose")])
+	# Made elsewhere (Blender): the map's bone turns a joint of the actor's skeleton from its rest.
+	var model := Skeleton3D.new()
+	for n in ["joint_000", "joint_001", "joint_002"]:
+		model.add_bone(n)
+	var joint_rest := Basis(Vector3(0, 0, 1), deg_to_rad(30))
+	model.set_bone_rest(2, Transform3D(joint_rest, Vector3(0, 1, 0)))
+	var arm := Skeleton3D.new()
+	arm.add_bone("Arm")
+	var arm_rest := Basis(Vector3(0, 1, 0), deg_to_rad(45))
+	arm.set_bone_rest(0, Transform3D(arm_rest, Vector3.ZERO))
+	var mocap := Animation.new()
+	mocap.length = 1.0
+	var mr := mocap.add_track(Animation.TYPE_ROTATION_3D)
+	mocap.track_set_path(mr, NodePath("Armature/Skeleton3D:Arm"))
+	mocap.rotation_track_insert_key(mr, 0.0, arm_rest.get_rotation_quaternion())
+	mocap.rotation_track_insert_key(mr, 1.0, (arm_rest * Basis(Vector3(1, 0, 0), PI / 2)).get_rotation_quaternion())
+	problems = actor.bake_pose(mocap, arm, {"Arm": 2, "Tail": 1, "Leg": 9}, 0.0, model)
+	check(problems.contains("no bone \"Tail\"") and problems.contains("no bone \"Leg\""), "what it could not do: %s" % problems)
+	bytes = FileAccess.get_file_as_bytes(actor.pose_file)
+	check(bytes.size() == 31 * 3 * 20, "31 frames: %d bytes" % bytes.size())
+	if bytes.size() == 31 * 3 * 20:
+		var end := pose_record(bytes, 3, 30, 2)
+		var want := (joint_rest * Basis(Vector3(1, 0, 0), PI / 2)).get_rotation_quaternion()
+		check(end["turn"].angle_to(want) < 0.001, "the joint's rest turned by the bone's move: %s" % [end["turn"]])
+		check(near3([end["place"].x, end["place"].y, end["place"].z], Vector3(0, 1, 0)), "its place stays the joint's own")
+		check(pose_record(bytes, 3, 30, 0)["turn"].is_equal_approx(Quaternion()), "an unmapped joint stays at rest")
+	# Nothing to bake: no file changes, and it says why.
+	var still := Animation.new()
+	still.length = 1.0
+	check(actor.bake_pose(still, skeleton).contains("nothing baked"), "an animation that moves nothing")
+	skeleton.free()
+	model.free()
+	arm.free()
+	root.queue_free()
+
+
 # Numbers past a float and keys past the end: imported and written back without an engine error.
 func test_odd_numbers() -> void:
 	var root := make_level("user://t/level_06", {"level": 6, "version": "ntsc"})
@@ -1063,6 +1149,7 @@ func _process(_delta: float) -> bool:
 	test_game_view()
 	test_layers()
 	test_retarget()
+	test_bake_pose()
 	test_inspector_fields()
 	test_smooth_with_cuts()
 	print("cutscene export: ", "%d check(s) failed" % failures if failures else "all checks passed")

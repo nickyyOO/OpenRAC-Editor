@@ -224,6 +224,27 @@ the editor the actor's model shows the pose; the player sets every joint's turn 
 of the class's animation (the port's `moby_set_joint_poses`; the first 128 joints, the most the port
 takes). The scale is shown in the editor only.
 
+**Your own pose.** An actor's **Pose** group bakes any skeleton animation into its pose file, so a
+mod's actor moves as smoothly as the game's scenes:
+
+- **Pose Source**: a scene or `.glb` with a Skeleton3D and an AnimationPlayer. **Pose Animation**:
+  its animation (the first if empty). **Pose Start**: where it starts on the timeline.
+- **Pose Map** empty: the skeleton's `joint_NNN` bones are the joints, and their turn, place and scale
+  go across as they are. Use this for an animation keyed in Godot: make a new scene, instance the
+  actor's `mobys/moby_<class>.tscn` in it, turn on **Editable Children**, and key the bones of its
+  Skeleton3D in a new animation (or duplicate one of the class's own and change it).
+- **Pose Map** set (Blender, Mixamo, mocap): `{"UpperArm.L": 52}` or `{"UpperArm.L": {"joint": 52,
+  "axes": Basis}}`, as a layer's Retarget map. Each mapped bone's turn from its rest turns that joint
+  from the joint's rest; other joints stay at rest. Bone lengths and the body's travel do not go
+  across: move the actor with `track` or `path`.
+- **Bake Pose** writes `cutscenes/poses/<cutscene>_<actor>.bin`, one frame per 30 Hz frame up to the
+  animation's end (the first frame holds before **Pose Start**), and sets **Pose File** and **Pose
+  Joints**. It says what it could not do. From a script: `bake_pose(animation, skeleton, map, start,
+  target)`.
+
+A joint's place must stay within 32 units of its parent and its scale under 16; the bake clamps it
+and says so. To chain moves, put them one after the other in one animation before baking.
+
 ### Face and gaits (version 1.2)
 
 ```jsonc
@@ -397,7 +418,7 @@ The game's own in-engine scenes can be a start: OpenRAC's `editor/game_scenes.py
 --out DIR` writes each of a level's scenes as `game_scene_KK.cutscene`, with its speech as WAV per
 language. It keeps the camera (a key a tick, its cuts and field of view), each actor's class, place
 and size, the subtitles and the speech; the first hero actor becomes a figure and the hero is hidden.
-Not kept: the actors' own joint animation, so they stand in their class's first animation.
+It also writes each actor's own joint animation as a pose file (see Pose).
 
 ## What the player does today (version 0.3)
 
