@@ -1048,7 +1048,7 @@ func check_limits() -> PackedStringArray:
 				out.append("A face at %s is too far from the middle of the level." % (Vector3(p) / UNIT))
 				break
 	if not estimate_complete:
-		out.append("some cell estimates were skipped because face bounds span more than %d cells" % ESTIMATE_CELL_LIMIT)
+		out.append("Some areas were too big to check.")
 
 	return out
 

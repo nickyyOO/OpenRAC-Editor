@@ -2111,6 +2111,7 @@ AnimationTimelineEdit::AnimationTimelineEdit() {
 	loop->connect(SceneStringName(pressed), callable_mp(this, &AnimationTimelineEdit::_anim_loop_pressed));
 	loop->set_toggle_mode(true);
 	len_hb->add_child(loop);
+	loop->hide(); // OpenRAC Editor: cutscenes play once.
 	add_child(len_hb);
 
 	add_track->hide();
@@ -5490,7 +5491,7 @@ void AnimationTrackEditor::_snap_mode_changed(int p_mode) {
 	if (use_fps) {
 		fps_compat->hide();
 	} else {
-		fps_compat->show();
+		fps_compat->hide(); // OpenRAC Editor: no frames-compatible switch.
 	}
 	_update_step_spinbox();
 }
@@ -8415,6 +8416,12 @@ AnimationTrackEditor::AnimationTrackEditor() {
 	auto_fit_bezier->set_shortcut(ED_GET_SHORTCUT("animation_editor/auto_fit"));
 	auto_fit_bezier->set_accessibility_name(TTRC("Auto Fit Curves"));
 	bottom_hf->add_child(auto_fit_bezier);
+
+	// OpenRAC Editor: a cutscene's keys need no function names, selection filter, sorting, grouping or
+	// frames mode (cutscene time is in seconds).
+	for (Control *extra : { (Control *)function_name_toggler, (Control *)selected_filter, (Control *)alphabetic_sorting, (Control *)view_group, (Control *)snap_mode }) {
+		extra->hide();
+	}
 
 	edit = memnew(MenuButton);
 	edit->set_shortcut_context(this);

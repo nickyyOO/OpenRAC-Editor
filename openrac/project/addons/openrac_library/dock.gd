@@ -284,18 +284,17 @@ func show_selected() -> void:
 	var status: String = Library.status(asset, here)
 	var refusal: String = Library.import_refusal(asset, here)
 	var colour: Color = FULL_COLOUR if status == Library.FULL else (IMPORT_COLOUR if refusal.is_empty() else LOOK_COLOUR)
-	details.text = "[b][color=#%s]%s[/color][/b]  class %d\n%s" % [colour.to_html(false),
+	details.text = "[b][color=#%s]%s[/color][/b]  type %d\n%s" % [colour.to_html(false),
 		asset["name"], int(asset["class"]), Library.origin(asset)]
 
 	add_button.disabled = here.is_empty()
-	add_button.text = "Add in front of the camera" + (" (moves as in game)" if status == Library.FULL else " (scenery only)")
+	add_button.text = "Add"
 	add_button.tooltip_text = ("Open a level first." if here.is_empty() else
 		"The game's own %s of this level." % asset["kind"].trim_suffix("s") if status == Library.FULL else
 		"Scenery only. Or drag it into the 3D view.")
 	own_button.disabled = not refusal.is_empty()
 	own_button.tooltip_text = (refusal if not refusal.is_empty() else
-		"Brings its class and logic from its level, with the paths, zones and mobys it needs. "
-		+ "Pack, then play. Costs about 0.5 ms a frame each.")
+		"Brings it from its level with what it needs. May slow the game a little.")
 	as_button.disabled = not can_add_as(asset)
 	as_button.tooltip_text = ("Pick a type of this level: it acts like that type and looks like this."
 		if can_add_as(asset) else "Only for objects this level doesn't have.")
@@ -376,14 +375,14 @@ func rescan() -> void:
 
 		for kind in Library.KINDS:
 			var kind_item: TreeItem = tree.create_item(level_item)
-			kind_item.set_text(0, kind.capitalize())
+			kind_item.set_text(0, {"mobys": "Objects", "ties": "Big scenery", "shrubs": "Small scenery"}.get(kind, kind.capitalize()))
 			kind_item.set_metadata(0, {"level": level, "kind": kind})
 
 		level_item.collapsed = true
 
 	fill_planets()
 	fit_tree()
-	show_report("%d levels found in %d games." % [levels.size(), folders.size()] if not levels.is_empty()
+	show_report(("%d %s found." % [levels.size(), "level" if levels.size() == 1 else "levels"]) if not levels.is_empty()
 		else "No levels found. Read your disc in the launcher's Level editor tab first.")
 	refill()
 
@@ -559,7 +558,7 @@ func tooltip(asset: Dictionary, status: String) -> String:
 		+ ("\nOr \"Add with its own logic\": brings its class from its level."
 			if Library.import_refusal(asset, here).is_empty() else "")
 		+ ("\nOr \"Add on a class's logic\": acts as a class of this level." if asset["kind"] == "mobys" else ""))
-	return "%s, class %d\nFrom %s\n%s\nDrag it into the 3D view, or double-click to add it." % [
+	return "%s, type %d\nFrom %s\n%s\nDrag it into the 3D view, or double-click to add it." % [
 		asset["name"], int(asset["class"]), where, does]
 
 

@@ -209,11 +209,8 @@ void AnimationPlayerEditor::_notification(int p_what) {
 #define ITEM_ICON(m_item, m_icon) tool_anim->get_popup()->set_item_icon(tool_anim->get_popup()->get_item_index(m_item), get_editor_theme_icon(SNAME(m_icon)))
 
 			ITEM_ICON(TOOL_NEW_ANIM, "New");
-			ITEM_ICON(TOOL_ANIM_LIBRARY, "AnimationLibrary");
 			ITEM_ICON(TOOL_DUPLICATE_ANIM, "Duplicate");
 			ITEM_ICON(TOOL_RENAME_ANIM, "Rename");
-			ITEM_ICON(TOOL_EDIT_TRANSITIONS, "Blend");
-			ITEM_ICON(TOOL_EDIT_RESOURCE, "Edit");
 			ITEM_ICON(TOOL_REMOVE_ANIM, "Remove");
 
 			_update_animation_list_icons();
@@ -452,8 +449,6 @@ void AnimationPlayerEditor::_animation_selected(int p_which) {
 	ITEM_CHECK_DISABLED(TOOL_DUPLICATE_ANIM);
 	ITEM_CHECK_DISABLED(TOOL_REMOVE_ANIM);
 
-	ITEM_CHECK_DISABLED(TOOL_EDIT_TRANSITIONS);
-	ITEM_CHECK_DISABLED(TOOL_EDIT_RESOURCE);
 #undef ITEM_CHECK_DISABLED
 
 	// when selecting an animation, the idea is that the only interesting behavior
@@ -1548,8 +1543,6 @@ void AnimationPlayerEditor::_current_animation_changed(const StringName &p_name)
 		_update_animation();
 
 #define ITEM_CHECK_DISABLED(m_item) tool_anim->get_popup()->set_item_disabled(tool_anim->get_popup()->get_item_index(m_item), false)
-		ITEM_CHECK_DISABLED(TOOL_EDIT_TRANSITIONS);
-		ITEM_CHECK_DISABLED(TOOL_EDIT_RESOURCE);
 #undef ITEM_CHECK_DISABLED
 
 #define ITEM_CHECK_DISABLED(m_item) tool_anim->get_popup()->set_item_disabled(tool_anim->get_popup()->get_item_index(m_item), current_animation_library_is_readonly)
@@ -2140,13 +2133,9 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	tool_anim->set_text(TTRC("Keys"));
 	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/new_animation", TTRC("New...")), TOOL_NEW_ANIM);
 	tool_anim->get_popup()->add_separator();
-	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/animation_libraries", TTRC("Manage Animations...")), TOOL_ANIM_LIBRARY);
-	tool_anim->get_popup()->add_separator();
 	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/duplicate_animation", TTRC("Duplicate...")), TOOL_DUPLICATE_ANIM);
 	tool_anim->get_popup()->add_separator();
 	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/rename_animation", TTRC("Rename...")), TOOL_RENAME_ANIM);
-	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/edit_transitions", TTRC("Edit Transitions...")), TOOL_EDIT_TRANSITIONS);
-	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/open_animation_in_inspector", TTRC("Show Properties")), TOOL_EDIT_RESOURCE);
 	tool_anim->get_popup()->add_separator();
 	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/remove_animation", TTRC("Remove")), TOOL_REMOVE_ANIM);
 	tool_anim->set_disabled(true);
@@ -2157,7 +2146,7 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	hb->add_child(animation);
 	animation->set_accessibility_name(TTRC("Keys"));
 	animation->set_h_size_flags(SIZE_EXPAND_FILL);
-	animation->set_tooltip_text(TTRC("Display list of animations in player."));
+	animation->set_tooltip_text(TTRC("Pick which keys to edit."));
 	animation->set_clip_text(true);
 	animation->set_fit_to_longest_item(false);
 	animation->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
@@ -2211,6 +2200,12 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	pin->set_toggle_mode(true);
 	pin->set_tooltip_text(TTRC("Keep This Cutscene"));
 	hb->add_child(pin);
+
+	// OpenRAC Editor: the keys panel keeps play, stop, play from here and the keys list. Playing
+	// backwards, autoplay, onion skin and pinning are Godot tools a cutscene does not need.
+	for (Control *extra : { (Control *)play_bw_from, (Control *)play_bw, (Control *)autoplay, (Control *)onion_toggle, (Control *)onion_skinning, (Control *)pin }) {
+		extra->hide();
+	}
 	pin->connect(SceneStringName(pressed), callable_mp(this, &AnimationPlayerEditor::_pin_pressed));
 
 	file = memnew(EditorFileDialog);

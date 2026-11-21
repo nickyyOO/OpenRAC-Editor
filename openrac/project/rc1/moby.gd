@@ -63,7 +63,7 @@ const SEARCH_EVERY: int = 30
 const RULES_PATH: String = "res://rc1/class_rules.json"
 
 ## The project setting that draws hidden mobys faint instead of not at all.
-const SHOW_HIDDEN: String = "Show hidden objects"
+const SHOW_HIDDEN: String = "openrac/editor/show_hidden_mobys"
 
 ## How faint a hidden moby is drawn with SHOW_HIDDEN.
 const GHOST: float = 0.75
@@ -330,23 +330,23 @@ func _get_property_list() -> Array[Dictionary]:
 
 	var properties: Array[Dictionary] = [
 		{"name": "Start state", "type": TYPE_NIL, "usage": PROPERTY_USAGE_GROUP},
-		{"name": "Start State", "type": TYPE_STRING, "hint": PROPERTY_HINT_MULTILINE_TEXT,
+		{"name": "start_state", "type": TYPE_STRING, "hint": PROPERTY_HINT_MULTILINE_TEXT,
 			"usage": PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY},
 	]
 
 	# One click: a cutscene event that shows or hides it from the preview's time on.
 	if int(get_meta("rc1_spawn_id", -1)) >= 0:
 		properties.append({"name": "scene_show", "type": TYPE_CALLABLE, "hint": PROPERTY_HINT_TOOL_BUTTON,
-			"hint_string": "Show in the cutscene from now,GuiVisibilityVisible", "usage": PROPERTY_USAGE_EDITOR})
+			"hint_string": "Show From Here,GuiVisibilityVisible", "usage": PROPERTY_USAGE_EDITOR})
 		properties.append({"name": "scene_hide", "type": TYPE_CALLABLE, "hint": PROPERTY_HINT_TOOL_BUTTON,
-			"hint_string": "Hide in the cutscene from now,GuiVisibilityHidden", "usage": PROPERTY_USAGE_EDITOR})
+			"hint_string": "Hide From Here,GuiVisibilityHidden", "usage": PROPERTY_USAGE_EDITOR})
 
 	# The class's rule, edited here for every moby of the class (class_rules.json).
-	properties.append({"name": "Type rule", "type": TYPE_STRING, "hint": PROPERTY_HINT_EXPRESSION,
+	properties.append({"name": "class_rule", "type": TYPE_STRING, "hint": PROPERTY_HINT_EXPRESSION,
 		"usage": PROPERTY_USAGE_EDITOR})
 
 	if not looks.is_empty():
-		properties.append({"name": "Preview", "type": TYPE_STRING, "hint": PROPERTY_HINT_ENUM,
+		properties.append({"name": "preview_look", "type": TYPE_STRING, "hint": PROPERTY_HINT_ENUM,
 			"hint_string": ",".join(looks), "usage": PROPERTY_USAGE_EDITOR})
 
 	return properties

@@ -34,7 +34,7 @@ var pick_toggle: CheckButton
 var selection_label: Label
 
 ## The surface id a repaint gives.
-var surface_spin: SpinBox
+var surface_option: OptionButton
 
 ## The footstep sound class a repaint gives.
 var sound_spin: SpinBox
@@ -142,9 +142,7 @@ func build_view(box: VBoxContainer) -> void:
 	needs.level.append(show_toggle)
 	legend = VBoxContainer.new()
 	box.add_child(legend)
-	wrapped(box, "A face's type byte: bits 0-4 the surface id (the colour), bits 5-6 the footstep sound class "
-		+ "(0-3), bit 7 keeps the face out of some of the game's queries. Hero walls (yellow) are walls only "
-		+ "the player meets; they have no type byte.")
+	wrapped(box, "Each colour is a ground type. Yellow walls block only Ratchet.")
 
 
 ## The pick toggle and the selection tools.
@@ -155,9 +153,7 @@ func build_selection(box: VBoxContainer) -> void:
 	pick_toggle.toggled.connect(handle_pick_toggled)
 	box.add_child(pick_toggle)
 	needs.level.append(pick_toggle)
-	wrapped(box, "Click a face to select it, Shift-click to add or take one out, drag for a box, "
-		+ "Alt-click for the connected faces of its surface (Shift-Alt-click adds them). Selecting a "
-		+ "tie or shrub selects the collision baked inside its bounds.")
+	wrapped(box, "Click a face to pick it. Shift-click adds, Alt-click picks the whole patch.")
 	var row := HBoxContainer.new()
 	box.add_child(row)
 	needs.selection.append(button(row, "Pick Whole Patch", handle_connected_pressed))
@@ -171,14 +167,23 @@ func build_edit(box: VBoxContainer) -> void:
 	var grid := GridContainer.new()
 	grid.columns = 2
 	box.add_child(grid)
-	surface_spin = spin(grid, "Ground type", 0, 31, 1, Surfaces.DEFAULT_SURFACE)
-	surface_spin.value_changed.connect(handle_surface_changed)
+	var surface_label := Label.new()
+	surface_label.text = "Ground type"
+	grid.add_child(surface_label)
+	surface_option = OptionButton.new()
+	surface_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for surface in 32:
+		var known: String = Surfaces.describe(surface)
+		surface_option.add_item(known, surface)
+	surface_option.select(surface_option.get_item_index(Surfaces.DEFAULT_SURFACE))
+	surface_option.item_selected.connect(func(_index: int) -> void: handle_surface_changed(surface_option.get_selected_id()))
+	grid.add_child(surface_option)
 	sound_spin = spin(grid, "Footstep sound", 0, 3, 1, 0)
 	excluded_check = CheckBox.new()
 	excluded_check.text = "Ignore for shots"
 	box.add_child(excluded_check)
 	surface_meaning = wrapped(box, "")
-	handle_surface_changed(surface_spin.value)
+	handle_surface_changed(surface_option.get_selected_id())
 	needs.selection.append(button(box, "Repaint", handle_repaint_pressed))
 	needs.selection.append(button(box, "Delete", handle_delete_pressed))
 	var row := HBoxContainer.new()
@@ -206,9 +211,7 @@ func build_add(box: VBoxContainer) -> void:
 	needs.mesh.append(button(box, "Collision From Model", handle_mesh_pressed))
 	needs.level.append(button(box, "Add Model", handle_static_model_pressed))
 	needs.level.append(button(box, "Add Spinning Model", handle_animated_model_pressed))
-	wrapped(box, "New faces take the surface id, sound class and exclusion above. Mesh corners snap to the game's "
-		+ "collision grid; dense cells use OpenRAC's expanded collision format. Static glTF imports add geometry, "
-		+ "not moby behavior. Spinning props are mod-only visual objects with no game collision.")
+	wrapped(box, "New faces use the ground type and sound above.")
 	needs.level.append(button(box, "Check Limits", handle_check_pressed))
 
 
@@ -237,12 +240,12 @@ func build_object(box: VBoxContainer) -> void:
 	mode_option = OptionButton.new()
 
 	for mode in ClassCollision.MODES:
-		mode_option.add_item(mode)
+		mode_option.add_item(mode.capitalize())
+		mode_option.set_item_metadata(mode_option.item_count - 1, mode)
 
 	row.add_child(mode_option)
 	needs.object.append(button(row, "Make From Model", handle_make_class_pressed))
-	wrapped(box, "Model units of the class (the Collision node carries the class scale). Queries: 1 the "
-		+ "player's movement and other flag-0x4 queries, 2 shots, bolts and the rest.")
+	wrapped(box, "Sizes are in the model's own units.")
 
 
 ## A bold caption between sections.
@@ -300,9 +303,7 @@ func show_level(faces) -> void:
 
 	# A scene without the level's editable collision: say why, and hide the level tools.
 	if faces == null:
-		status_label.text = ("This scene has no level collision: the level's tools are in a level scene "
-			+ "(levels/level_NN/level_NN.tscn). In a class scene (mobys/moby_<class>.tscn), its object "
-			+ "collision is edited below.")
+		status_label.text = "This file isn't a level. Open a level to edit its collision."
 		level_box.visible = false
 		enable("level", false)
 		enable("selection", false)
@@ -324,10 +325,10 @@ func show_level(faces) -> void:
 	for surface in ids:
 		var colour: Color = Surfaces.HERO_COLOUR if surface < 0 else Surfaces.colour(surface)
 		var text: String = ("Yellow walls: %d faces" % by_surface[surface] if surface < 0
-			else "%d (0x%02x): %s; %d faces" % [surface, surface, Surfaces.describe(surface), by_surface[surface]])
+			else "%s: %d faces" % [Surfaces.describe(surface), by_surface[surface]])
 		legend_row(colour, text)
 
-	var edited: String = "Edited: %d removed, %d added." % [
+	var edited: String = " Edited: %d removed, %d added." % [
 		faces.removed.size() + faces.hero_removed.size(), faces.added.size()] if faces.has_edits() else ""
 	status_label.text = "%d collision faces.%s" % [faces.face_count(), edited]
 
@@ -387,7 +388,7 @@ func show_selection(faces, selected: PackedInt32Array) -> void:
 	var parts: PackedStringArray = PackedStringArray()
 
 	for surface in surfaces:
-		parts.append("surface %d (%d)" % [surface, surfaces[surface]])
+		parts.append("%s (%d)" % [Surfaces.describe(surface), surfaces[surface]])
 
 	var text: String = "%d faces picked" % selected.size()
 	text += (": %s." % ", ".join(parts)) if not parts.is_empty() else "."
@@ -409,7 +410,7 @@ func show_selection(faces, selected: PackedInt32Array) -> void:
 	# A single face's byte becomes the repaint's starting point.
 	if selected.size() == 1 and heroes == 0:
 		var kind: int = faces.face_kind(selected[0])
-		surface_spin.value = Surfaces.surface_of(kind)
+		surface_option.select(surface_option.get_item_index(Surfaces.surface_of(kind)))
 		sound_spin.value = Surfaces.sound_of(kind)
 		excluded_check.button_pressed = Surfaces.is_excluded(kind)
 
@@ -418,7 +419,7 @@ func show_selection(faces, selected: PackedInt32Array) -> void:
 func show_place(place) -> void:
 	enable("place", place != null)
 	place_label.text = ("Click a face to choose where." if place == null
-		else "Here: (%.2f, %.2f, %.2f), the last point you clicked." % [place.x, place.y, place.z])
+		else "Here: the last point you clicked.")
 
 
 ## Whether a mesh outside the collision is selected, for "Make collision from the selected mesh".
@@ -434,8 +435,7 @@ func show_report(text: String) -> void:
 ## The selected object's collision: {} for none, else "text", "can_open" (a moby of a level),
 ## "can_make" (the class scene is open), "part" (a selected part's values, or {}).
 func show_object(info: Dictionary) -> void:
-	object_label.text = info.get("text", "Select a moby to see its class's collision; open its class "
-		+ "scene to edit it.")
+	object_label.text = info.get("text", "Select an object to see its collision.")
 	needs.object[0].disabled = not info.get("can_open", false)
 	needs.object[1].disabled = not info.get("can_make", false)
 	var part: Dictionary = info.get("part", {})
@@ -464,7 +464,7 @@ func enable(group: String, on: bool) -> void:
 
 ## The type byte the controls give.
 func chosen_kind() -> int:
-	return Surfaces.type_byte(int(surface_spin.value), int(sound_spin.value), excluded_check.button_pressed)
+	return Surfaces.type_byte(surface_option.get_selected_id(), int(sound_spin.value), excluded_check.button_pressed)
 
 
 ## The vector of three spin boxes.
@@ -501,7 +501,7 @@ func handle_clear_pressed() -> void:
 
 ## Says what the chosen surface id is known for.
 func handle_surface_changed(value: float) -> void:
-	surface_meaning.text = "Surface %d: %s." % [int(value), Surfaces.describe(int(value))]
+	surface_meaning.text = "Ground type %d." % int(value)
 
 
 ## Repaints the selection.
@@ -567,4 +567,4 @@ func handle_apply_part_pressed() -> void:
 
 ## Makes the class's collision from its model.
 func handle_make_class_pressed() -> void:
-	plugin.make_class_collision(mode_option.get_item_text(mode_option.selected), chosen_kind())
+	plugin.make_class_collision(String(mode_option.get_item_metadata(mode_option.selected)), chosen_kind())

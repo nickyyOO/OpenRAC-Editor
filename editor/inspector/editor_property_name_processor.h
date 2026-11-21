@@ -39,6 +39,9 @@ class EditorPropertyNameProcessor : public Node {
 
 	mutable HashMap<String, String> capitalize_string_cache;
 	HashMap<String, String> capitalize_string_remaps;
+	// OpenRAC Editor: plain labels, keyed by "Class::property" or "property".
+	HashMap<String, String> openrac_labels;
+	bool _openrac_label(const String &p_name, const String &p_property, const StringName &p_class, String &r_label) const;
 	LocalVector<String> stop_words; // Exceptions that shouldn't be capitalized.
 
 	HashMap<String, HashMap<String, StringName>> translation_contexts;

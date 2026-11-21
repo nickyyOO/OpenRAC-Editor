@@ -402,7 +402,24 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 
 	p_item->set_text(0, p_node->get_name());
 	p_item->set_text_overrun_behavior(0, TextServer::OVERRUN_NO_TRIMMING);
-	if (can_rename && !p_part_of_subscene) {
+	// OpenRAC Editor: the level's fixed parts (under Game) read in plain words. The game finds them by
+	// their real names, so they can't be renamed.
+	bool openrac_fixed = false;
+	{
+		static const HashMap<String, String> plain = {
+			{ "Mobys", "Objects" }, { "Ties", "Big Scenery" }, { "Shrubs", "Small Scenery" }, { "Terrain", "Ground" },
+			{ "HeroWalls", "Ratchet-Only Walls" }, { "Collision", "Collision" }, { "Cutscenes", "Cutscenes" },
+		};
+		const Node *parent = p_node->get_parent();
+		if (parent && parent->get_name() == StringName("Game") && parent->get_parent() == get_scene_node()) {
+			const String *label = plain.getptr(p_node->get_name());
+			if (label) {
+				p_item->set_text(0, *label);
+				openrac_fixed = true;
+			}
+		}
+	}
+	if (can_rename && !p_part_of_subscene && !openrac_fixed) {
 		p_item->set_editable(0, true);
 	}
 
@@ -519,7 +536,8 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 			p_item->add_button(0, get_editor_theme_icon(warning_icon), BUTTON_WARNING, false, TTR("Problem with this object:") + all_warnings);
 		}
 
-		if (p_node->is_unique_name_in_owner()) {
+		// OpenRAC Editor: unique names are a script thing; no button for them.
+		if (false && p_node->is_unique_name_in_owner()) {
 			const bool disabled = p_node->get_owner() != EditorNode::get_singleton()->get_edited_scene();
 			String button_text = vformat(TTR("This node can be accessed from anywhere within the scene it belongs to by using the '%s' prefix in the node path."), UNIQUE_NODE_PREFIX);
 			if (!disabled) {
@@ -567,7 +585,8 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 			msg_temp_end = TTR("Click to show groups dock.");
 		}
 
-		if (num_connections >= 1 || num_groups >= 1) {
+		// OpenRAC Editor: signals and groups are hidden, so no button for them.
+		if (false && (num_connections >= 1 || num_groups >= 1)) {
 			msg_temp += msg_temp_end;
 			p_item->add_button(0, icon_temp, signal_temp, false, msg_temp);
 		}
@@ -585,7 +604,8 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 	// Show buttons only when necessary (SceneTreeDock) to avoid crashes.
 	if (can_open_instance && is_scene_tree_dock) {
 		Ref<Script> scr = p_node->get_script();
-		if (scr.is_valid()) {
+		// OpenRAC Editor: scripts are the editor's own; no "open script" button.
+		if (false && scr.is_valid()) {
 			String additional_notes;
 			Color button_color = Color(1, 1, 1);
 			// Can't set tooltip after adding button, need to do it before.

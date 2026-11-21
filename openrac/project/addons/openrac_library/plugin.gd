@@ -106,8 +106,8 @@ func register_mcp() -> void:
 ## name in the ship's menu, and its id, which the first add sets so later ones update the same
 ## planet. In Project Settings, OpenRAC > Planet.
 static func add_planet_settings() -> void:
-	for entry in [["Planet name", "Name in the ship's menu (letters, digits, spaces; 40 at most)"],
-			["Planet ID", "Set when the planet is first added."]]:
+	for entry in [["openrac/planet/name", "Name in the ship's menu (letters, digits, spaces; 40 at most)"],
+			["openrac/planet/id", "Set when the planet is first added."]]:
 		if not ProjectSettings.has_setting(entry[0]):
 			ProjectSettings.set_setting(entry[0], "")
 		ProjectSettings.set_initial_value(entry[0], "")
@@ -523,7 +523,7 @@ func add_as(asset: Dictionary, host_class: int, place: Variant = null, job: Stri
 	EditorInterface.get_selection().add_node(node)
 	last_added = node
 	report(("Added %s: a %s of this level that looks like %s from %s. "
-		+ "Set its animations in the Inspector (rc1_skin_animations). Pack, then play.") % [node.name,
+		+ "Set its animations in Properties, then Play Level.") % [node.name,
 		host["name"], asset["name"], asset["level_name"] if not String(asset["level_name"]).is_empty() else "its level"])
 
 
@@ -654,8 +654,8 @@ func placed_report(asset: Dictionary, node: Node) -> String:
 	if Library.status(asset, here()) == Library.FULL:
 		return "Added %s, a %s of this level. Move it, then Play Level." % [node.name, asset["kind"].trim_suffix("s")]
 
-	return ("Added %s as static scenery from %s, no logic. "
-		+ "Collision is %s (rc1_static_collision). Pack bakes it in.") % [node.name,
+	return ("Added %s as scenery from %s. "
+		+ "Collision is %s.") % [node.name,
 		asset["level_name"] if not String(asset["level_name"]).is_empty() else "its level",
 		"on" if asset["kind"] != "shrubs" else "off"]
 

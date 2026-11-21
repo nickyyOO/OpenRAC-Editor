@@ -42,9 +42,8 @@ func _parse_begin(object: Object) -> void:
 func section(node: Node3D) -> Control:
 	var box := VBoxContainer.new()
 	var title := Label.new()
-	title.text = "Behaviour"
-	title.tooltip_text = ("A simple move the editor mod plays in the game. The moby's own logic stops while it runs. "
-		+ "Pack, then play with the mod on.")
+	title.text = "Simple Move"
+	title.tooltip_text = "A simple move the object plays in the game, in place of its own."
 	title.mouse_filter = Control.MOUSE_FILTER_PASS
 	box.add_child(title)
 

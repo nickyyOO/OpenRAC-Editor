@@ -196,7 +196,7 @@ anything is deleted (`launcher/core/src/reset.rs`).
 A placed moby's node is named after its class: `Vendor_0012`, `Bolt_0003`,
 `BlargHeavyInterceptor_0040` (568 classes have a name, from
 [moby_classes.tsv](https://github.com/OpenRAC/OpenRAC/blob/develop/extractor/moby_classes.tsv); the rest show as `Class809_0001`).
-Select one and the Inspector shows its values as `rc1_*` metadata (spawn id,
+Select one and the Properties panel shows its values as `rc1_*` metadata (spawn id,
 group, colour, draw distance...), which the packer writes back.
 
 Its class scene (`levels/level_NN/mobys/moby_<class>.tscn`) says what the
@@ -228,13 +228,13 @@ the editor-runtime mod plays.
 
 ## Check and play from the editor
 
-The editor's toolbar has **Check level** and **Play level** (the Assets plugin, `play.gd`). Both
+The editor's toolbar has **Check Level** and **Play Level** (the Assets plugin, `play.gd`). Both
 save your scenes first, and run in the background:
 
-- **Check level** packs every level of the folder into a throwaway folder and lists each edit the
+- **Check Level** packs every level of the folder into a throwaway folder and lists each edit the
   game cannot take, such as a mirrored object or a value out of range. Click one to select its
   node, fix it and check again.
-- **Play level** packs into your packed levels folder (as the launcher's Pack does) and starts the
+- **Play Level** packs into your packed levels folder (as the launcher's Pack does) and starts the
   game on this level with your edits, movies skipped. Every disc of the game: Europe, Europe v1.00, USA and Japan.
 
 They work on a level opened from the launcher, which tells the editor where Python, the editor's
@@ -322,7 +322,7 @@ The disc image is never written. The native port reads the folder with
 launcher's Mods page does all three steps (edit, pack, play).
 
 What is packed today: **mobys that were moved, turned, scaled, given another
-class, given other values** (the `rc1_*` metadata in the Inspector), **added
+class, given other values** (the `rc1_*` metadata in the Properties panel), **added
 or deleted**, and **ties and shrubs** the same way (moved, turned, scaled
 each axis its own, another class of the level, other values, added, deleted),
 **the gameplay data**: pvars, links between objects, moby groups, volumes,
@@ -488,9 +488,10 @@ To edit a level:
 
 - Move, rotate or scale objects as usual. Transforms under `Game` are in
   game units and axes.
-- To add an object, drag a class `.glb` from the FileSystem dock onto
-  `Game/Ties` or `Game/Shrubs`. The file is the object's class.
-- Per-object game fields are in the Inspector's Metadata section:
+- To add an object, drag it from the Assets dock into the 3D view.
+- Per-object game fields are in the Properties panel's Game Settings section
+  (bookkeeping values such as `rc1_index`, `rc1_uid`, `rc1_occlusion_index` and
+  `rc1_matrix_w` stay in the file but are not shown):
   - `rc1_index`: the object's record in the original level (new objects
     have none);
   - `rc1_draw_distance`, `rc1_directional_lights`;
@@ -503,14 +504,12 @@ To edit a level:
   show as a coloured box. Each class scene, `mobys/moby_<class>.tscn`,
   has one for every class the level loads, placed or not; drag one onto
   `Game/Mobys` to add a moby. Its `Model` node carries the class scale.
-  A moby's rotation in the Inspector is the game's own Euler angles
+  A moby's rotation in the Properties panel is the game's own Euler angles
   (rotation order XYZ).
 - Animated classes have a `Skeleton3D` in the bind pose and an
   `AnimationPlayer` with one animation per sequence: `seq_NN` by slot, and
   Ratchet's `ratchet_seq_NNN`. Sequences that loop in the game loop here.
-  To preview one, double-click `mobys/moby_<class>.glb` in the FileSystem
-  dock: the editor's import settings window plays each animation. In a scene,
-  enable Editable Children on the `Model` node to reach the
+  In a scene, enable Editable Children on the `Model` node to reach the
   `AnimationPlayer`.
 - A moby's metadata:
   - always `rc1_index`, `rc1_spawn_id`, `rc1_group`, `rc1_pvar_index` and
@@ -954,7 +953,7 @@ Approximations:
   every moby on, looping; in the editor it follows the cutscene preview's
   time. What its update function plays later is not known to the editor.
 - A placed moby starts as the game starts it (`rc1/moby.gd`, Ratchet &
-  Clank). The Inspector's **Start state** says whether the game shows it,
+  Clank). The Properties panel's **Start state** says whether the game shows it,
   and why.
   - The game's own code decides. When you open a level with no
     `moby_states.json`, the editor runs the port's states program once.
@@ -976,13 +975,13 @@ Approximations:
     its record (`_NNNN`) is that moby.
   - The reasons come from the moby's spawn flags (before or after a
     mission, gone once killed or picked up) and its class's rule in
-    `rc1/class_rules.json`. **Class Rule** in the Inspector edits it.
+    `rc1/class_rules.json`. **Class Rule** in the Properties panel edits it.
   - A hidden moby is not drawn. The project setting
     `openrac/editor/show_hidden_mobys` draws it faint. "Depends on the
     game" marks what the player's save decides; a moby that a mission or
     a volume can change gets a warning in the scene tree.
-  - In a cutscene, the Inspector buttons "Show/Hide in the cutscene from
-    now" add a show or hide event at the preview's time. Exporting a
+  - In a cutscene, the Properties buttons **Show From Here** and **Hide From
+    Here** add a show or hide event at the preview's time. Exporting a
     cutscene lists the mobys the camera sees without one.
   - Some classes are drawn by code. The nanotech crate's ball
     (`effects.py`, `rc1/nanotech.gd`) is drawn inside the crate, or alone

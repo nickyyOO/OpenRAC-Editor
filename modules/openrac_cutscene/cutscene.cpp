@@ -2225,10 +2225,10 @@ void Cutscene::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("from_cutscene", "data"), &Cutscene::from_cutscene);
 	ClassDB::bind_method(D_METHOD("import_cutscene", "path"), &Cutscene::_import_cutscene_bind);
 
-	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "set_up", PROPERTY_HINT_TOOL_BUTTON, "Set Up Timeline and Camera,AnimationPlayer", PROPERTY_USAGE_EDITOR), "", "get_set_up_action");
-	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "export_now", PROPERTY_HINT_TOOL_BUTTON, "Export .cutscene,Save", PROPERTY_USAGE_EDITOR), "", "get_export_action");
-	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "import_file", PROPERTY_HINT_TOOL_BUTTON, "Import .cutscene,Load", PROPERTY_USAGE_EDITOR), "", "get_import_action");
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "file_name", PROPERTY_HINT_PLACEHOLDER_TEXT, "the node's name"), "set_file_name", "get_file_name");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "set_up", PROPERTY_HINT_TOOL_BUTTON, "Set Up Camera and Keys,AnimationPlayer", PROPERTY_USAGE_EDITOR), "", "get_set_up_action");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "export_now", PROPERTY_HINT_TOOL_BUTTON, "Save Cutscene File,Save", PROPERTY_USAGE_EDITOR), "", "get_export_action");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "import_file", PROPERTY_HINT_TOOL_BUTTON, "Load Cutscene File,Load", PROPERTY_USAGE_EDITOR), "", "get_import_action");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "file_name", PROPERTY_HINT_PLACEHOLDER_TEXT, "the object's name"), "set_file_name", "get_file_name");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "title"), "set_title", "get_title");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "game"), "set_game", "get_game");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "length", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_length", "get_length");
@@ -2236,8 +2236,8 @@ void Cutscene::_bind_methods() {
 	// None ticked: the disc's own languages.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "translations", PROPERTY_HINT_FLAGS, "English,French,German,Spanish,Italian,Japanese", PROPERTY_USAGE_EDITOR), "set_translations", "get_translations");
 
-	ADD_GROUP("Trigger", "trigger_");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "trigger_kind", PROPERTY_HINT_ENUM, "Level Start,Area,Talk,Pickup,After,Flag,Manual"), "set_trigger_kind", "get_trigger_kind");
+	ADD_GROUP("Starts When", "trigger_");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "trigger_kind", PROPERTY_HINT_ENUM, "Level Starts,Enter Area,Talk,Pick Up,After Cutscene,Mission Flag,Manual"), "set_trigger_kind", "get_trigger_kind");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "trigger_once"), "set_trigger_once", "get_trigger_once");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "trigger_radius", PROPERTY_HINT_RANGE, "0,100,0.1,or_greater"), "set_trigger_radius", "get_trigger_radius");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "trigger_box"), "set_trigger_box", "get_trigger_box");
@@ -2250,9 +2250,9 @@ void Cutscene::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "skippable"), "set_skippable", "get_skippable");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "letterbox"), "set_letterbox", "get_letterbox");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "hide_hud"), "set_hide_hud", "get_hide_hud");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "world", PROPERTY_HINT_ENUM, "Run,Hold"), "set_world", "get_world");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "music", PROPERTY_HINT_ENUM, "Duck,Keep,Stop"), "set_music", "get_music");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "hero_mode", PROPERTY_HINT_ENUM, "Held,Hidden,Actor"), "set_hero_mode", "get_hero_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "world", PROPERTY_HINT_ENUM, "Keeps Moving,Frozen"), "set_world", "get_world");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "music", PROPERTY_HINT_ENUM, "Quieter,Keep,Stop"), "set_music", "get_music");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "hero_mode", PROPERTY_HINT_ENUM, "Frozen,Hidden,Acts"), "set_hero_mode", "get_hero_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "hero_sequence", PROPERTY_HINT_RANGE, "0,255,1"), "set_hero_sequence", "get_hero_sequence");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "variants", PROPERTY_HINT_ARRAY_TYPE, "Dictionary"), "set_variants", "get_variants");
 
@@ -2874,12 +2874,12 @@ static int joint_count(const Skeleton3D *p_skeleton) {
 String CutsceneActor::bake_pose(const Ref<Animation> &p_source, Node *p_skeleton, const Dictionary &p_map, double p_start, Node *p_target) {
 	const Skeleton3D *skeleton = Object::cast_to<Skeleton3D>(p_skeleton);
 	if (p_source.is_null() || skeleton == nullptr) {
-		return "Bake Pose needs an animation and the Skeleton3D it moves.";
+		return "Make Pose needs an animation and the Skeleton3D it moves.";
 	}
 	Cutscene *cutscene = cutscene_above(this);
 	const String dir = scene_dir_of(this);
 	if (cutscene == nullptr || dir.is_empty()) {
-		return "Bake Pose needs this actor in a Cutscene of a saved level scene.";
+		return "Make Pose needs this actor in a Cutscene of a saved level scene.";
 	}
 	if (source == SOURCE_PROP) {
 		return "A prop plays its own .glb's animations (a sequence key): a pose is for a moby or the hero's figure.";
@@ -2898,7 +2898,7 @@ String CutsceneActor::bake_pose(const Ref<Animation> &p_source, Node *p_skeleton
 		target = skeleton;
 	}
 	if (target == nullptr) {
-		return "Bake Pose with a map needs the actor's model (set its moby class) to know its joints.";
+		return "Make Pose with a map needs the actor's model (set its moby class) to know its joints.";
 	}
 	int joints = joint_count(target);
 	if (joints == 0) {
@@ -3125,7 +3125,7 @@ void CutsceneActor::_bake_pose_from_source() {
 		if (instance != nullptr) {
 			memdelete(instance);
 		}
-		ERR_FAIL_MSG("Bake Pose: " + error);
+		ERR_FAIL_MSG("Make Pose: " + error);
 	}
 	const String old_file = pose_file;
 	const int old_joints = pose_joints;
@@ -3133,7 +3133,7 @@ void CutsceneActor::_bake_pose_from_source() {
 	const String problems = bake_pose(animation, skeleton, pose_map, pose_start, nullptr);
 	memdelete(instance);
 	if (!problems.is_empty()) {
-		WARN_PRINT("Bake Pose: " + problems);
+		WARN_PRINT("Make Pose: " + problems);
 	}
 	if (pose_bakes == bakes) {
 		return;
@@ -3259,15 +3259,15 @@ void CutsceneActor::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_blink"), &CutsceneActor::get_blink);
 	ClassDB::bind_static_method("CutsceneActor", D_METHOD("known_rig", "game", "moby_class"), &CutsceneActor::known_rig);
 
-	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "take_selected_moby", PROPERTY_HINT_TOOL_BUTTON, "Take Selected Moby,Node3D", PROPERTY_USAGE_EDITOR), "", "get_take_selected_action");
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "actor_id", PROPERTY_HINT_PLACEHOLDER_TEXT, "the node's name"), "set_actor_id", "get_actor_id");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "source", PROPERTY_HINT_ENUM, "Level Moby,New Moby,Hero Figure,Prop"), "set_source", "get_source");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "take_selected_moby", PROPERTY_HINT_TOOL_BUTTON, "Use Selected Object,Node3D", PROPERTY_USAGE_EDITOR), "", "get_take_selected_action");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "actor_id", PROPERTY_HINT_PLACEHOLDER_TEXT, "the object's name"), "set_actor_id", "get_actor_id");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "source", PROPERTY_HINT_ENUM, "Object in Level,New Object,Ratchet Copy,Prop"), "set_source", "get_source");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "spawn_id"), "set_spawn_id", "get_spawn_id");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "moby_class"), "set_moby_class", "get_moby_class");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "prop_path"), "set_prop_path", "get_prop_path");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "spawn_if_missing"), "set_spawn_if_missing", "get_spawn_if_missing");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "end", PROPERTY_HINT_ENUM, "Keep,Restore,Remove"), "set_end", "get_end");
-	ADD_GROUP("Animation", "");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "end", PROPERTY_HINT_ENUM, "Stay,Go Back,Remove"), "set_end", "get_end");
+	ADD_GROUP("Moves", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "sequence", PROPERTY_HINT_RANGE, "-1,255,1"), "set_sequence", "get_sequence");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "anim_speed", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_anim_speed", "get_anim_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "blend", PROPERTY_HINT_RANGE, "0,60,1,suffix:ticks"), "set_blend", "get_blend");
@@ -3276,7 +3276,7 @@ void CutsceneActor::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ride_start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_ride_start", "get_ride_start");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ride_end", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_ride_end", "get_ride_end");
 	ADD_GROUP("Face", "");
-	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "use_known_rig", PROPERTY_HINT_TOOL_BUTTON, "Use Known Rig,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_use_known_rig_action");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "use_known_rig", PROPERTY_HINT_TOOL_BUTTON, "Use Known Face,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_use_known_rig_action");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "rig", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_rig", "get_rig");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "blink"), "set_blink", "get_blink");
 	ClassDB::bind_method(D_METHOD("set_feet_on_ground", "on"), &CutsceneActor::set_feet_on_ground);
@@ -3300,11 +3300,11 @@ void CutsceneActor::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "pose_file", PROPERTY_HINT_FILE, "*.bin"), "set_pose_file", "get_pose_file");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "pose_joints", PROPERTY_HINT_RANGE, "0,255,1"), "set_pose_joints", "get_pose_joints");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "pose_source", PROPERTY_HINT_FILE, "*.glb,*.gltf,*.tscn,*.scn"), "set_pose_source", "get_pose_source");
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "pose_animation", PROPERTY_HINT_PLACEHOLDER_TEXT, "the first"), "set_pose_animation", "get_pose_animation");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "pose_animation", PROPERTY_HINT_PLACEHOLDER_TEXT, "the first one"), "set_pose_animation", "get_pose_animation");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "pose_map", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_pose_map", "get_pose_map");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pose_start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_pose_start", "get_pose_start");
-	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "pose_bake", PROPERTY_HINT_TOOL_BUTTON, "Bake Pose,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_bake_pose_action");
-	ADD_GROUP("Advanced", "");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "pose_bake", PROPERTY_HINT_TOOL_BUTTON, "Make Pose,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_bake_pose_action");
+	ADD_GROUP("Extra Settings", "");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "advanced", PROPERTY_HINT_DICTIONARY_TYPE, "String;Variant"), "set_advanced", "get_advanced");
 
 	BIND_ENUM_CONSTANT(SOURCE_LEVEL_MOBY);
@@ -3440,7 +3440,7 @@ void CutscenePath::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_ground", "ground"), &CutscenePath::set_ground);
 	ClassDB::bind_method(D_METHOD("get_ground"), &CutscenePath::get_ground);
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_start", "get_start");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed", PROPERTY_HINT_RANGE, "0.01,40,0.01,or_greater,suffix:u/s"), "set_speed", "get_speed");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed", PROPERTY_HINT_RANGE, "0.01,40,0.01,or_greater,suffix:m/s"), "set_speed", "get_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ground"), "set_ground", "get_ground");
 }
 
@@ -3610,11 +3610,11 @@ static const Node *timeline_root(const Cutscene *p_cutscene) {
 String CutsceneLayer::retarget(const Ref<Animation> &p_source, Node *p_skeleton, const Dictionary &p_map, double p_start) {
 	const Skeleton3D *skeleton = Object::cast_to<Skeleton3D>(p_skeleton);
 	if (p_source.is_null() || skeleton == nullptr) {
-		return "Retarget needs an animation and the Skeleton3D it moves.";
+		return "Copy Moves needs an animation and the skeleton it moves.";
 	}
 	Cutscene *cutscene = cutscene_above(this);
 	if (cutscene == nullptr || Object::cast_to<CutsceneActor>(get_parent()) == nullptr) {
-		return "Retarget needs this layer under a CutsceneActor of a Cutscene.";
+		return "Copy Moves needs this layer inside a cutscene actor.";
 	}
 	Ref<Animation> anim = cutscene->get_timeline_animation();
 	if (anim.is_null()) {
@@ -3771,12 +3771,12 @@ void CutsceneLayer::_retarget_from_source() {
 	const String problems = retarget(source, skeleton, retarget_map, retarget_start);
 	memdelete(instance);
 	if (!problems.is_empty()) {
-		WARN_PRINT("Retarget: " + problems);
+		WARN_PRINT("Copy Moves: " + problems);
 	}
 	// What the import found that the game cannot play: a face on blend shapes.
 	const String note = check_rig_scene(scene);
 	if (!note.is_empty()) {
-		WARN_PRINT("Retarget: " + note);
+		WARN_PRINT("Copy Moves: " + note);
 	}
 }
 
@@ -3812,12 +3812,12 @@ void CutsceneLayer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_retarget_start", "seconds"), &CutsceneLayer::set_retarget_start);
 	ClassDB::bind_method(D_METHOD("get_retarget_start"), &CutsceneLayer::get_retarget_start);
 	ClassDB::bind_method(D_METHOD("get_retarget_action"), &CutsceneLayer::get_retarget_action);
-	ADD_GROUP("Retarget", "retarget_");
+	ADD_GROUP("Copy Moves From Model", "retarget_");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "retarget_source", PROPERTY_HINT_FILE, "*.glb,*.gltf,*.tscn,*.scn"), "set_retarget_source", "get_retarget_source");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "retarget_animation"), "set_retarget_animation", "get_retarget_animation");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "retarget_map"), "set_retarget_map", "get_retarget_map");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "retarget_start", PROPERTY_HINT_RANGE, "0,600,0.01,suffix:s"), "set_retarget_start", "get_retarget_start");
-	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "retarget_bake", PROPERTY_HINT_TOOL_BUTTON, "Retarget,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_retarget_action");
+	ADD_PROPERTY(PropertyInfo(Variant::CALLABLE, "retarget_bake", PROPERTY_HINT_TOOL_BUTTON, "Copy Moves,Skeleton3D", PROPERTY_USAGE_EDITOR), "", "get_retarget_action");
 }
 
 void CutsceneMood::set_start(double p_seconds) { start = MAX(0.0, p_seconds); }
@@ -3854,7 +3854,7 @@ void CutsceneMood::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_blend", "seconds"), &CutsceneMood::set_blend);
 	ClassDB::bind_method(D_METHOD("get_blend"), &CutsceneMood::get_blend);
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_start", "get_start");
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "mood", PROPERTY_HINT_PLACEHOLDER_TEXT, "happy, angry, ... (empty: the face's own)"), "set_mood", "get_mood");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "mood", PROPERTY_HINT_PLACEHOLDER_TEXT, "happy, angry (empty: normal face)"), "set_mood", "get_mood");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "weight", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_weight", "get_weight");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "blend", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater,suffix:s"), "set_blend", "get_blend");
 }
@@ -3926,7 +3926,7 @@ void CutsceneSound::_get_property_list(List<PropertyInfo> *p_list) const {
 		return; // one language: File is its file
 	}
 	for (const String &code : codes) {
-		p_list->push_back(PropertyInfo(Variant::STRING, Cutscene::language_name(code).to_lower() + "_file", PROPERTY_HINT_PLACEHOLDER_TEXT, "the File above", PROPERTY_USAGE_EDITOR));
+		p_list->push_back(PropertyInfo(Variant::STRING, Cutscene::language_name(code).to_lower() + "_file", PROPERTY_HINT_PLACEHOLDER_TEXT, "the file above", PROPERTY_USAGE_EDITOR));
 	}
 }
 
@@ -3952,8 +3952,8 @@ void CutsceneSound::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_stop", "seconds"), &CutsceneSound::set_stop);
 	ClassDB::bind_method(D_METHOD("get_stop"), &CutsceneSound::get_stop);
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_start", "get_start");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "kind", PROPERTY_HINT_ENUM, "Voice,Music,Sfx"), "set_kind", "get_kind");
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "file", PROPERTY_HINT_PLACEHOLDER_TEXT, "audio/line.ogg, beside the .cutscene"), "set_file", "get_file");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "kind", PROPERTY_HINT_ENUM, "Voice,Music,Effect"), "set_kind", "get_kind");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "file", PROPERTY_HINT_PLACEHOLDER_TEXT, "audio/line.ogg next to the cutscene file"), "set_file", "get_file");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "files", PROPERTY_HINT_DICTIONARY_TYPE, "String;String"), "set_files", "get_files");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "game_sound", PROPERTY_HINT_RANGE, "-1,255,1"), "set_game_sound", "get_game_sound"); // -1: a file
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "source", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "CutsceneActor"), "set_source", "get_source");
@@ -4174,7 +4174,7 @@ void CutsceneEvent::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_tie"), &CutsceneEvent::get_tie);
 	ClassDB::bind_method(D_METHOD("to_event"), &CutsceneEvent::to_event);
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "start", PROPERTY_HINT_RANGE, "0,600,0.01,or_greater,suffix:s"), "set_start", "get_start");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "action", PROPERTY_HINT_ENUM, "Hide Moby,Show Moby,Delete Moby,Mission Flag,Heat Haze,Fade,Play Cutscene,Travel,Fog and Background,Slow Motion,Hide Tie,Show Tie"), "set_action", "get_action");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "action", PROPERTY_HINT_ENUM, "Hide Object,Show Object,Delete Object,Mission Flag,Heat Haze,Fade,Play Cutscene,Travel,Fog and Background,Slow Motion,Hide Big Scenery,Show Big Scenery"), "set_action", "get_action");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "persistent"), "set_persistent", "get_persistent");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "spawn_id"), "set_spawn_id", "get_spawn_id");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "level", PROPERTY_HINT_RANGE, "-1,255,1"), "set_level", "get_level");

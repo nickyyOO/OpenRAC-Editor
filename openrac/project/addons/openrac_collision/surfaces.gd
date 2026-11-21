@@ -78,7 +78,7 @@ static func type_byte(surface: int, sound: int, excluded: bool) -> int:
 
 ## What is known of a surface id, in a few words.
 static func describe(surface: int) -> String:
-	return KNOWN.get(surface, "Unknown")
+	return KNOWN.get(surface, "Other (%d)" % surface)
 
 
 ## A type byte in words: its surface id, sound class and exclusion.

@@ -20,19 +20,19 @@ var worker: Thread
 func _init() -> void:
 	name = "OpenRACPlay"
 	check_button = Button.new()
-	check_button.text = "Check level"
+	check_button.text = "Check Level"
 	check_button.flat = true
 	check_button.tooltip_text = "Saves and lists each edit the game can't take. Click one to pick it."
 	check_button.pressed.connect(start.bind("check"))
 	add_child(check_button)
 	play_button = Button.new()
-	play_button.text = "Play level"
+	play_button.text = "Play Level"
 	play_button.flat = true
 	play_button.tooltip_text = "Saves, builds your edits and starts the game here."
 	play_button.pressed.connect(start.bind("play"))
 	add_child(play_button)
 	dialog = AcceptDialog.new()
-	dialog.title = "Check level"
+	dialog.title = "Check Level"
 	var box := VBoxContainer.new()
 	summary = Label.new()
 	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -112,8 +112,8 @@ func start(kind: String) -> void:
 	EditorInterface.save_all_scenes()
 	check_button.disabled = true
 	play_button.disabled = true
-	check_button.text = "Checking" if kind == "check" else "Check level"
-	play_button.text = "Building" if kind == "play" else "Play level"
+	check_button.text = "Checking" if kind == "check" else "Check Level"
+	play_button.text = "Building" if kind == "play" else "Play Level"
 	worker = Thread.new()
 	worker.start(run.bind(kind, command))
 
@@ -135,8 +135,8 @@ func finish(kind: String, code: int, lines: PackedStringArray) -> void:
 	worker = null
 	check_button.disabled = false
 	play_button.disabled = false
-	check_button.text = "Check level"
-	play_button.text = "Play level"
+	check_button.text = "Check Level"
+	play_button.text = "Play Level"
 	show_result(kind, code, lines)
 
 
@@ -153,7 +153,7 @@ func show_result(kind: String, code: int, lines: PackedStringArray) -> void:
 		elif not line.begins_with("openrac-"):
 			said.append(line)
 
-	dialog.title = "Check level" if kind == "check" else "Play level"
+	dialog.title = "Check Level" if kind == "check" else "Play Level"
 
 	if problems.item_count > 0:
 		summary.text = "%d edits can't be built. Click one, fix it, then check again." % problems.item_count

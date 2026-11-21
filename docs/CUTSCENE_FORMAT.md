@@ -240,7 +240,7 @@ mod's actor moves as smoothly as the game's scenes:
   "axes": Basis}}`, as a layer's Retarget map. Each mapped bone's turn from its rest turns that joint
   from the joint's rest; other joints stay at rest. Bone lengths and the body's travel do not go
   across: move the actor with `track` or `path`.
-- **Bake Pose** writes `cutscenes/poses/<cutscene>_<actor>.bin`, one frame per 30 Hz frame up to the
+- **Make Pose** writes `cutscenes/poses/<cutscene>_<actor>.bin`, one frame per 30 Hz frame up to the
   animation's end (the first frame holds before **Pose Start**), and sets **Pose File** and **Pose
   Joints**. It says what it could not do. From a script: `bake_pose(animation, skeleton, map, start,
   target)`.
@@ -389,7 +389,7 @@ cutscene's timeline, and a **CutsceneCamera**. Its children are what the file li
 | Node | In the file |
 |------|-------------|
 | CutsceneCamera | `camera`: its place and turn on the timeline, sampled every tenth of a second and at each key; `cuts` (seconds) jump |
-| CutsceneActor | `actors`: **Take Selected Moby** makes it a moby of the level; a `sequence` key starts an animation, `visible` keys show and hide it; `advanced` holds `look_at`, `held` and `layers` as the file writes them |
+| CutsceneActor | `actors`: **Use Selected Object** makes it a moby of the level; a `sequence` key starts an animation, `visible` keys show and hide it; `advanced` holds `look_at`, `held` and `layers` as the file writes them |
 | CutscenePath (a child of an actor) | the actor's `path`: the curve's points, drawn in the 3D view as any Path3D's; `start`, `speed`, `ground` |
 | CutsceneShake (a child of the camera) | `camera.shake`: `start`, `duration`, `strength` |
 | CutsceneSubtitle | `subtitles` |
@@ -415,7 +415,7 @@ launcher packs them with the level. Packing checks each one first (OpenRAC's `ed
 leaves out one that is for another level, has no length or one over ten minutes, has two actors of
 one name, spawns a moby class the level does not load, or asks for more than the port has (8
 figures, 256 meshes, 128 joints an actor, 64 MiB of sounds). What the player would only skip is
-reported and packed: a file not beside it, a moby not in the level, an actor that is not one. **Export .cutscene** writes one now; **Import .cutscene** reads
+reported and packed: a file not beside it, a moby not in the level, an actor that is not one. **Save Cutscene File** writes one now; **Load Cutscene File** reads
 one back into a new, empty Cutscene (a camera looking at an actor becomes its turn, bezier handles
 a smooth curve, and events the editor has no node for are not kept: it says which). From a script, `to_cutscene()`,
 `export_cutscene()`, `from_cutscene(data)` and `import_cutscene(path)` do the same.

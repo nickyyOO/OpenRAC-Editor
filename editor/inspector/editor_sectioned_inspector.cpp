@@ -35,6 +35,7 @@
 #include "editor/editor_string_names.h"
 #include "editor/inspector/editor_inspector.h"
 #include "editor/inspector/editor_property_name_processor.h"
+#include "editor/settings/editor_settings.h"
 #include "editor/themes/editor_scale.h"
 #include "scene/gui/check_button.h"
 #include "scene/gui/line_edit.h"
@@ -48,6 +49,29 @@ static bool _property_path_matches(const String &p_property_path, const String &
 	const Vector<String> sections = p_property_path.split("/");
 	for (int i = 0; i < sections.size(); i++) {
 		if (p_filter.is_subsequence_ofn(EditorPropertyNameProcessor::get_singleton()->process_name(sections[i], p_style, p_property_path))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
+// OpenRAC Editor: the Settings window shows only what a level maker may want to change: size and
+// look of the editor, saving, and how the 3D view moves. Godot's other settings stay at their defaults.
+static bool _openrac_setting_shown(const Object *p_edited, const String &p_name) {
+	if (!Object::cast_to<EditorSettings>(p_edited)) {
+		return true;
+	}
+	static const char *shown[] = {
+		"interface/editor/appearance/display_scale", "interface/editor/appearance/custom_display_scale",
+		"interface/editor/appearance/editor_screen", "interface/editor/display/light_mode",
+		"interface/editor/display/single_window_mode", "interface/editor/fonts/main_font_size",
+		"interface/editor/behavior/save_on_focus_loss", "interface/editor/behavior/save_each_scene_on_quit",
+		"interface/theme/", "editors/3d/navigation/", "editors/3d/navigation_feel/", "editors/3d/freelook/",
+		"editors/3d/default_fov", "editors/3d/grid_size", "editors/3d/manipulator_gizmo_size", "openrac/",
+	};
+	for (const char *prefix : shown) {
+		if (p_name.begins_with(prefix)) {
 			return true;
 		}
 	}
@@ -105,6 +129,9 @@ class SectionedInspectorFilter : public Object {
 				continue;
 			}
 
+			if (!_openrac_setting_shown(edited, pi.name)) {
+				continue;
+			}
 			if (sp == -1) {
 				pi.name = "global/" + pi.name;
 			}
@@ -253,6 +280,9 @@ void SectionedInspector::update_category_list() {
 			continue;
 		}
 
+		if (!_openrac_setting_shown(o, pi.name)) {
+			continue;
+		}
 		if (pi.name.contains_char(':') || pi.name == "script" || pi.name == "resource_name" || pi.name == "resource_path" || pi.name == "resource_local_to_scene" || pi.name.begins_with("_global_script")) {
 			continue;
 		}

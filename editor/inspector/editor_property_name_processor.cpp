@@ -107,7 +107,44 @@ StringName EditorPropertyNameProcessor::_get_context(const String &p_name, const
 	return *context;
 }
 
+// OpenRAC Editor: a plain label for a game property, if it has one. Only the last part of a path gets it.
+bool EditorPropertyNameProcessor::_openrac_label(const String &p_name, const String &p_property, const StringName &p_class, String &r_label) const {
+	if (p_property.is_empty()) {
+		return false;
+	}
+	if (p_name == "metadata" && p_property.begins_with("metadata/")) {
+		r_label = "Game Settings";
+		return true;
+	}
+	if (!p_property.ends_with(p_name)) {
+		return false;
+	}
+	if (p_class != StringName()) {
+		const String *found = openrac_labels.getptr(String(p_class) + "::" + p_property);
+		if (found) {
+			r_label = *found;
+			return true;
+		}
+	}
+	const String *found = openrac_labels.getptr(p_property);
+	if (found) {
+		r_label = *found;
+		return true;
+	}
+	if (p_property.begins_with("metadata/rc1_")) {
+		// Other game values: drop the rc1_ (and pv_) prefix, so "rc1_pv_spring_k" reads "Spring K".
+		String rest = p_property.trim_prefix("metadata/rc1_").trim_prefix("pv_");
+		r_label = _capitalize_name(rest);
+		return true;
+	}
+	return false;
+}
+
 String EditorPropertyNameProcessor::process_name(const String &p_name, Style p_style, const String &p_property, const StringName &p_class) const {
+	String openrac_label;
+	if (p_style != STYLE_RAW && _openrac_label(p_name, p_property, p_class, openrac_label)) {
+		return openrac_label;
+	}
 	switch (p_style) {
 		case STYLE_RAW: {
 			return p_name;
@@ -142,6 +179,121 @@ EditorPropertyNameProcessor::EditorPropertyNameProcessor() {
 	// The following initialization is parsed by the l10n extraction script with a regex.
 	// The map name and value definition format should be kept synced with the regex.
 	// https://github.com/godotengine/godot-editor-l10n/blob/main/scripts/common.py
+	// OpenRAC Editor: plain labels for the game's properties.
+	openrac_labels["Cutscene::export_now"] = "Save Cutscene File";
+	openrac_labels["Cutscene::import_file"] = "Load Cutscene File";
+	openrac_labels["Cutscene::set_up"] = "Set Up";
+	openrac_labels["Cutscene::file_name"] = "File Name";
+	openrac_labels["Cutscene::game"] = "Game";
+	openrac_labels["Cutscene::length"] = "Length";
+	openrac_labels["Cutscene::languages"] = "Disc Languages";
+	openrac_labels["Cutscene::translations"] = "Subtitle Languages";
+	openrac_labels["Cutscene::trigger_kind"] = "Starts When";
+	openrac_labels["Cutscene::trigger_once"] = "Play Only Once";
+	openrac_labels["Cutscene::trigger_radius"] = "Area Size";
+	openrac_labels["Cutscene::trigger_box"] = "Area Box";
+	openrac_labels["Cutscene::trigger_spawn_id"] = "Object ID";
+	openrac_labels["Cutscene::trigger_after"] = "After Cutscene";
+	openrac_labels["Cutscene::trigger_flag_enabled"] = "Use Mission Flag";
+	openrac_labels["Cutscene::skippable"] = "Can Skip";
+	openrac_labels["Cutscene::letterbox"] = "Black Bars";
+	openrac_labels["Cutscene::hide_hud"] = "Hide the HUD";
+	openrac_labels["Cutscene::world"] = "Level During Cutscene";
+	openrac_labels["Cutscene::music"] = "Music";
+	openrac_labels["Cutscene::hero_mode"] = "Ratchet During Cutscene";
+	openrac_labels["Cutscene::hero_sequence"] = "Ratchet's Move";
+	openrac_labels["Cutscene::variants"] = "Other Versions";
+	openrac_labels["CutsceneCamera::cuts"] = "Camera Cuts";
+	openrac_labels["CutsceneCamera::ease_back"] = "Ease Back to Game Camera";
+	openrac_labels["CutsceneCamera::export_fov"] = "Save Zoom";
+	openrac_labels["CutsceneCamera::fov"] = "Zoom";
+	openrac_labels["CutsceneActor::take_selected_moby"] = "Use Selected Object";
+	openrac_labels["CutsceneActor::actor_id"] = "Actor Name";
+	openrac_labels["CutsceneActor::source"] = "Who Acts";
+	openrac_labels["CutsceneActor::spawn_id"] = "Object ID";
+	openrac_labels["CutsceneActor::moby_class"] = "Object Type";
+	openrac_labels["CutsceneActor::prop_path"] = "Prop Model";
+	openrac_labels["CutsceneActor::spawn_if_missing"] = "Add If Missing";
+	openrac_labels["CutsceneActor::end"] = "At the End";
+	openrac_labels["CutsceneActor::sequence"] = "Move";
+	openrac_labels["CutsceneActor::anim_speed"] = "Move Speed";
+	openrac_labels["CutsceneActor::blend"] = "Blend Time";
+	openrac_labels["CutsceneActor::ride_on"] = "Ride On";
+	openrac_labels["CutsceneActor::ride_start"] = "Ride From";
+	openrac_labels["CutsceneActor::ride_end"] = "Ride To";
+	openrac_labels["CutsceneActor::use_known_rig"] = "Use Known Face";
+	openrac_labels["CutsceneActor::rig"] = "Face Joints";
+	openrac_labels["CutsceneActor::pose_file"] = "Pose File";
+	openrac_labels["CutsceneActor::pose_joints"] = "Pose Joints";
+	openrac_labels["CutsceneActor::pose_source"] = "Pose From Model";
+	openrac_labels["CutsceneActor::pose_animation"] = "Move Name";
+	openrac_labels["CutsceneActor::pose_map"] = "Joint Matching";
+	openrac_labels["CutsceneActor::pose_start"] = "Pose Start";
+	openrac_labels["CutsceneActor::pose_bake"] = "Make Pose";
+	openrac_labels["CutscenePath::speed"] = "Speed";
+	openrac_labels["CutscenePath::ground"] = "Stick to Ground";
+	openrac_labels["CutsceneLayer::use_part"] = "Body Part";
+	openrac_labels["CutsceneLayer::weight"] = "Amount";
+	openrac_labels["CutsceneLayer::retarget_source"] = "Model File";
+	openrac_labels["CutsceneLayer::retarget_animation"] = "Move Name";
+	openrac_labels["CutsceneLayer::retarget_map"] = "Joint Matching";
+	openrac_labels["CutsceneLayer::retarget_bake"] = "Copy Moves";
+	openrac_labels["CutsceneMood::mood"] = "Mood";
+	openrac_labels["CutsceneMood::weight"] = "Amount";
+	openrac_labels["CutsceneMood::blend"] = "Blend Time";
+	openrac_labels["CutsceneSound::kind"] = "Kind";
+	openrac_labels["CutsceneSound::files"] = "Files per Language";
+	openrac_labels["CutsceneSound::game_sound"] = "Game Sound";
+	openrac_labels["CutsceneSound::source"] = "Comes From";
+	openrac_labels["CutsceneSound::volume"] = "Volume";
+	openrac_labels["CutsceneSound::fade_in"] = "Fade In";
+	openrac_labels["CutsceneSound::fade_out"] = "Fade Out";
+	openrac_labels["CutsceneSound::stop"] = "Stop At";
+	openrac_labels["CutsceneEvent::action"] = "Action";
+	openrac_labels["CutsceneEvent::persistent"] = "Stays After";
+	openrac_labels["CutsceneEvent::spawn_id"] = "Object ID";
+	openrac_labels["CutsceneEvent::level"] = "Level";
+	openrac_labels["CutsceneEvent::flag_byte"] = "Flag Number";
+	openrac_labels["CutsceneEvent::flag_value"] = "Flag Value";
+	openrac_labels["CutsceneEvent::radius"] = "Size";
+	openrac_labels["CutsceneEvent::colour"] = "Color";
+	openrac_labels["CutsceneEvent::cutscene"] = "Cutscene";
+	openrac_labels["CutsceneEvent::air_fog"] = "Change Fog";
+	openrac_labels["CutsceneEvent::fog_near"] = "Fog Start";
+	openrac_labels["CutsceneEvent::fog_far"] = "Fog End";
+	openrac_labels["CutsceneEvent::fog_thickness"] = "Fog Thickness";
+	openrac_labels["CutsceneEvent::air_background"] = "Change Sky Color";
+	openrac_labels["CutsceneEvent::background"] = "Sky Color";
+	openrac_labels["CutsceneEvent::stretch"] = "Slow Down";
+	openrac_labels["CutsceneEvent::tie"] = "Big Scenery";
+	openrac_labels["scale"] = "Size";
+	openrac_labels["metadata/rc1_draw_distance"] = "Visible Up To";
+	openrac_labels["metadata/rc1_update_distance"] = "Active Up To";
+	openrac_labels["metadata/rc1_colour"] = "Brightness";
+	openrac_labels["metadata/rc1_spawn_id"] = "ID";
+	openrac_labels["metadata/rc1_occlusion"] = "Hidden Behind Walls";
+	openrac_labels["metadata/rc1_class"] = "Type";
+	openrac_labels["metadata/rc1_class_name"] = "Type Name";
+	openrac_labels["metadata/rc1_class_scale"] = "Type Size";
+	openrac_labels["metadata/rc1_light"] = "Light";
+	openrac_labels["metadata/rc1_directional_lights"] = "Lights";
+	openrac_labels["metadata/rc1_pvar"] = "Settings";
+	openrac_labels["metadata/rc1_spawn_flags"] = "Start Options";
+	openrac_labels["metadata/rc1_group"] = "Team";
+	openrac_labels["metadata/rc1_rooted_distance"] = "Stays Put Up To";
+	openrac_labels["metadata/rc1_surface"] = "Ground Type";
+	openrac_labels["metadata/rc1_collision_kind"] = "Collision Kind";
+	openrac_labels["metadata/rc1_range"] = "Range";
+	openrac_labels["metadata/rc1_joints"] = "Joints";
+	openrac_labels["metadata/rc1_joint"] = "Joint";
+	openrac_labels["metadata/rc1_static_collision"] = "Solid";
+	openrac_labels["metadata/rc1_skin_animations"] = "Animations";
+	openrac_labels["metadata/rc1_skin"] = "Skin";
+	openrac_labels["metadata/rc1_foreign_level"] = "From Level";
+	openrac_labels["metadata/rc1_behaviour"] = "Simple Move";
+	openrac_labels["metadata/rc1_ship_path"] = "Ship Path";
+	openrac_labels["metadata/rc1_ship_camera_cuboids"] = "Ship Camera Areas";
+
 	capitalize_string_remaps["2d"] = "2D";
 	capitalize_string_remaps["3d"] = "3D";
 	capitalize_string_remaps["4d"] = "4D";

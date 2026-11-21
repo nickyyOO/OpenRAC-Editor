@@ -44,9 +44,8 @@ func section(node: Node3D) -> Control:
 	text.custom_minimum_size = Vector2(160 * px, 0)
 	var level: int = int(node.get_meta("rc1_foreign_level", -1))
 	var name: String = String(level_name.call(level))
-	text.text = ("[b]Imported class[/b]\nRuns its own logic from level %02d%s. "
-		+ "[color=#9aa4b2]Its paths, zones, cameras and needed mobys come with it. "
-		+ "Sounds and texts are this level's. Costs about 0.5 ms a frame. Pack, then play.[/color]") % [level, "" if name.is_empty() else " (%s)" % name]
+	text.text = ("[b]From another level[/b]\nActs like it does in level %02d%s. "
+		+ "[color=#9aa4b2]What it needs comes with it. Sounds and texts are this level's.[/color]") % [level, "" if name.is_empty() else " (%s)" % name]
 	var box := VBoxContainer.new()
 	box.add_child(text)
 	box.add_child(partial_toggle(node))
@@ -61,9 +60,7 @@ func section(node: Node3D) -> Control:
 func partial_toggle(node: Node) -> Control:
 	var check := CheckBox.new()
 	check.text = "Leave Out Extras"
-	check.tooltip_text = ("A level has room for only so many classes. If this class and what it makes do not fit, "
-		+ "the pack refuses it. Turn this on to import it anyway: the extra classes it makes "
-		+ "(shots, effects, parts) will be missing.")
+	check.tooltip_text = "If it doesn't fit, leave out its extras (shots, effects)."
 	check.button_pressed = bool(node.get_meta("rc1_foreign_partial", false))
 	check.toggled.connect(func(on: bool) -> void:
 		if undo_redo == null:

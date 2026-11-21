@@ -176,7 +176,7 @@ String InputMap::get_action_description(const StringName &p_action) const {
 	for (Ref<InputEventKey> iek : inputs) {
 		if (iek.is_valid()) {
 			if (!ret.is_empty()) {
-				ret += RTR("or");
+				ret += RTR(" or ");
 			}
 			ret += iek->as_text();
 		}

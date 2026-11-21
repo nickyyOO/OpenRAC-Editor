@@ -499,7 +499,7 @@ func _process(_delta: float) -> void:
 		if said["kind"] == "progress":
 			show_progress(said)
 		elif said["kind"] == "stopped":
-			say("The voice tools stopped." + String(said.get("text", "")).get_slice("\n", 0), WARN_COLOUR)
+			say("The voice tools stopped. " + String(said.get("text", "")).get_slice("\n", 0), WARN_COLOUR)
 			update_buttons()
 
 
@@ -682,7 +682,7 @@ func show_model() -> void:
 		lines.append("[color=#ffcc73]%s[/color]" % row["why"])
 
 	if not row["missing"].is_empty():
-		lines.append("[color=#ffcc73]Does not speak: %s.[/color]" % ", ".join(PackedStringArray(row["missing"].map(language_name))))
+		lines.append("[color=#ffcc73]No voice for: %s.[/color]" % ", ".join(PackedStringArray(row["missing"].map(language_name))))
 
 	var size: String = "about %s GB to download" % str(row["download_gb"]) if row["kind"] == "python" else "runs elsewhere"
 	lines.append("Licence: %s%s. Uses %s; %s." % [row["license"], "" if row["commercial"] else " (free for non-commercial use)",
@@ -717,14 +717,14 @@ func install_model() -> void:
 	var row: Dictionary = picked_model()
 
 	if not row.is_empty():
-		run("install", {"model": row["id"]}, "Installing" + String(row["name"]), refresh_models)
+		run("install", {"model": row["id"]}, "Installing " + String(row["name"]), refresh_models)
 
 
 func remove_model() -> void:
 	var row: Dictionary = picked_model()
 
 	if not row.is_empty():
-		run("remove", {"model": row["id"]}, "Removing" + String(row["name"]), refresh_models)
+		run("remove", {"model": row["id"]}, "Removing " + String(row["name"]), refresh_models)
 
 
 ## The model lines are spoken with, and its server's address: what speak and say take.
@@ -1100,7 +1100,7 @@ func show_subtitle() -> void:
 	cutscene_words.text = String(text.get(code, text.get("", "")))
 	var speaker: Node = subtitle.get_node_or_null(subtitle.get("speaker"))
 	cutscene_info.text = "%s at %.1f s%s." % [subtitle.name, float(subtitle.get("start")),
-		", said by" + String(speaker.name) if speaker != null else ""]
+		", said by " + String(speaker.name) if speaker != null else ""]
 
 	# The character whose name is the speaker's, if any.
 	if speaker != null:
@@ -1228,7 +1228,7 @@ func hear(path: String) -> void:
 	var stream: AudioStreamWAV = AudioStreamWAV.load_from_file(path)
 
 	if stream == null:
-		say("Couldn't play" + path.get_file(), WARN_COLOUR)
+		say("Couldn't play " + path.get_file(), WARN_COLOUR)
 		return
 
 	player.stream = stream

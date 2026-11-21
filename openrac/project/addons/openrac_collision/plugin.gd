@@ -647,7 +647,7 @@ func class_text(layer: Node3D, id: int, label: String) -> String:
 
 	for part in ClassCollision.parts(layer):
 		var shape: String = "radius %.3f" % part.radius if part.radius > 0 else "type byte 0x%02x" % part.surface
-		lines.append("%s (%s): %s at %s, hit by %d" % [part.name, part.kind, shape, part.position, part.queries])
+		lines.append("  %s (%s): %s at %s, hit by %d" % [part.name, part.kind, shape, part.position, part.queries])
 
 	return "\n".join(lines)
 

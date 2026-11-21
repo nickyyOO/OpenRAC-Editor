@@ -1722,7 +1722,7 @@ void EditorProperty::_update_popup() {
 			menu->add_icon_check_item(theme_cache.pin_icon, TTR("Always Save Value"), MENU_PIN_VALUE);
 			menu->set_item_checked(menu->get_item_index(MENU_PIN_VALUE), pinned);
 		} else {
-			menu->add_icon_check_item(theme_cache.pin_icon, vformat(TTR("Pin Value [Disabled because '%s' is editor-only]"), property), MENU_PIN_VALUE);
+			menu->add_icon_check_item(theme_cache.pin_icon, TTR("Always Save Value (Not Available)"), MENU_PIN_VALUE);
 			menu->set_item_disabled(menu->get_item_index(MENU_PIN_VALUE), true);
 		}
 		menu->set_item_tooltip(menu->get_item_index(MENU_PIN_VALUE), TTR("Save this value even if it's the default."));
@@ -1957,6 +1957,17 @@ void EditorInspectorCategory::set_property_info(const PropertyInfo &p_info) {
 	}
 	if (label.is_empty()) {
 		label = info.name;
+	}
+	// OpenRAC Editor: plain section names, not file or class names ("moby.gd" reads "Object").
+	static const HashMap<String, String> plain = {
+		{ "moby.gd", "Object" }, { "level.gd", "Level" }, { "nanotech.gd", "Nanotech" }, { "electric_gate.gd", "Electric Gate" },
+		{ "CutsceneCamera", "Cutscene Camera" }, { "CutsceneActor", "Cutscene Actor" }, { "CutscenePath", "Walk Path" },
+		{ "CutsceneShake", "Camera Shake" }, { "CutsceneMood", "Face Mood" }, { "CutsceneLayer", "Body Part Move" },
+		{ "CutsceneSubtitle", "Subtitle" }, { "CutsceneSound", "Cutscene Sound" }, { "CutsceneEvent", "Cutscene Event" },
+	};
+	const String *plain_label = plain.getptr(label.get_file());
+	if (plain_label) {
+		label = *plain_label;
 	}
 	_update_icon();
 }
@@ -4171,7 +4182,14 @@ void EditorInspector::_openrac_simplify_property_list(Object *p_object, List<Pro
 				r_list.erase(E);
 			}
 		} else if (!(p.usage & (PROPERTY_USAGE_GROUP | PROPERTY_USAGE_SUBGROUP))) {
-			if (p.name == "script" || (!keep_category && !kept.has(p.name) && !String(p.name).begins_with("metadata/"))) {
+			const String name = p.name;
+			// The game's bookkeeping values (indexes, ids, raw bits) stay in the file but are not shown.
+			const bool internal_meta = name.begins_with("metadata/rc1_") &&
+					(name.ends_with("_index") || name.begins_with("metadata/rc1_unknown_") || name.begins_with("metadata/rc1_link_") ||
+							name == "metadata/rc1_uid" || name == "metadata/rc1_mode_bits" || name == "metadata/rc1_w" ||
+							name == "metadata/rc1_matrix_w" || name == "metadata/rc1_collision_format" || name == "metadata/rc1_m_class" ||
+							name == "metadata/rc1_queries");
+			if (name == "script" || internal_meta || (!keep_category && !kept.has(p.name) && !name.begins_with("metadata/"))) {
 				r_list.erase(E);
 			}
 		}
@@ -4638,6 +4656,12 @@ void EditorInspector::update_tree() {
 					} else {
 						label = component;
 						tooltip = EditorPropertyNameProcessor::get_singleton()->translate_group_name(component);
+					}
+					// OpenRAC Editor: plain group names.
+					if (component == "Transform") {
+						label = "Position and Size";
+					} else if (component == "Visibility") {
+						label = "Show and Hide";
 					}
 				} else {
 					label = EditorPropertyNameProcessor::get_singleton()->process_name(component, section_name_style, p.name, doc_name);
