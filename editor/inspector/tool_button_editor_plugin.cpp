@@ -88,7 +88,7 @@ bool EditorInspectorToolButtonPlugin::parse_property(Object *p_object, const Var
 		const Callable callback = p_object->get(p_path);
 		if (callback.is_custom()) {
 			action_button->set_disabled(true);
-			action_button->set_tooltip_text(TTR("The assigned tool button callback can't be used with multiple nodes."));
+			action_button->set_tooltip_text(TTR("This button only works with one object selected."));
 		}
 	}
 	action_button->connect(SceneStringName(pressed), callable_mp(this, &EditorInspectorToolButtonPlugin::_call_action).bind(p_object, p_path));

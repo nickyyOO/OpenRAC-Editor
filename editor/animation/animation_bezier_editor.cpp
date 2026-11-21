@@ -1186,7 +1186,7 @@ void AnimationBezierTrackEdit::_clear_selection() {
 
 void AnimationBezierTrackEdit::_change_selected_keys_handle_mode(Animation::HandleMode p_mode, bool p_auto) {
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->create_action(TTR("Update Selected Key Handles"), UndoRedo::MERGE_DISABLE, animation.ptr());
+	undo_redo->create_action(TTR("Change Curve Handles"), UndoRedo::MERGE_DISABLE, animation.ptr());
 	for (SelectionSet::Element *E = selection.back(); E; E = E->prev()) {
 		const IntPair track_key_pair = E->get();
 		undo_redo->add_undo_method(editor, "_bezier_track_set_key_handle_mode", animation.ptr(), track_key_pair.first, track_key_pair.second, animation->bezier_track_get_key_handle_mode(track_key_pair.first, track_key_pair.second), Animation::HANDLE_SET_MODE_NONE);
@@ -1361,28 +1361,28 @@ void AnimationBezierTrackEdit::gui_input(const Ref<InputEvent> &p_event) {
 				bool selected = _try_select_at_ui_pos(mb->get_position(), mb->is_shift_pressed(), false);
 
 				menu->clear();
-				menu->add_icon_item(bezier_icon, TTR("Insert Key Here"), MENU_KEY_INSERT);
+				menu->add_icon_item(bezier_icon, TTR("Add Key Here"), MENU_KEY_INSERT);
 				if (selected || selection.size()) {
 					menu->add_separator();
-					menu->add_icon_item(get_editor_theme_icon(SNAME("Duplicate")), TTR("Duplicate Selected Key(s)"), MENU_KEY_DUPLICATE);
-					menu->add_icon_item(get_editor_theme_icon(SNAME("ActionCut")), TTR("Cut Selected Key(s)"), MENU_KEY_CUT);
-					menu->add_icon_item(get_editor_theme_icon(SNAME("ActionCopy")), TTR("Copy Selected Key(s)"), MENU_KEY_COPY);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("Duplicate")), TTR("Duplicate Keys"), MENU_KEY_DUPLICATE);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("ActionCut")), TTR("Cut Keys"), MENU_KEY_CUT);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("ActionCopy")), TTR("Copy Keys"), MENU_KEY_COPY);
 				}
 
 				if (editor->is_key_clipboard_active()) {
-					menu->add_icon_item(get_editor_theme_icon(SNAME("ActionPaste")), TTR("Paste Key(s)"), MENU_KEY_PASTE);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("ActionPaste")), TTR("Paste Keys"), MENU_KEY_PASTE);
 				}
 
 				if (selected || selection.size()) {
 					menu->add_separator();
-					menu->add_icon_item(get_editor_theme_icon(SNAME("Remove")), TTR("Delete Selected Key(s)"), MENU_KEY_DELETE);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("Remove")), TTR("Delete Keys"), MENU_KEY_DELETE);
 					menu->add_separator();
-					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesFree")), TTR("Make Handles Free"), MENU_KEY_SET_HANDLE_FREE);
-					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesLinear")), TTR("Make Handles Linear"), MENU_KEY_SET_HANDLE_LINEAR);
-					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesBalanced")), TTR("Make Handles Balanced"), MENU_KEY_SET_HANDLE_BALANCED);
-					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesMirror")), TTR("Make Handles Mirrored"), MENU_KEY_SET_HANDLE_MIRRORED);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesFree")), TTR("Free Curve"), MENU_KEY_SET_HANDLE_FREE);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesLinear")), TTR("Straight Curve"), MENU_KEY_SET_HANDLE_LINEAR);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesBalanced")), TTR("Smooth Curve"), MENU_KEY_SET_HANDLE_BALANCED);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesMirror")), TTR("Even Curve"), MENU_KEY_SET_HANDLE_MIRRORED);
 					menu->add_separator();
-					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesBalanced")), TTR("Make Handles Balanced (Auto Tangent)"), MENU_KEY_SET_HANDLE_AUTO_BALANCED);
+					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesBalanced")), TTR("Auto Smooth Curve"), MENU_KEY_SET_HANDLE_AUTO_BALANCED);
 					menu->add_icon_item(get_editor_theme_icon(SNAME("BezierHandlesMirror")), TTR("Make Handles Mirrored (Auto Tangent)"), MENU_KEY_SET_HANDLE_AUTO_MIRRORED);
 				}
 
@@ -1744,7 +1744,7 @@ void AnimationBezierTrackEdit::gui_input(const Ref<InputEvent> &p_event) {
 			}
 
 			EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-			undo_redo->create_action(TTR("Add Bezier Point"));
+			undo_redo->create_action(TTR("Add Curve Key"));
 			undo_redo->add_do_method(animation.ptr(), "bezier_track_insert_key", selected_track, time, new_point[0], Vector2(new_point[1], new_point[2]), Vector2(new_point[3], new_point[4]));
 			undo_redo->add_do_method(editor, "_bezier_track_set_key_handle_mode_at_time", animation.ptr(), selected_track, time, (Animation::HandleMode)editor->bezier_key_mode->get_selected_id(), Animation::HANDLE_SET_MODE_AUTO);
 			undo_redo->add_undo_method(animation.ptr(), "track_remove_key_at_time", selected_track, time);
@@ -1846,7 +1846,7 @@ void AnimationBezierTrackEdit::gui_input(const Ref<InputEvent> &p_event) {
 			if (moving_selection && (std::abs(moving_selection_offset.x) > CMP_EPSILON || std::abs(moving_selection_offset.y) > CMP_EPSILON)) {
 				// Commit it.
 				EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-				undo_redo->create_action(TTR("Move Bezier Points"));
+				undo_redo->create_action(TTR("Move Curve Keys"));
 
 				List<AnimMoveRestore> to_restore;
 				List<Animation::HandleMode> to_restore_handle_modes;
@@ -1986,7 +1986,7 @@ void AnimationBezierTrackEdit::gui_input(const Ref<InputEvent> &p_event) {
 		if (std::abs(scaling_selection_scale.x - 1) > CMP_EPSILON || std::abs(scaling_selection_scale.y - 1) > CMP_EPSILON) {
 			// Scale it.
 			EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-			undo_redo->create_action(TTR("Scale Bezier Points"));
+			undo_redo->create_action(TTR("Stretch Curve Keys"));
 
 			List<AnimMoveRestore> to_restore;
 			List<Animation::HandleMode> to_restore_handle_modes;
@@ -2291,7 +2291,7 @@ void AnimationBezierTrackEdit::gui_input(const Ref<InputEvent> &p_event) {
 	if ((moving_handle == -1 || moving_handle == 1) && mb.is_valid() && !mb->is_pressed() && mb->get_button_index() == MouseButton::LEFT) {
 		if (!read_only) {
 			EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-			undo_redo->create_action(TTR("Move Bezier Points"));
+			undo_redo->create_action(TTR("Move Curve Keys"));
 			if (moving_handle == -1) {
 				real_t ratio = timeline->get_zoom_scale() * timeline_v_zoom;
 				undo_redo->add_do_method(animation.ptr(), "bezier_track_set_key_in_handle", moving_handle_track, moving_handle_key, moving_handle_left, ratio);
@@ -2416,7 +2416,7 @@ void AnimationBezierTrackEdit::_menu_selected(int p_index) {
 				Array new_point = animation->make_default_bezier_key(h);
 				Animation::HandleMode handle_mode = (Animation::HandleMode)editor->bezier_key_mode->get_selected_id();
 				EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-				undo_redo->create_action(TTR("Add Bezier Point"));
+				undo_redo->create_action(TTR("Add Curve Key"));
 				undo_redo->add_do_method(animation.ptr(), "track_insert_key", selected_track, time, new_point);
 				undo_redo->add_do_method(editor, "_bezier_track_set_key_handle_mode_at_time", animation.ptr(), selected_track, time, handle_mode, Animation::HANDLE_SET_MODE_AUTO);
 				undo_redo->add_undo_method(this, "_clear_selection_for_anim", animation);
@@ -2480,7 +2480,7 @@ void AnimationBezierTrackEdit::duplicate_selected_keys(real_t p_ofs, bool p_ofs_
 	}
 
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->create_action(TTR("Animation Duplicate Keys"));
+	undo_redo->create_action(TTR("Duplicate Keys"));
 
 	List<Pair<int, real_t>> new_selection_values;
 
@@ -2562,7 +2562,7 @@ void AnimationBezierTrackEdit::copy_selected_keys(bool p_cut) {
 
 	if (p_cut) {
 		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-		undo_redo->create_action(TTR("Animation Cut Keys"), UndoRedo::MERGE_DISABLE, animation.ptr());
+		undo_redo->create_action(TTR("Cut Keys"), UndoRedo::MERGE_DISABLE, animation.ptr());
 		undo_redo->add_do_method(this, "_clear_selection_for_anim", animation);
 		undo_redo->add_undo_method(this, "_clear_selection_for_anim", animation);
 		int i = 0;
@@ -2596,7 +2596,7 @@ void AnimationBezierTrackEdit::copy_selected_keys(bool p_cut) {
 void AnimationBezierTrackEdit::paste_keys(real_t p_ofs, bool p_ofs_valid) {
 	if (editor->is_key_clipboard_active() && animation.is_valid() && (selected_track >= 0 && selected_track < animation->get_track_count())) {
 		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-		undo_redo->create_action(TTR("Animation Paste Keys"));
+		undo_redo->create_action(TTR("Paste Keys"));
 
 		bool same_track = true;
 		bool all_compatible = true;
@@ -2682,7 +2682,7 @@ void AnimationBezierTrackEdit::paste_keys(real_t p_ofs, bool p_ofs_valid) {
 void AnimationBezierTrackEdit::delete_selection() {
 	if (selection.size()) {
 		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-		undo_redo->create_action(TTR("Animation Delete Keys"));
+		undo_redo->create_action(TTR("Delete Keys"));
 
 		for (SelectionSet::Element *E = selection.back(); E; E = E->prev()) {
 			undo_redo->add_do_method(animation.ptr(), "track_remove_key", E->get().first, E->get().second);
@@ -2735,7 +2735,7 @@ AnimationBezierTrackEdit::AnimationBezierTrackEdit() {
 
 	set_clip_contents(true);
 
-	ED_SHORTCUT("animation_bezier_editor/focus", TTRC("Focus"), Key::F);
+	ED_SHORTCUT("animation_bezier_editor/focus", TTRC("Show Selected Keys"), Key::F);
 	ED_SHORTCUT("animation_bezier_editor/select_all_keys", TTRC("Select All Keys"), KeyModifierMask::CMD_OR_CTRL | Key::A);
 	ED_SHORTCUT("animation_bezier_editor/deselect_all_keys", TTRC("Deselect All Keys"), KeyModifierMask::CMD_OR_CTRL | KeyModifierMask::SHIFT | Key::A);
 

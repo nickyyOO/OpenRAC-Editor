@@ -42,7 +42,7 @@ void PackedSceneEditor::_on_open_scene_pressed() {
 PackedSceneEditor::PackedSceneEditor(Ref<PackedScene> &p_packed_scene) {
 	packed_scene = p_packed_scene;
 
-	EditorInspectorActionButton *open_scene_button = memnew(EditorInspectorActionButton(TTRC("Open Scene"), SNAME("PackedScene")));
+	EditorInspectorActionButton *open_scene_button = memnew(EditorInspectorActionButton(TTRC("Open Level"), SNAME("PackedScene")));
 	open_scene_button->connect(SceneStringName(pressed), callable_mp(this, &PackedSceneEditor::_on_open_scene_pressed));
 	open_scene_button->set_disabled(!packed_scene->get_path().get_file().is_valid_filename());
 	add_child(open_scene_button);

@@ -145,7 +145,7 @@ void CutsceneTimelineView::refresh() {
 				Item item;
 				item.start = cut;
 				item.node = cam->get_instance_id();
-				item.text = TTR("cut");
+				item.text = TTR("Cut");
 				row.items.push_back(item);
 			}
 			rows.push_back(row);
@@ -155,7 +155,7 @@ void CutsceneTimelineView::refresh() {
 					sub.label = String(shake->get_name());
 					sub.depth = 1;
 					sub.node = shake->get_instance_id();
-					Item item = point(shake, shake->get_start(), TTR("shake"));
+					Item item = point(shake, shake->get_start(), TTR("Shake"));
 					item.end = shake->get_start() + shake->get_duration();
 					sub.items.push_back(item);
 					rows.push_back(sub);
@@ -174,9 +174,9 @@ void CutsceneTimelineView::refresh() {
 				sub.depth = 1;
 				sub.node = part->get_instance_id();
 				if (CutscenePath *walk = Object::cast_to<CutscenePath>(part)) {
-					sub.items.push_back(point(walk, walk->get_start(), TTR("walk")));
+					sub.items.push_back(point(walk, walk->get_start(), TTR("Walk")));
 				} else if (CutsceneMood *mood = Object::cast_to<CutsceneMood>(part)) {
-					Item item = point(mood, mood->get_start(), mood->get_mood().is_empty() ? TTR("own face") : mood->get_mood());
+					Item item = point(mood, mood->get_start(), mood->get_mood().is_empty() ? TTR("Own Face") : mood->get_mood());
 					item.end = mood->get_start() + mood->get_blend();
 					sub.items.push_back(item);
 				} else if (CutsceneLayer *layer = Object::cast_to<CutsceneLayer>(part)) {
@@ -375,7 +375,7 @@ void CutsceneTimelineView::_notification(int p_what) {
 
 	draw_rect(Rect2(Point2(), size), get_theme_color(SNAME("dark_color_2"), EditorStringName(Editor)));
 	if (get_cutscene() == nullptr) {
-		draw_string(font, Point2(8 * EDSCALE, ruler), TTR("Select a Cutscene, or a node in one, to see its timeline."), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, dim);
+		draw_string(font, Point2(8 * EDSCALE, ruler), TTR("Select a cutscene, or something in one, to see its timeline."), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, dim);
 		return;
 	}
 	// Past the end: shaded, with a line where it ends.
@@ -529,7 +529,7 @@ void CutsceneTimeline::_notification(int p_what) {
 			}
 			if (position != last_position) {
 				last_position = position;
-				time->set_text(position < 0.0 ? String() : vformat(TTR("%.2f s  |  tick %d of %d"), position, int(Math::round(position * cutscene_math::TICK_RATE)), int(Math::round(view->get_length() * cutscene_math::TICK_RATE))));
+				time->set_text(position < 0.0 ? String() : vformat(TTR("%.2f s, tick %d of %d"), position, int(Math::round(position * cutscene_math::TICK_RATE)), int(Math::round(view->get_length() * cutscene_math::TICK_RATE))));
 				view->queue_redraw();
 			}
 			_update_scroll();
@@ -555,12 +555,12 @@ CutsceneTimeline::CutsceneTimeline() {
 	box->add_child(bar);
 	rewind = memnew(Button);
 	rewind->set_flat(true);
-	rewind->set_tooltip_text(TTRC("To the start"));
+	rewind->set_tooltip_text(TTRC("To the Start"));
 	rewind->connect(SceneStringName(pressed), callable_mp(this, &CutsceneTimeline::_rewind_pressed));
 	bar->add_child(rewind);
 	play = memnew(Button);
 	play->set_flat(true);
-	play->set_tooltip_text(TTRC("Play or pause the cutscene in the 3D view (at the game's 60 ticks a second)"));
+	play->set_tooltip_text(TTRC("Play or pause the cutscene."));
 	play->connect(SceneStringName(pressed), callable_mp(this, &CutsceneTimeline::_play_pressed));
 	bar->add_child(play);
 	time = memnew(Label);
@@ -590,7 +590,7 @@ CutsceneTimeline::CutsceneTimeline() {
 	view = memnew(CutsceneTimelineView);
 	view->set_h_size_flags(SIZE_EXPAND_FILL);
 	view->set_v_size_flags(SIZE_EXPAND_FILL);
-	view->set_tooltip_text(TTRC("Click: go to that time, or pick what is there.\nDrag a highlighted start to move it.\nCtrl+wheel: zoom.  Shift+wheel: scroll."));
+	view->set_tooltip_text(TTRC("Click to jump or pick. Drag a start to move it.\nCtrl+wheel zooms, Shift+wheel scrolls."));
 	rows->add_child(view);
 	scroll = memnew(HScrollBar);
 	scroll->set_step(0);

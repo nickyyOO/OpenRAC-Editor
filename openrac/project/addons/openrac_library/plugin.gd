@@ -106,8 +106,8 @@ func register_mcp() -> void:
 ## name in the ship's menu, and its id, which the first add sets so later ones update the same
 ## planet. In Project Settings, OpenRAC > Planet.
 static func add_planet_settings() -> void:
-	for entry in [["openrac/planet/name", "The name in the ship's menu (one line, at most 40 characters: plain letters A-Z, digits, spaces and punctuation, as the game's font has no others)"],
-			["openrac/planet/id", "Set when the planet is first added: the next add updates the same planet"]]:
+	for entry in [["Planet name", "Name in the ship's menu (letters, digits, spaces; 40 at most)"],
+			["Planet ID", "Set when the planet is first added."]]:
 		if not ProjectSettings.has_setting(entry[0]):
 			ProjectSettings.set_setting(entry[0], "")
 		ProjectSettings.set_initial_value(entry[0], "")
@@ -153,7 +153,7 @@ func ready_to_place(path: String, again: Callable) -> bool:
 		return true
 
 	waiting_for_import = true
-	report("Importing %s; it is placed when ready..." % path.get_file(), false, false)
+	report("Loading %s; it's placed when ready." % path.get_file(), false, false)
 	wait_for_import(path, again)
 	return false
 
@@ -187,7 +187,7 @@ func wait_for_import(path: String, again: Callable) -> void:
 			return
 
 	waiting_for_import = false
-	report("The editor could not import %s." % path, true)
+	report("Couldn't load %s." % path, true)
 
 
 ## The name of LEVEL of the edited level's disc, as the dock read it, or "".
@@ -314,7 +314,7 @@ func stand_up_lying(root: Node = null) -> void:
 	undo_redo.commit_action()
 
 	if dock != null:
-		report("Stood up %d asset%s placed lying down by an older editor. Ctrl+Z puts them back." % [
+		report("Stood up %d asset%s placed lying down. Ctrl+Z puts them back." % [
 			nodes.size(), "" if nodes.size() == 1 else "s"])
 
 
@@ -394,7 +394,7 @@ func add_in_view(asset: Dictionary, place: Variant = null, job: String = "") -> 
 	var game: Node3D = root.get_node_or_null("Game") as Node3D if root != null else null
 
 	if game == null:
-		report("Open a level scene first.", true)
+		report("Open a level first.", true)
 		return
 
 	var path: String = prepare(asset)
@@ -408,7 +408,7 @@ func add_in_view(asset: Dictionary, place: Variant = null, job: String = "") -> 
 	var scene := ResourceLoader.load(path) as PackedScene
 
 	if scene == null:
-		report("The editor could not load %s." % path, true)
+		report("Couldn't load %s." % path, true)
 		return
 
 	var node := scene.instantiate() as Node3D
@@ -456,7 +456,7 @@ func add_as(asset: Dictionary, host_class: int, place: Variant = null, job: Stri
 	var level: Dictionary = here()
 
 	if game == null or level.is_empty():
-		report("Open a level scene first.", true)
+		report("Open a level first.", true)
 		return
 
 	var host_path: String = String(level["classes"]["mobys"].get(host_class, ""))
@@ -466,13 +466,13 @@ func add_as(asset: Dictionary, host_class: int, place: Variant = null, job: Stri
 	dock.importing = false
 
 	if host_path.is_empty() or skin_path.is_empty():
-		report(" ".join(error) if not error.is_empty() else "This level has no moby class %d." % host_class, true)
+		report(" ".join(error) if not error.is_empty() else "This level has no type %d." % host_class, true)
 		return
 
 	var host_scene := ResourceLoader.load(host_path) as PackedScene
 
 	if host_scene == null:
-		report("The editor could not load %s." % host_path, true)
+		report("Couldn't load %s." % host_path, true)
 		return
 
 	var host: Dictionary = {"name": "Class %d" % host_class, "scale": 1.0}
@@ -492,7 +492,7 @@ func add_as(asset: Dictionary, host_class: int, place: Variant = null, job: Stri
 		String(asset["name"]).capitalize().replace(" ", "")]
 	node.name = free_name(group, label.validate_node_name())
 	var undo_redo := get_undo_redo()
-	undo_redo.create_action("Add %s on the logic of %s" % [asset["name"], host["name"]], UndoRedo.MERGE_DISABLE, root)
+	undo_redo.create_action("Add %s acting as %s" % [asset["name"], host["name"]], UndoRedo.MERGE_DISABLE, root)
 
 	if make_group:
 		undo_redo.add_do_method(game, "add_child", group)
@@ -537,7 +537,7 @@ func add_foreign(asset: Dictionary, place: Variant = null, job: String = "") -> 
 	var game: Node3D = root.get_node_or_null("Game") as Node3D if root != null else null
 
 	if game == null:
-		report("Open a level scene first.", true)
+		report("Open a level first.", true)
 		return
 
 	var refusal: String = Library.import_refusal(asset, here())
@@ -557,7 +557,7 @@ func add_foreign(asset: Dictionary, place: Variant = null, job: String = "") -> 
 	var scene := ResourceLoader.load(path) as PackedScene if not path.is_empty() else null
 
 	if scene == null:
-		report(" ".join(error) if not error.is_empty() else "The editor could not load %s." % path, true)
+		report(" ".join(error) if not error.is_empty() else "Couldn't load %s." % path, true)
 		return
 
 	var node := scene.instantiate() as Node3D
@@ -572,7 +572,7 @@ func add_foreign(asset: Dictionary, place: Variant = null, job: String = "") -> 
 
 	node.name = free_name(group, base_name(asset))
 	var undo_redo := get_undo_redo()
-	undo_redo.create_action("Add %s with its own logic" % asset["name"], UndoRedo.MERGE_DISABLE, root)
+	undo_redo.create_action("Add %s with its actions" % asset["name"], UndoRedo.MERGE_DISABLE, root)
 
 	if make_group:
 		undo_redo.add_do_method(game, "add_child", group)
@@ -599,7 +599,7 @@ func add_foreign(asset: Dictionary, place: Variant = null, job: String = "") -> 
 	EditorInterface.get_selection().clear()
 	EditorInterface.get_selection().add_node(node)
 	last_added = node
-	report("Added %s with its own logic from %s. Pack, then play." % [
+	report("Added %s with its actions from %s. Then Play Level." % [
 		node.name, asset["level_name"] if not String(asset["level_name"]).is_empty() else "level %02d" % int(asset["level"])])
 
 
@@ -652,7 +652,7 @@ func add_metadata(undo_redo: EditorUndoRedoManager, node: Node3D, asset: Diction
 
 func placed_report(asset: Dictionary, node: Node) -> String:
 	if Library.status(asset, here()) == Library.FULL:
-		return "Added %s, a %s of this level. Move it, then pack." % [node.name, asset["kind"].trim_suffix("s")]
+		return "Added %s, a %s of this level. Move it, then Play Level." % [node.name, asset["kind"].trim_suffix("s")]
 
 	return ("Added %s as static scenery from %s, no logic. "
 		+ "Collision is %s (rc1_static_collision). Pack bakes it in.") % [node.name,

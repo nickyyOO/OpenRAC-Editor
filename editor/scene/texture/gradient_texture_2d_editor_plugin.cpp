@@ -63,7 +63,7 @@ void GradientTexture2DEdit::set_fill_pos(const Vector2 &p_pos) {
 
 	const StringName property_name = (grabbed == HANDLE_FROM) ? "fill_from" : "fill_to";
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->create_action(TTR("Move GradientTexture2D Fill Point"));
+	undo_redo->create_action(TTR("Move Gradient Point"));
 	undo_redo->add_do_property(texture.ptr(), property_name, p_pos);
 	undo_redo->add_undo_property(texture.ptr(), property_name, initial_grab_pos);
 	undo_redo->commit_action();
@@ -236,7 +236,7 @@ const int GradientTexture2DEditor::DEFAULT_SNAP = 10;
 
 void GradientTexture2DEditor::_reverse_button_pressed() {
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->create_action(TTR("Swap GradientTexture2D Fill Points"));
+	undo_redo->create_action(TTR("Swap Gradient Points"));
 	undo_redo->add_do_property(texture.ptr(), "fill_from", texture->get_fill_to());
 	undo_redo->add_do_property(texture.ptr(), "fill_to", texture->get_fill_from());
 	undo_redo->add_undo_property(texture.ptr(), "fill_from", texture->get_fill_from());
@@ -279,7 +279,7 @@ GradientTexture2DEditor::GradientTexture2DEditor() {
 	add_child(toolbar);
 
 	reverse_button = memnew(Button);
-	reverse_button->set_tooltip_text(TTR("Swap Gradient Fill Points"));
+	reverse_button->set_tooltip_text(TTR("Swap Gradient Points"));
 	toolbar->add_child(reverse_button);
 	reverse_button->connect(SceneStringName(pressed), callable_mp(this, &GradientTexture2DEditor::_reverse_button_pressed));
 

@@ -26,14 +26,14 @@ const HERO_COLOUR: Color = Color(1.0, 0.85, 0.2)
 
 ## What is known of each surface id; ids not listed have no known meaning.
 const KNOWN: Dictionary = {
-	0x1f: "no special surface; most of every level",
-	0: "water surface (the ground probe looks for the floor below it)",
-	8: "common; the game's wall and ledge checks test for it",
-	9: "common; the game's wall and ledge checks test for it",
-	10: "common; the game's wall and ledge checks test for it",
-	12: "common; the game's wall and ledge checks test for it",
-	11: "the ground snap is skipped (some special floor)",
-	13: "liquid-like (level 12 only)",
+	0x1f: "Normal ground",
+	0: "Water",
+	8: "Wall or ledge 8",
+	9: "Wall or ledge 9",
+	10: "Wall or ledge 10",
+	12: "Wall or ledge 12",
+	11: "Special floor",
+	13: "Liquid",
 }
 
 ## The golden-ratio step that spreads the other ids around the colour wheel.
@@ -78,7 +78,7 @@ static func type_byte(surface: int, sound: int, excluded: bool) -> int:
 
 ## What is known of a surface id, in a few words.
 static func describe(surface: int) -> String:
-	return KNOWN.get(surface, "meaning unknown")
+	return KNOWN.get(surface, "Unknown")
 
 
 ## A type byte in words: its surface id, sound class and exclusion.

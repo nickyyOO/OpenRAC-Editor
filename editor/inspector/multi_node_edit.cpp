@@ -63,7 +63,7 @@ bool MultiNodeEdit::_set_impl(const StringName &p_name, const Variant &p_value, 
 	EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
 
 	if (p_undo_redo) {
-		ur->create_action(vformat(TTR("Set %s on %d nodes"), name, get_node_count()), UndoRedo::MERGE_ENDS);
+		ur->create_action(vformat(TTR("Set %s on %d objects"), name, get_node_count()), UndoRedo::MERGE_ENDS);
 	}
 
 	for (const NodePath &E : nodes) {

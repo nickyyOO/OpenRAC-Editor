@@ -527,7 +527,7 @@ void AnimationPlayerEditor::_animation_new() {
 	_update_name_dialog_library_dropdown();
 
 	name_dialog_op = TOOL_NEW_ANIM;
-	name_dialog->set_title(TTR("Create New Animation"));
+	name_dialog->set_title(TTR("New Timeline"));
 	name_dialog->popup_centered(Size2(300, 90));
 	name_title->set_text(TTR("New Animation Name:"));
 	name->set_text(base);
@@ -1226,9 +1226,9 @@ void AnimationPlayerEditor::_update_name_dialog_library_dropdown() {
 }
 
 void AnimationPlayerEditor::_update_playback_tooltips() {
-	stop->set_tooltip_text(TTR("Pause/Stop Animation") + " (" + ED_GET_SHORTCUT("animation_editor/stop_animation")->get_as_text() + ")");
-	play->set_tooltip_text(TTR("Play Animation from Start") + " (" + ED_GET_SHORTCUT("animation_editor/play_animation_from_start")->get_as_text() + ")");
-	play_from->set_tooltip_text(TTR("Play Animation") + " (" + ED_GET_SHORTCUT("animation_editor/play_animation")->get_as_text() + ")");
+	stop->set_tooltip_text(TTR("Pause") + " (" + ED_GET_SHORTCUT("animation_editor/stop_animation")->get_as_text() + ")");
+	play->set_tooltip_text(TTR("Play from Start") + " (" + ED_GET_SHORTCUT("animation_editor/play_animation_from_start")->get_as_text() + ")");
+	play_from->set_tooltip_text(TTR("Play") + " (" + ED_GET_SHORTCUT("animation_editor/play_animation")->get_as_text() + ")");
 	play_bw_from->set_tooltip_text(TTR("Play Animation Backwards") + " (" + ED_GET_SHORTCUT("animation_editor/play_animation_backwards")->get_as_text() + ")");
 	play_bw->set_tooltip_text(TTR("Play Animation Backwards from End") + " (" + ED_GET_SHORTCUT("animation_editor/play_animation_from_end")->get_as_text() + ")");
 }
@@ -2077,7 +2077,7 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	set_name(TTRC("Keys")); // OpenRAC Editor: a plain name; the layout key stays "Animation" so saved layouts still work.
 	set_layout_key("Animation");
 	set_icon_name("Animation");
-	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("bottom_panels/toggle_animation_bottom_panel", TTRC("Toggle Animation Dock"), KeyModifierMask::ALT | Key::N));
+	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("bottom_panels/toggle_animation_bottom_panel", TTRC("Show Keys Panel"), KeyModifierMask::ALT | Key::N));
 	set_default_slot(EditorDock::DOCK_SLOT_BOTTOM);
 	set_available_layouts(EditorDock::DOCK_LAYOUT_HORIZONTAL | EditorDock::DOCK_LAYOUT_FLOATING);
 
@@ -2118,7 +2118,7 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	frame->set_custom_minimum_size(Size2(80, 0) * EDSCALE);
 	frame->set_stretch_ratio(2);
 	frame->set_step(0.0001);
-	frame->set_tooltip_text(TTRC("Animation position (in seconds)."));
+	frame->set_tooltip_text(TTRC("Time in seconds."));
 
 	hb->add_child(memnew(VSeparator));
 
@@ -2136,8 +2136,8 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	tool_anim = memnew(MenuButton);
 	tool_anim->set_shortcut_context(this);
 	tool_anim->set_flat(false);
-	tool_anim->set_tooltip_text(TTRC("Animation Tools"));
-	tool_anim->set_text(TTRC("Animation"));
+	tool_anim->set_tooltip_text(TTRC("Keys Menu"));
+	tool_anim->set_text(TTRC("Keys"));
 	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/new_animation", TTRC("New...")), TOOL_NEW_ANIM);
 	tool_anim->get_popup()->add_separator();
 	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/animation_libraries", TTRC("Manage Animations...")), TOOL_ANIM_LIBRARY);
@@ -2146,7 +2146,7 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	tool_anim->get_popup()->add_separator();
 	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/rename_animation", TTRC("Rename...")), TOOL_RENAME_ANIM);
 	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/edit_transitions", TTRC("Edit Transitions...")), TOOL_EDIT_TRANSITIONS);
-	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/open_animation_in_inspector", TTRC("Open in Inspector")), TOOL_EDIT_RESOURCE);
+	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/open_animation_in_inspector", TTRC("Show Properties")), TOOL_EDIT_RESOURCE);
 	tool_anim->get_popup()->add_separator();
 	tool_anim->get_popup()->add_shortcut(ED_SHORTCUT("animation_player_editor/remove_animation", TTRC("Remove")), TOOL_REMOVE_ANIM);
 	tool_anim->set_disabled(true);
@@ -2155,7 +2155,7 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 
 	animation = memnew(OptionButton);
 	hb->add_child(animation);
-	animation->set_accessibility_name(TTRC("Animation"));
+	animation->set_accessibility_name(TTRC("Keys"));
 	animation->set_h_size_flags(SIZE_EXPAND_FILL);
 	animation->set_tooltip_text(TTRC("Display list of animations in player."));
 	animation->set_clip_text(true);
@@ -2209,7 +2209,7 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	pin = memnew(Button);
 	pin->set_theme_type_variation(SceneStringName(FlatButton));
 	pin->set_toggle_mode(true);
-	pin->set_tooltip_text(TTRC("Pin AnimationPlayer"));
+	pin->set_tooltip_text(TTRC("Keep This Cutscene"));
 	hb->add_child(pin);
 	pin->connect(SceneStringName(pressed), callable_mp(this, &AnimationPlayerEditor::_pin_pressed));
 
@@ -2217,7 +2217,7 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	add_child(file);
 
 	name_dialog = memnew(ConfirmationDialog);
-	name_dialog->set_title(TTRC("Create New Animation"));
+	name_dialog->set_title(TTRC("New Timeline"));
 	name_dialog->set_hide_on_ok(false);
 	add_child(name_dialog);
 	VBoxContainer *vb = memnew(VBoxContainer);
@@ -2238,7 +2238,7 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 
 	error_dialog = memnew(AcceptDialog);
 	error_dialog->set_ok_button_text(TTRC("Close"));
-	error_dialog->set_title(TTRC("Error!"));
+	error_dialog->set_title(TTRC("Something Went Wrong"));
 	name_dialog->add_child(error_dialog);
 
 	name_dialog->connect(SceneStringName(confirmed), callable_mp(this, &AnimationPlayerEditor::_animation_name_edited));
@@ -2334,10 +2334,10 @@ void fragment() {
 )");
 	RS::get_singleton()->material_set_shader(onion.capture.material->get_rid(), onion.capture.shader->get_rid());
 
-	ED_SHORTCUT("animation_editor/stop_animation", TTRC("Pause/Stop Animation"), Key::S, true);
-	ED_SHORTCUT("animation_editor/play_animation", TTRC("Play Animation"), Key::D, true);
+	ED_SHORTCUT("animation_editor/stop_animation", TTRC("Pause"), Key::S, true);
+	ED_SHORTCUT("animation_editor/play_animation", TTRC("Play"), Key::D, true);
 	ED_SHORTCUT("animation_editor/play_animation_backwards", TTRC("Play Animation Backwards"), Key::A, true);
-	ED_SHORTCUT("animation_editor/play_animation_from_start", TTRC("Play Animation from Start"), KeyModifierMask::SHIFT + Key::D, true);
+	ED_SHORTCUT("animation_editor/play_animation_from_start", TTRC("Play from Start"), KeyModifierMask::SHIFT + Key::D, true);
 	ED_SHORTCUT("animation_editor/play_animation_from_end", TTRC("Play Animation Backwards from End"), KeyModifierMask::SHIFT + Key::A, true);
 }
 

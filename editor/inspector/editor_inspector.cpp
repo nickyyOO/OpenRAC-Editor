@@ -1230,7 +1230,7 @@ void EditorProperty::gui_input(const Ref<InputEvent> &p_event) {
 				object->get_property_list(&pinfo);
 				for (const PropertyInfo &E : pinfo) {
 					if (E.type == Variant::OBJECT && E.name == property_path) {
-						EditorToaster::get_singleton()->popup_str(TTR("Toggling the checkbox is disabled for Resource properties. Modify the property using the resource picker instead."), EditorToaster::SEVERITY_WARNING);
+						EditorToaster::get_singleton()->popup_str(TTR("Use the file picker to change this."), EditorToaster::SEVERITY_WARNING);
 						return; // Disallow clicking to toggle the checkbox of type Resource to checked.
 					}
 				}
@@ -1258,7 +1258,7 @@ void EditorProperty::_accessibility_action_click(const Variant &p_data) {
 			object->get_property_list(&pinfo);
 			for (const PropertyInfo &E : pinfo) {
 				if (E.type == Variant::OBJECT && E.name == property_path) {
-					EditorToaster::get_singleton()->popup_str(TTR("Toggling the checkbox is disabled for Resource properties. Modify the property using the resource picker instead."), EditorToaster::SEVERITY_WARNING);
+					EditorToaster::get_singleton()->popup_str(TTR("Use the file picker to change this."), EditorToaster::SEVERITY_WARNING);
 					return;
 				}
 			}
@@ -1708,24 +1708,24 @@ void EditorProperty::_update_popup() {
 
 	if (can_favorite) {
 		if (favorited) {
-			menu->add_icon_item(theme_cache.unfavorite_icon, TTR("Unfavorite Property"), MENU_FAVORITE_PROPERTY);
-			menu->set_item_tooltip(menu->get_item_index(MENU_FAVORITE_PROPERTY), TTR("Make this property be put back at its original place."));
+			menu->add_icon_item(theme_cache.unfavorite_icon, TTR("Remove from Favorites"), MENU_FAVORITE_PROPERTY);
+			menu->set_item_tooltip(menu->get_item_index(MENU_FAVORITE_PROPERTY), TTR("Put this back in its usual place."));
 		} else {
 			// TRANSLATORS: This is a menu item to add a property to the favorites.
-			menu->add_icon_item(theme_cache.favorite_icon, TTR("Favorite Property"), MENU_FAVORITE_PROPERTY);
-			menu->set_item_tooltip(menu->get_item_index(MENU_FAVORITE_PROPERTY), TTR("Make this property be placed at the top for all objects of this class."));
+			menu->add_icon_item(theme_cache.favorite_icon, TTR("Add to Favorites"), MENU_FAVORITE_PROPERTY);
+			menu->set_item_tooltip(menu->get_item_index(MENU_FAVORITE_PROPERTY), TTR("Show this at the top for all objects of this type."));
 		}
 	}
 
 	if (!pin_hidden) {
 		if (can_pin) {
-			menu->add_icon_check_item(theme_cache.pin_icon, TTR("Pin Value"), MENU_PIN_VALUE);
+			menu->add_icon_check_item(theme_cache.pin_icon, TTR("Always Save Value"), MENU_PIN_VALUE);
 			menu->set_item_checked(menu->get_item_index(MENU_PIN_VALUE), pinned);
 		} else {
 			menu->add_icon_check_item(theme_cache.pin_icon, vformat(TTR("Pin Value [Disabled because '%s' is editor-only]"), property), MENU_PIN_VALUE);
 			menu->set_item_disabled(menu->get_item_index(MENU_PIN_VALUE), true);
 		}
-		menu->set_item_tooltip(menu->get_item_index(MENU_PIN_VALUE), TTR("Pinning a value forces it to be saved even if it's equal to the default."));
+		menu->set_item_tooltip(menu->get_item_index(MENU_PIN_VALUE), TTR("Save this value even if it's the default."));
 	}
 	if (deletable || can_revert || can_override) {
 		menu->add_separator();
@@ -1736,7 +1736,7 @@ void EditorProperty::_update_popup() {
 			menu->add_icon_item(theme_cache.remove_icon, TTR("Delete Property"), MENU_DELETE);
 		}
 		if (can_revert) {
-			menu->add_icon_item(theme_cache.revert_icon, TTR("Revert Value"), MENU_REVERT_VALUE);
+			menu->add_icon_item(theme_cache.revert_icon, TTR("Reset Value"), MENU_REVERT_VALUE);
 		}
 	}
 	if (!doc_path.is_empty() && ScriptEditor::get_singleton() && EditorNode::get_singleton()) {
@@ -1999,7 +1999,7 @@ void EditorInspectorCategory::_handle_menu_option(int p_option) {
 			const Dictionary clipboard = EditorInspector::get_property_clipboard_value();
 
 			EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
-			ur->create_action(TTR("Paste category properties"));
+			ur->create_action(TTR("Paste Category Values"));
 			for (EditorProperty *property : category_properties) {
 				if (property->is_read_only()) {
 					continue;
@@ -2029,7 +2029,7 @@ void EditorInspectorCategory::_popup_context_menu(const Point2i &p_position) {
 		menu = memnew(PopupMenu);
 
 		if (is_favorite) {
-			menu->add_item(TTRC("Unfavorite All"), MENU_UNFAVORITE_ALL);
+			menu->add_item(TTRC("Clear Favorites"), MENU_UNFAVORITE_ALL);
 		} else {
 			menu->add_icon_item(theme_cache.icon_copy, TTRC("Copy Category Values"), MENU_COPY_VALUE);
 			menu->add_icon_item(theme_cache.icon_paste, TTRC("Paste Category Values"), MENU_PASTE_VALUE);
@@ -2376,7 +2376,7 @@ void EditorInspectorSection::_notification(int p_what) {
 					int label_width = theme_cache.bold_font->get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, available, theme_cache.bold_font_size, TextServer::JUSTIFICATION_KASHIDA | TextServer::JUSTIFICATION_CONSTRAIN_ELLIPSIS).x;
 
 					// Can we fit the long version of the revertable count text?
-					num_revertable_str = vformat(TTRN("(%d change)", "(%d changes)", revertable_properties.size()), revertable_properties.size());
+					num_revertable_str = vformat(TTRN("(%d changed)", "(%d changes)", revertable_properties.size()), revertable_properties.size());
 					num_revertable_width = light_font->get_string_size(num_revertable_str, HORIZONTAL_ALIGNMENT_LEFT, -1.0f, light_font_size, TextServer::JUSTIFICATION_NONE).x;
 					if (label_width + outer_margin + num_revertable_width > available) {
 						// We'll have to use the short version.
@@ -2819,7 +2819,7 @@ void EditorInspectorSection::menu_option(int p_option) const {
 			const Dictionary clipboard = EditorInspector::get_property_clipboard_value();
 
 			EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
-			ur->create_action(TTR("Paste section properties"));
+			ur->create_action(TTR("Paste Section Values"));
 			for (EditorProperty *property : section_properties) {
 				if (property->is_read_only()) {
 					continue;
@@ -3021,11 +3021,11 @@ void EditorInspectorArray::show_menu(int p_index, const Vector2 &p_offset) {
 void EditorInspectorArray::_move_element(int p_element_index, int p_to_pos) {
 	String action_name;
 	if (p_element_index < 0) {
-		action_name = vformat(TTR("Add element to property array with prefix %s."), array_element_prefix);
+		action_name = vformat(TTR("Add item to %s list."), array_element_prefix);
 	} else if (p_to_pos < 0) {
-		action_name = vformat(TTR("Remove element %d from property array with prefix %s."), p_element_index, array_element_prefix);
+		action_name = vformat(TTR("Remove item %d from %s list."), p_element_index, array_element_prefix);
 	} else {
-		action_name = vformat(TTR("Move element %d to position %d in property array with prefix %s."), p_element_index, p_to_pos, array_element_prefix);
+		action_name = vformat(TTR("Move item %d to position %d in %s list."), p_element_index, p_to_pos, array_element_prefix);
 	}
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
 	undo_redo->create_action(action_name);
@@ -3168,7 +3168,7 @@ void EditorInspectorArray::_move_element(int p_element_index, int p_to_pos) {
 
 void EditorInspectorArray::_clear_array() {
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->create_action(vformat(TTR("Clear Property Array with Prefix %s"), array_element_prefix));
+	undo_redo->create_action(vformat(TTR("Clear %s List"), array_element_prefix));
 	if (mode == MODE_USE_MOVE_ARRAY_ELEMENT_FUNCTION) {
 		for (int i = count - 1; i >= 0; i--) {
 			// Call the function.
@@ -3215,7 +3215,7 @@ void EditorInspectorArray::_resize_array(int p_size) {
 	}
 
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->create_action(vformat(TTR("Resize Property Array with Prefix %s"), array_element_prefix));
+	undo_redo->create_action(vformat(TTR("Resize %s List"), array_element_prefix));
 	if (p_size > count) {
 		if (mode == MODE_USE_MOVE_ARRAY_ELEMENT_FUNCTION) {
 			for (int i = count; i < p_size; i++) {
@@ -3384,7 +3384,7 @@ void EditorInspectorArray::_setup() {
 		SET_DRAG_FORWARDING_GCD(ae.panel, EditorInspectorArray);
 
 		int element_position = begin_array_index + i;
-		String ae_name = vformat(TTR("Element %d: %s%d*"), element_position, array_element_prefix, element_position);
+		String ae_name = vformat(TTR("Item %d: %s%d*"), element_position, array_element_prefix, element_position);
 
 		ae.panel->set_meta("index", element_position);
 		ae.panel->set_meta("name", ae_name);
@@ -3571,7 +3571,7 @@ void EditorInspectorArray::_notification(int p_what) {
 			RID ae = get_accessibility_element();
 			ERR_FAIL_COND(ae.is_null());
 
-			AccessibilityServer::get_singleton()->update_set_name(ae, vformat(TTR("Array: %s"), get_label()));
+			AccessibilityServer::get_singleton()->update_set_name(ae, vformat(TTR("List: %s"), get_label()));
 		} break;
 
 		case NOTIFICATION_THEME_CHANGED: {
@@ -3677,13 +3677,13 @@ EditorInspectorArray::EditorInspectorArray(bool p_read_only) {
 	rmb_popup->add_item(TTR("Move Up"), OPTION_MOVE_UP);
 	rmb_popup->add_item(TTR("Move Down"), OPTION_MOVE_DOWN);
 	rmb_popup->add_separator();
-	rmb_popup->add_item(TTR("Insert New Before"), OPTION_NEW_BEFORE);
-	rmb_popup->add_item(TTR("Insert New After"), OPTION_NEW_AFTER);
+	rmb_popup->add_item(TTR("Insert Before"), OPTION_NEW_BEFORE);
+	rmb_popup->add_item(TTR("Insert After"), OPTION_NEW_AFTER);
 	rmb_popup->add_separator();
 	rmb_popup->add_item(TTR("Remove"), OPTION_REMOVE);
 	rmb_popup->add_separator();
-	rmb_popup->add_item(TTR("Clear Array"), OPTION_CLEAR_ARRAY);
-	rmb_popup->add_item(TTR("Resize Array..."), OPTION_RESIZE_ARRAY);
+	rmb_popup->add_item(TTR("Clear List"), OPTION_CLEAR_ARRAY);
+	rmb_popup->add_item(TTR("Change List Size..."), OPTION_RESIZE_ARRAY);
 	rmb_popup->connect(SceneStringName(id_pressed), callable_mp(this, &EditorInspectorArray::_rmb_popup_id_pressed));
 	add_child(rmb_popup);
 
@@ -3691,7 +3691,7 @@ EditorInspectorArray::EditorInspectorArray(bool p_read_only) {
 	elements_vbox->add_theme_constant_override("separation", 0);
 	vbox->add_child(elements_vbox);
 
-	add_button = memnew(EditorInspectorActionButton(TTRC("Add Element"), SNAME("Add")));
+	add_button = memnew(EditorInspectorActionButton(TTRC("Add Item"), SNAME("Add")));
 	add_button->connect(SceneStringName(pressed), callable_mp(this, &EditorInspectorArray::_add_button_pressed));
 	add_button->set_disabled(read_only);
 	vbox->add_child(add_button);
@@ -3702,7 +3702,7 @@ EditorInspectorArray::EditorInspectorArray(bool p_read_only) {
 	add_child(control_dropping);
 
 	resize_dialog = memnew(AcceptDialog);
-	resize_dialog->set_title(TTRC("Resize Array"));
+	resize_dialog->set_title(TTRC("Change List Size"));
 	resize_dialog->add_cancel_button();
 	resize_dialog->connect(SceneStringName(confirmed), callable_mp(this, &EditorInspectorArray::_resize_dialog_confirmed));
 	add_child(resize_dialog);
@@ -4497,7 +4497,7 @@ void EditorInspector::update_tree() {
 			if (char_index >= 0) {
 				path = path.right(-char_index - 1);
 			} else {
-				path = vformat(TTR("Element %s"), array_index);
+				path = vformat(TTR("Item %s"), array_index);
 			}
 		} else {
 			// Check if we exit or not a subgroup. If there is a prefix, remove it from the property label string.
@@ -4685,7 +4685,7 @@ void EditorInspector::update_tree() {
 			bool is_const = false;
 			bool numbered = false;
 			bool foldable = use_folding;
-			String add_button_text = TTRC("Add Element");
+			String add_button_text = TTRC("Add Item");
 			String swap_method;
 			for (int i = (p.type == Variant::NIL ? 1 : 2); i < class_name_components.size(); i++) {
 				if (class_name_components[i].begins_with("page_size") && class_name_components[i].get_slice_count("=") == 2) {
@@ -5696,7 +5696,7 @@ void EditorInspector::_multiple_properties_changed(const Vector<String> &p_paths
 	}
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
 	// TRANSLATORS: This is describing a change to multiple properties at once. The parameter is a list of property names.
-	undo_redo->create_action(vformat(TTR("Set Multiple: %s"), names), UndoRedo::MERGE_ENDS);
+	undo_redo->create_action(vformat(TTR("Set %s on Several Objects"), names), UndoRedo::MERGE_ENDS);
 	for (int i = 0; i < p_paths.size(); i++) {
 		_edit_set(p_paths[i], p_values[i], false, "");
 		if (restart_request_props.has(p_paths[i])) {
@@ -5804,7 +5804,7 @@ void EditorInspector::_property_pinned(const String &p_path, bool p_pinned) {
 	ERR_FAIL_NULL(node);
 
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->create_action(vformat(p_pinned ? TTR("Pinned %s") : TTR("Unpinned %s"), p_path));
+	undo_redo->create_action(vformat(p_pinned ? TTR("Always save %s") : TTR("Stop always saving %s"), p_path));
 	undo_redo->add_do_method(node, "_set_property_pinned", p_path, p_pinned);
 	undo_redo->add_undo_method(node, "_set_property_pinned", p_path, !p_pinned);
 	if (editor_property_map.has(p_path)) {

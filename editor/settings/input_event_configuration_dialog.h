@@ -90,7 +90,7 @@ private:
 		TTRC("Alt or Option key"),
 		TTRC("Shift key"),
 		TTRC("Control key"),
-		TTRC("Meta/Windows or Command key"),
+		TTRC("Windows or Cmd key"),
 	};
 
 	CheckBox *mod_checkboxes[MOD_MAX];

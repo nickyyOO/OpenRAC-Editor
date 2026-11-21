@@ -2118,17 +2118,17 @@ PackedStringArray Cutscene::from_cutscene(const Dictionary &p_data) {
 PackedStringArray Cutscene::get_configuration_warnings() const {
 	PackedStringArray warnings = Node3D::get_configuration_warnings();
 	if (get_timeline() == nullptr) {
-		warnings.push_back(RTR("Add an AnimationPlayer child: its animation is the cutscene's timeline."));
+		warnings.push_back(RTR("Press Set Up Timeline to give this cutscene its keys."));
 	}
 	bool has_camera = false;
 	for (int i = 0; i < get_child_count(); i++) {
 		has_camera = has_camera || Object::cast_to<CutsceneCamera>(get_child(i)) != nullptr;
 	}
 	if (!has_camera) {
-		warnings.push_back(RTR("No CutsceneCamera child: the game's own camera stays."));
+		warnings.push_back(RTR("No cutscene camera inside, so the game camera is used."));
 	}
 	if ((trigger_kind == TRIGGER_TALK || trigger_kind == TRIGGER_PICKUP) && trigger_spawn_id < 0) {
-		warnings.push_back(RTR("This trigger needs the spawn id of a moby."));
+		warnings.push_back(RTR("Set the ID of the object that starts it."));
 	}
 	if (trigger_kind == TRIGGER_AFTER && trigger_after.is_empty()) {
 		warnings.push_back(RTR("Name the cutscene this one plays after."));
@@ -3143,7 +3143,7 @@ void CutsceneActor::_bake_pose_from_source() {
 	// Undo goes back to the pose file before (the new file stays on disk); the scene is unsaved.
 	if (Engine::get_singleton()->is_editor_hint() && EditorUndoRedoManager::get_singleton() != nullptr) {
 		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-		undo_redo->create_action(RTR("Bake Pose"), UndoRedo::MERGE_DISABLE, this);
+		undo_redo->create_action(RTR("Make Pose"), UndoRedo::MERGE_DISABLE, this);
 		undo_redo->add_do_property(this, "pose_file", pose_file);
 		undo_redo->add_do_property(this, "pose_joints", pose_joints);
 		undo_redo->add_undo_property(this, "pose_file", old_file);
@@ -3178,13 +3178,13 @@ Dictionary CutsceneActor::get_advanced() const { return advanced; }
 PackedStringArray CutsceneActor::get_configuration_warnings() const {
 	PackedStringArray warnings = Node3D::get_configuration_warnings();
 	if (source == SOURCE_LEVEL_MOBY && spawn_id < 0) {
-		warnings.push_back(RTR("Set the moby's spawn id, or select a moby with this actor and press Take Selected Moby."));
+		warnings.push_back(RTR("Set the object's ID, or select it and press Use Selected Object."));
 	}
 	if (source == SOURCE_NEW_MOBY && moby_class < 0) {
-		warnings.push_back(RTR("Set the class of the moby to make."));
+		warnings.push_back(RTR("Set the type of object to add."));
 	}
 	if (source == SOURCE_PROP && prop_path.is_empty()) {
-		warnings.push_back(RTR("Set the mesh (a .glb beside the cutscene file)."));
+		warnings.push_back(RTR("Pick the model (a .glb next to the cutscene file)."));
 	} else if (source == SOURCE_PROP && !scene_dir_of(this).is_empty()) {
 		const String mesh = scene_dir_of(this).path_join("cutscenes").path_join(prop_path);
 		if (ResourceLoader::exists(mesh)) {
@@ -3195,7 +3195,7 @@ PackedStringArray CutsceneActor::get_configuration_warnings() const {
 		}
 	}
 	if (Object::cast_to<Cutscene>(get_parent()) == nullptr) {
-		warnings.push_back(RTR("An actor plays only as a child of a Cutscene."));
+		warnings.push_back(RTR("Put this actor inside a cutscene."));
 	}
 	if (!pose_file.is_empty()) {
 		bool layered = false;
@@ -3203,10 +3203,10 @@ PackedStringArray CutsceneActor::get_configuration_warnings() const {
 			layered = layered || Object::cast_to<CutsceneLayer>(get_child(c)) != nullptr;
 		}
 		if (layered || feet_on_ground) {
-			warnings.push_back(RTR("The pose sets every joint: its layers and Feet On Ground do nothing in the game. Clear Pose File to use them."));
+			warnings.push_back(RTR("A pose file moves every joint, so layers and Feet on Ground are ignored. Clear Pose File to use them."));
 		}
 		if (source == SOURCE_PROP) {
-			warnings.push_back(RTR("A prop does not play a pose file: give it a sequence key instead."));
+			warnings.push_back(RTR("A prop can't use a pose file. Give it a move key instead."));
 		}
 	}
 	return warnings;
@@ -3424,7 +3424,7 @@ bool CutscenePath::get_ground() const { return ground; }
 PackedStringArray CutscenePath::get_configuration_warnings() const {
 	PackedStringArray warnings = Path3D::get_configuration_warnings();
 	if (Object::cast_to<CutsceneActor>(get_parent()) == nullptr) {
-		warnings.push_back(RTR("A path is walked only as a child of a CutsceneActor."));
+		warnings.push_back(RTR("Put this path inside an actor."));
 	}
 	if (get_curve().is_null() || get_curve()->get_point_count() < 2) {
 		warnings.push_back(RTR("Add at least two points (select the path and click in the 3D view)."));
@@ -3457,7 +3457,7 @@ double CutsceneShake::get_strength() const { return strength; }
 PackedStringArray CutsceneShake::get_configuration_warnings() const {
 	PackedStringArray warnings = Node::get_configuration_warnings();
 	if (Object::cast_to<CutsceneCamera>(get_parent()) == nullptr) {
-		warnings.push_back(RTR("A shake moves the camera only as a child of a CutsceneCamera."));
+		warnings.push_back(RTR("Put this shake inside a cutscene camera."));
 	}
 	return warnings;
 }
@@ -3553,10 +3553,10 @@ void CutsceneLayer::_get_property_list(List<PropertyInfo> *p_list) const {
 PackedStringArray CutsceneLayer::get_configuration_warnings() const {
 	PackedStringArray warnings = Node::get_configuration_warnings();
 	if (Object::cast_to<CutsceneActor>(get_parent()) == nullptr) {
-		warnings.push_back(RTR("A layer turns joints only as a child of a CutsceneActor."));
+		warnings.push_back(RTR("Put this layer inside an actor."));
 	}
 	if (joints.is_empty()) {
-		warnings.push_back(RTR("List the joints this layer turns (its mask), or pick a Use Part."));
+		warnings.push_back(RTR("List the joints this layer turns, or pick a body part."));
 	}
 	return warnings;
 }
@@ -3836,9 +3836,9 @@ PackedStringArray CutsceneMood::get_configuration_warnings() const {
 	PackedStringArray warnings = Node::get_configuration_warnings();
 	const CutsceneActor *actor = Object::cast_to<CutsceneActor>(get_parent());
 	if (actor == nullptr) {
-		warnings.push_back(RTR("A mood shows only as a child of a CutsceneActor."));
+		warnings.push_back(RTR("Put this mood inside an actor."));
 	} else if (!mood.is_empty() && !Dictionary(actor->get_rig().get("moods", Dictionary())).has(mood)) {
-		warnings.push_back(RTR("The actor's rig has no such mood: add its joints to the rig's \"moods\"."));
+		warnings.push_back(RTR("This actor's face has no such mood. Add it to the face's moods."));
 	}
 	return warnings;
 }

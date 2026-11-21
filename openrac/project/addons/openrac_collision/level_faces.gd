@@ -1038,14 +1038,14 @@ func check_limits() -> PackedStringArray:
 	for cell in sorted(cells.keys()):
 		# Only cells beyond expanded mode's per-query scratch bound matter.
 		if cells[cell].size() > CELL_LIMIT:
-			out.append("cell %s (at %s units): about %d corners, %d at most" % [cell, Vector3(cell) * 4.0,
+			out.append("Area at %s (%s): about %d corners, %d at most" % [cell, Vector3(cell) * 4.0,
 				cells[cell].size(), CELL_LIMIT])
 
 	for face in level:
 		for p in corners_of(records, face):
 			# Expanded collision only answers queries inside this positive-coordinate world.
 			if p.x < 0 or p.y < 0 or p.z < 0 or p.x >= WORLD or p.y >= WORLD or p.z >= WORLD:
-				out.append("a face at %s is outside 0-131072 units" % (Vector3(p) / UNIT))
+				out.append("A face at %s is too far from the middle of the level." % (Vector3(p) / UNIT))
 				break
 	if not estimate_complete:
 		out.append("some cell estimates were skipped because face bounds span more than %d cells" % ESTIMATE_CELL_LIMIT)

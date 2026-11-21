@@ -126,7 +126,7 @@ void EditorAbout::_item_activated(int p_idx, ItemList *p_il) {
 		// Easter egg! :D
 		if (EditorRunBar::get_singleton() && EditorRunBar::get_singleton()->is_playing()) {
 			// Don't allow if the game is running, as it will look weird if it's embedded.
-			EditorToaster::get_singleton()->popup_str(TTR("No distractions for this, close that game first."));
+			EditorToaster::get_singleton()->popup_str(TTR("Close the game first."));
 			return;
 		}
 
@@ -287,7 +287,7 @@ EditorAbout::EditorAbout() {
 	license_thirdparty->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	tc->add_child(license_thirdparty);
 
-	Label *tpl_label = memnew(Label(TTRC("Godot Engine relies on a number of third-party free and open source libraries, all compatible with the terms of its MIT license. The following is an exhaustive list of all such third-party components with their respective copyright statements and license terms.")));
+	Label *tpl_label = memnew(Label(TTRC("OpenRAC Editor is built on Godot Engine and uses these free, open source libraries.")));
 	tpl_label->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
 	tpl_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	tpl_label->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);

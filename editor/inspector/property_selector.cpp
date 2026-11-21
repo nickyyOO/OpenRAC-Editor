@@ -47,7 +47,7 @@ void PropertySelector::_text_changed(const String &p_newtext) {
 
 void PropertySelector::_update_search() {
 	if (properties) {
-		set_title(TTRC("Select Property"));
+		set_title(TTRC("Pick Property"));
 	} else if (virtuals_only) {
 		set_title(TTRC("Select Virtual Method"));
 	} else {

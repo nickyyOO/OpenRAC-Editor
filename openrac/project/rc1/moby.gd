@@ -63,7 +63,7 @@ const SEARCH_EVERY: int = 30
 const RULES_PATH: String = "res://rc1/class_rules.json"
 
 ## The project setting that draws hidden mobys faint instead of not at all.
-const SHOW_HIDDEN: String = "openrac/editor/show_hidden_mobys"
+const SHOW_HIDDEN: String = "Show hidden objects"
 
 ## How faint a hidden moby is drawn with SHOW_HIDDEN.
 const GHOST: float = 0.75
@@ -251,8 +251,8 @@ func _get_configuration_warnings() -> PackedStringArray:
 	if not may_change:
 		return []
 
-	return ["Shown or not depending on the save: " + "; ".join(start_reasons)
-		+ " Add a Show or Hide event for spawn id %d to be sure." % int(get_meta("rc1_spawn_id", -1))]
+	return ["Depends on the save. " + "; ".join(start_reasons)
+		+ " Add a Show or Hide key for ID %d to be sure." % int(get_meta("rc1_spawn_id", -1))]
 
 
 ## Sets the moby's ambient and light word on every mesh of its model.
@@ -330,7 +330,7 @@ func _get_property_list() -> Array[Dictionary]:
 
 	var properties: Array[Dictionary] = [
 		{"name": "Start state", "type": TYPE_NIL, "usage": PROPERTY_USAGE_GROUP},
-		{"name": "start_state", "type": TYPE_STRING, "hint": PROPERTY_HINT_MULTILINE_TEXT,
+		{"name": "Start State", "type": TYPE_STRING, "hint": PROPERTY_HINT_MULTILINE_TEXT,
 			"usage": PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY},
 	]
 
@@ -342,11 +342,11 @@ func _get_property_list() -> Array[Dictionary]:
 			"hint_string": "Hide in the cutscene from now,GuiVisibilityHidden", "usage": PROPERTY_USAGE_EDITOR})
 
 	# The class's rule, edited here for every moby of the class (class_rules.json).
-	properties.append({"name": "class_rule", "type": TYPE_STRING, "hint": PROPERTY_HINT_EXPRESSION,
+	properties.append({"name": "Type rule", "type": TYPE_STRING, "hint": PROPERTY_HINT_EXPRESSION,
 		"usage": PROPERTY_USAGE_EDITOR})
 
 	if not looks.is_empty():
-		properties.append({"name": "preview_look", "type": TYPE_STRING, "hint": PROPERTY_HINT_ENUM,
+		properties.append({"name": "Preview", "type": TYPE_STRING, "hint": PROPERTY_HINT_ENUM,
 			"hint_string": ",".join(looks), "usage": PROPERTY_USAGE_EDITOR})
 
 	return properties
@@ -492,11 +492,11 @@ func decide_start() -> void:
 		hidden_at_start = true
 		depends_on_game = true
 		may_change = true
-		start_reasons.append("Appears after mission %d of this planet (spawn flags %d); not in a new game." % [mission, flags])
+		start_reasons.append("Appears after mission %d of this planet (%d); not in a new game." % [mission, flags])
 	elif flags & (SPAWN_BEFORE | SPAWN_AFTER) == SPAWN_BEFORE:
 		depends_on_game = true
 		may_change = true
-		start_reasons.append("Gone after mission %d of this planet (spawn flags %d)." % [mission, flags])
+		start_reasons.append("Gone after mission %d of this planet (%d)." % [mission, flags])
 
 	if flags & SPAWN_ONCE or flags & (SPAWN_SAVED | SPAWN_ONCE) == SPAWN_SAVED:
 		depends_on_game = true
@@ -532,7 +532,7 @@ func decide_start() -> void:
 			if volume != -1:
 				depends_on_game = true
 				may_change = true
-				start_reasons.append("Shown once Ratchet enters volume %d." % volume)
+				start_reasons.append("Shown once Ratchet enters area %d." % volume)
 	elif rule.has("hidden_unless_pvar"):
 		decide_by_pvars(rule)
 
@@ -541,7 +541,7 @@ func decide_start() -> void:
 		hidden_at_start = true
 		depends_on_game = true
 		may_change = true
-		start_reasons.append(String(rule.get("hidden_if_pvar_reason", "Hidden by its class's code (pvar %s)." % rule["hidden_if_pvar"])))
+		start_reasons.append(String(rule.get("hidden_if_pvar_reason", "Hidden by the game (%s)." % rule["hidden_if_pvar"])))
 
 	# Volumes the camera must be inside, or outside, for its code to draw it.
 	if rule.has("camera_volumes"):
@@ -678,10 +678,10 @@ func decide_by_game(states: Dictionary, rule: Dictionary) -> void:
 
 	if game_state.is_empty():
 		hidden_at_start = true
-		start_reasons.append("Gone %.0f s after the level starts (moby_states.json)." % seconds)
+		start_reasons.append("Gone %.0f s after the level starts." % seconds)
 	elif int(game_state["dead"]) != 0:
 		hidden_at_start = true
-		start_reasons.append("Dead %.0f s after the level starts (moby_states.json)." % seconds)
+		start_reasons.append("Dead %.0f s after the level starts." % seconds)
 	elif int(game_state["hidden"]) != 0 and rule.has("game_hidden"):
 		start_reasons.append(String(rule["game_hidden"]))
 	elif int(game_state["hidden"]) != 0 and rule.has("drawn_by_code"):
@@ -689,7 +689,7 @@ func decide_by_game(states: Dictionary, rule: Dictionary) -> void:
 		start_reasons.append(String(rule["drawn_by_code"]))
 	elif int(game_state["hidden"]) != 0:
 		hidden_at_start = true
-		start_reasons.append("Not drawn %.0f s after the level starts (moby_states.json)." % seconds)
+		start_reasons.append("Not drawn %.0f s after the level starts." % seconds)
 
 
 ## A copy of the model where the game's run puts the moby (class_rules.json effect "game_height":
@@ -732,8 +732,8 @@ func decide_by_camera_volumes(volumes: Dictionary) -> void:
 
 		may_change = true
 		var listed: String = " or ".join(found.map(func(v: int) -> String: return str(v)))
-		start_reasons.append(("Drawn only while the camera is inside volume %s." if kind == "show"
-			else "Not drawn while the camera is inside volume %s.") % listed)
+		start_reasons.append(("Shown only while the camera is in area %s." if kind == "show"
+			else "Hidden while the camera is in area %s.") % listed)
 		# The first kind set is the one its code goes by.
 		return
 
@@ -748,17 +748,17 @@ func decide_by_pvars(rule: Dictionary) -> void:
 	hidden_at_start = true
 
 	if not rule.has("trigger_volume_pvar"):
-		start_reasons.append("Hidden by its class's code.")
+		start_reasons.append("Hidden by the game.")
 		return
 
 	var volume: int = int(pvar_word(String(rule["trigger_volume_pvar"]).hex_to_int()))
 
 	if volume == -1:
-		start_reasons.append("Hidden by its class's code, and nothing shows it.")
+		start_reasons.append("Hidden by the game, and nothing shows it.")
 	else:
 		depends_on_game = true
 		may_change = true
-		start_reasons.append("Hidden until Ratchet enters volume %d." % volume)
+		start_reasons.append("Hidden until Ratchet enters area %d." % volume)
 
 
 ## The pvar word at a byte offset (0 when it has none).

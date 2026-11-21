@@ -152,7 +152,7 @@ func open_scene(root: Node) -> void:
 ## Opens the editor's picker at the project's assets.
 func add_static_model() -> void:
 	if scene_root == null or faces == null:
-		dock.show_report("Open an extracted level scene before adding static geometry.")
+		dock.show_report("Open a level first.")
 		return
 	animated_model_pick = false
 	static_model_dialog.current_dir = "res://"
@@ -162,7 +162,7 @@ func add_static_model() -> void:
 ## Opens the project asset picker for a mod-only spinning visual prop.
 func add_animated_model() -> void:
 	if scene_root == null or faces == null:
-		dock.show_report("Open an extracted level scene before adding an animated prop.")
+		dock.show_report("Open a level first.")
 		return
 	animated_model_pick = true
 	static_model_dialog.current_dir = "res://"
@@ -172,21 +172,21 @@ func add_animated_model() -> void:
 ## Instances a project GLB/glTF below Game/StaticAssets as an undoable scene edit.
 func handle_static_model_selected(path: String) -> void:
 	if not path.begins_with("res://") or path.get_extension().to_lower() not in ["glb", "gltf"]:
-		dock.show_report("Choose a project-local .glb or .gltf model.")
+		dock.show_report("Choose a .glb or .gltf model in this project.")
 		return
 	var packed_scene := ResourceLoader.load(path) as PackedScene
 	if packed_scene == null:
-		dock.show_report("The editor could not import this glTF model as a scene.")
+		dock.show_report("Couldn't open this model.")
 		return
 	var instance := packed_scene.instantiate()
 	if not instance is Node3D:
 		instance.queue_free()
-		dock.show_report("The GLB root must be a 3D node.")
+		dock.show_report("This model is empty. Use another model.")
 		return
 	var game := scene_root.get_node_or_null("Game") as Node3D
 	if game == null:
 		instance.queue_free()
-		dock.show_report("This scene has no Game node.")
+		dock.show_report("This level is missing its Game part. Reopen it from the launcher.")
 		return
 	var group_name := "AnimatedAssets" if animated_model_pick else "StaticAssets"
 	var group := game.get_node_or_null(group_name) as Node3D
@@ -204,7 +204,7 @@ func handle_static_model_selected(path: String) -> void:
 		suffix += 1
 	instance.name = node_name
 	var undo_redo := get_undo_redo()
-	var action := "Add a spinning glTF prop to the level" if animated_model_pick else "Add a static glTF model to the level"
+	var action := "Add Spinning Model" if animated_model_pick else "Add Model"
 	undo_redo.create_action(action, UndoRedo.MERGE_DISABLE, scene_root)
 	if make_group:
 		undo_redo.add_do_method(game, "add_child", group)
@@ -234,7 +234,7 @@ func handle_static_model_selected(path: String) -> void:
 	EditorInterface.get_selection().clear()
 	EditorInterface.get_selection().add_node(instance)
 	var kind := "spinning prop" if animated_model_pick else "static model"
-	dock.show_report("Added %s %s. Move and scale it in the 3D view, then Pack the level." % [kind, node_name])
+	dock.show_report("Added %s %s. Move it in the 3D view, then Play Level." % [kind, node_name])
 
 
 ## Removes the overlay from the scene it was in.
@@ -528,7 +528,7 @@ func delete_selection() -> void:
 func move_selection(offset: Vector3) -> void:
 	var before: Dictionary = faces.stored_edits()
 	var count: int = faces.move(faces.selected(), offset)
-	dock.show_report("%d faces moved by %s (hero walls are not moved)." % [count, offset])
+	dock.show_report("%d faces moved by %s (yellow walls stay)." % [count, offset])
 	commit("Move collision faces", before)
 
 
@@ -536,15 +536,15 @@ func move_selection(offset: Vector3) -> void:
 func add_quad(size: Vector2, kind: int) -> void:
 	var before: Dictionary = faces.stored_edits()
 	var count: int = faces.add_triangles(LevelFaces.floor_quad(place, size), kind)
-	dock.show_report("A floor quad added (%d faces)." % count)
-	commit("Add a collision quad", before)
+	dock.show_report("Floor added (%d faces)." % count)
+	commit("Add collision floor", before)
 
 
 ## Adds a box where the last click was (resting on it).
 func add_box(size: Vector3, kind: int) -> void:
 	var before: Dictionary = faces.stored_edits()
 	var count: int = faces.add_triangles(LevelFaces.box_triangles(place + Vector3(0, 0, size.z / 2.0), size), kind)
-	dock.show_report("A box added (%d faces)." % count)
+	dock.show_report("Box added (%d faces)." % count)
 	commit("Add a collision box", before)
 
 
@@ -554,7 +554,7 @@ func make_from_mesh(kind: int) -> void:
 
 	# A node without triangle meshes has nothing to make collision from.
 	if triangles.is_empty():
-		dock.show_report("%s has no triangle mesh." % selected_node.name)
+		dock.show_report("%s has no model." % selected_node.name)
 		return
 
 	var made: Dictionary = faces.simplify(triangles)
@@ -562,12 +562,12 @@ func make_from_mesh(kind: int) -> void:
 	var count: int = faces.add_triangles(made.triangles, kind)
 	var over := ""
 	if not bool(made.estimate_complete):
-		over = " The cell estimate was skipped for very broad face bounds; use Check Limits before packing."
+		over = " Some areas were too big to check; press Check Limits."
 	elif int(made.most) > LevelFaces.CELL_LIMIT:
-		over = " A cell estimate is %d corners; the expanded query index limit is %d." % [made.most, LevelFaces.CELL_LIMIT]
-	dock.show_report("%d faces added from %s (%d triangles), snapped to the game's collision grid.%s" %
+		over = " One area has %d corners; at most %d fit." % [made.most, LevelFaces.CELL_LIMIT]
+	dock.show_report("%d faces added from %s (%d triangles).%s" %
 		[count, selected_node.name, int(triangles.size() / 3.0), over])
-	commit("Make collision from a mesh", before)
+	commit("Collision from model", before)
 
 
 ## Estimates what the packer would refuse.
@@ -577,19 +577,19 @@ func check_limits() -> void:
 	if animated_group != null:
 		var animated_count := count_animated_instances(animated_group)
 		if animated_count > MAX_RENDERED_INSTANCES:
-			lines.insert(0, "Game/AnimatedAssets has %d props; the renderer limit is %d." %
+			lines.insert(0, "%d spinning models; at most %d fit." %
 				[animated_count, MAX_RENDERED_INSTANCES])
 
 	# Nothing over a limit, as far as the estimate goes.
 	if lines.is_empty():
-		dock.show_report("Within the limits, as far as the dock can tell (the packer checks exactly).")
+		dock.show_report("Within the limits. Check Level checks for sure.")
 		return
 
 	var shown: PackedStringArray = lines.slice(0, REPORT_LINES)
 
 	# A long report says how much more there is.
 	if lines.size() > REPORT_LINES:
-		shown.append("... and %d more" % (lines.size() - REPORT_LINES))
+		shown.append("and %d more" % (lines.size() - REPORT_LINES))
 
 	dock.show_report("\n".join(shown))
 
@@ -639,15 +639,15 @@ func show_object() -> void:
 func class_text(layer: Node3D, id: int, label: String) -> String:
 	# Spawn points, gadgets and classes without data in the core have none.
 	if layer == null:
-		return "Class %d %s has no collision of its own in this level." % [id, label]
+		return "Type %d %s has no collision of its own here." % [id, label]
 
 	var lines: PackedStringArray = PackedStringArray([
-		"Class %d %s: %d parts. A class edit changes every moby of class %d in this level." % [id, label,
+		"Type %d %s: %d parts. Changes every object of type %d here." % [id, label,
 		layer.get_child_count(), id]])
 
 	for part in ClassCollision.parts(layer):
 		var shape: String = "radius %.3f" % part.radius if part.radius > 0 else "type byte 0x%02x" % part.surface
-		lines.append("  %s (%s): %s at %s, queries %d" % [part.name, part.kind, shape, part.position, part.queries])
+		lines.append("%s (%s): %s at %s, hit by %d" % [part.name, part.kind, shape, part.position, part.queries])
 
 	return "\n".join(lines)
 
@@ -661,7 +661,7 @@ func open_class_scene() -> void:
 func apply_part(values: Dictionary) -> void:
 	var node := selected_node as MeshInstance3D
 	var history := get_undo_redo()
-	history.create_action("Edit class collision part", UndoRedo.MERGE_DISABLE, scene_root)
+	history.create_action("Change object collision", UndoRedo.MERGE_DISABLE, scene_root)
 	var position := Vector3(values.x, values.y, values.z)
 	history.add_do_property(node, "position", position)
 	history.add_undo_property(node, "position", node.position)
@@ -718,7 +718,7 @@ func make_class_collision(mode: String, kind: int) -> void:
 
 	# A class without a model has nothing to make collision from.
 	if triangles.is_empty():
-		dock.show_report("This class has no model to make collision from.")
+		dock.show_report("This type has no model to make collision from.")
 		return
 
 	var made: Array[Node3D] = []
@@ -736,9 +736,9 @@ func make_class_collision(mode: String, kind: int) -> void:
 		made = ClassCollision.make(triangles, mode, kind)
 
 	var warning: String = ("" if ClassCollision.fits(triangles) else
-		" The model reaches past 32 model units from the class's origin: the packer will refuse it.")
+		" The model is too big (over 32 units from its middle). Make it smaller.")
 	replace_parts(layer, made)
-	dock.show_report("Class collision made from the model (%s). Every moby of this class in this level gets it.%s"
+	dock.show_report("Collision made from the model (%s). Every object of this type here gets it.%s"
 		% [mode, warning])
 
 
@@ -758,7 +758,7 @@ func mesh_part(triangles: PackedVector3Array, kind: int) -> Node3D:
 
 	# A project folder that cannot be written: said in the dock, nothing made.
 	if file == null:
-		dock.show_report("Cannot write %s (is the project folder read-only or full?)." % path)
+		dock.show_report("Couldn't save %s. Is the folder full or read-only?" % path)
 		return null
 
 	file.store_string(ClassCollision.mesh_gltf(triangles, kind))
@@ -777,7 +777,7 @@ func mesh_part(triangles: PackedVector3Array, kind: int) -> Node3D:
 
 	# The import may not be done yet in a busy editor: the file stays, and a second press uses a new one.
 	if scene == null:
-		dock.show_report("%s is written but not imported yet; press again in a moment." % path)
+		dock.show_report("%s is still loading. Press again in a moment." % path)
 		return null
 
 	var node := scene.instantiate() as Node3D
@@ -790,7 +790,7 @@ func mesh_part(triangles: PackedVector3Array, kind: int) -> Node3D:
 ## Replaces a class collision node's children by new ones, undoably.
 func replace_parts(layer: Node3D, made: Array[Node3D]) -> void:
 	var history := get_undo_redo()
-	history.create_action("Make class collision from its model", UndoRedo.MERGE_DISABLE, scene_root)
+	history.create_action("Collision from model", UndoRedo.MERGE_DISABLE, scene_root)
 
 	for child in layer.get_children():
 		history.add_do_method(layer, "remove_child", child)
@@ -858,8 +858,8 @@ func select_baked(node: Node3D) -> void:
 		return
 
 	faces.select(faces.faces_within(box.grow(BOUNDS_MARGIN)), false)
-	dock.show_report("%d faces of the level's collision lie inside %s's bounds: selected. A moved tie or shrub "
-		% [faces.selection.size(), node.name] + "keeps its collision where it was: move these faces by the same offset.")
+	dock.show_report("%d level faces lie inside %s: picked. Scenery you move "
+		% [faces.selection.size(), node.name] + "leaves its collision behind: move these faces the same way.")
 	refresh_selection()
 
 

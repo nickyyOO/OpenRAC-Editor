@@ -987,7 +987,7 @@ void RuntimeNodeSelect::_open_selection_list(const Vector<SelectResult> &p_items
 		if (locked == 1) {
 			suffix = " (" + RTR("Locked") + ")";
 		} else if (locked == 2) {
-			suffix = " (" + RTR("Grouped") + ")";
+			suffix = " (" + RTR("Joined") + ")";
 		}
 
 		selection_list->add_item((String)I.item->get_name() + suffix);

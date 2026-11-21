@@ -98,12 +98,12 @@ EditorEventSearchBar::EditorEventSearchBar() {
 	search_by_event = memnew(EventListenerLineEdit);
 	search_by_event->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	search_by_event->set_stretch_ratio(0.75);
-	search_by_event->set_accessibility_name(TTRC("Action Event"));
+	search_by_event->set_accessibility_name(TTRC("Shortcut"));
 	search_by_event->connect("event_changed", callable_mp(this, &EditorEventSearchBar::_on_event_changed));
 	add_child(search_by_event);
 
 	clear_all = memnew(Button(TTRC("Clear All")));
-	clear_all->set_tooltip_text(TTRC("Clear all search filters."));
+	clear_all->set_tooltip_text(TTRC("Clear the search."));
 	clear_all->connect(SceneStringName(pressed), callable_mp(this, &EditorEventSearchBar::_on_clear_all));
 	clear_all->set_disabled(true);
 	add_child(clear_all);

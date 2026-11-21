@@ -255,7 +255,7 @@ void SceneImportSettingsDialog::_fill_material(Tree *p_tree, const Ref<Material>
 
 	TreeItem *item = p_tree->create_item(p_parent);
 	if (p_material->get_name().is_empty()) {
-		item->set_text(0, TTR("<Unnamed Material>"));
+		item->set_text(0, TTR("<Unnamed Look>"));
 	} else {
 		item->set_text(0, p_material->get_name());
 	}
@@ -421,7 +421,7 @@ void SceneImportSettingsDialog::_fill_scene(Node *p_node, TreeItem *p_parent_ite
 
 	if (p_node == scene) {
 		icon = get_editor_theme_icon(SNAME("PackedScene"));
-		item->set_text(0, TTR("Scene"));
+		item->set_text(0, TTR("Model"));
 	}
 
 	item->set_icon(0, icon);
@@ -429,7 +429,7 @@ void SceneImportSettingsDialog::_fill_scene(Node *p_node, TreeItem *p_parent_ite
 	item->set_meta("type", "Node");
 	item->set_meta("class", type);
 	item->set_meta("import_id", import_id);
-	item->set_tooltip_text(0, vformat(TTR("Type: %s\nImport ID: %s"), type, import_id));
+	item->set_tooltip_text(0, vformat(TTR("Type: %s\nID: %s"), type, import_id));
 
 	item->set_selectable(0, true);
 
@@ -803,7 +803,7 @@ void SceneImportSettingsDialog::open_settings(const String &p_path, const String
 	scene = _resource_importer_scene->pre_import(p_path, defaults);
 	_resource_importer_scene->set_scene_import_type(p_scene_import_type);
 	if (scene == nullptr) {
-		EditorNode::get_singleton()->show_warning(TTR("Error opening scene"));
+		EditorNode::get_singleton()->show_warning(TTR("Couldn't open this model."));
 		return;
 	}
 
@@ -834,7 +834,7 @@ void SceneImportSettingsDialog::open_settings(const String &p_path, const String
 	// Start with the root item (Scene) selected.
 	scene_tree->get_root()->select(0);
 
-	set_title(vformat(TTR("Advanced Import Settings for %s '%s'"), _resource_importer_scene->get_visible_name(), base_path.get_file()));
+	set_title(vformat(TTR("Model Settings for %s '%s'"), _resource_importer_scene->get_visible_name(), base_path.get_file()));
 }
 
 SceneImportSettingsDialog *SceneImportSettingsDialog::singleton = nullptr;
@@ -1723,20 +1723,20 @@ SceneImportSettingsDialog::SceneImportSettingsDialog() {
 	property_split->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 
 	scene_tree = memnew(Tree);
-	scene_tree->set_name(TTR("Scene"));
+	scene_tree->set_name(TTR("Model"));
 	scene_tree->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	data_mode->add_child(scene_tree);
 	scene_tree->connect("cell_selected", callable_mp(this, &SceneImportSettingsDialog::_scene_tree_selected));
 
 	mesh_tree = memnew(Tree);
-	mesh_tree->set_name(TTR("Meshes"));
+	mesh_tree->set_name(TTR("Models"));
 	mesh_tree->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	data_mode->add_child(mesh_tree);
 	mesh_tree->set_hide_root(true);
 	mesh_tree->connect("cell_selected", callable_mp(this, &SceneImportSettingsDialog::_mesh_tree_selected));
 
 	material_tree = memnew(Tree);
-	material_tree->set_name(TTR("Materials"));
+	material_tree->set_name(TTR("Looks"));
 	material_tree->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	data_mode->add_child(material_tree);
 	material_tree->connect("cell_selected", callable_mp(this, &SceneImportSettingsDialog::_material_tree_selected));
@@ -1770,16 +1770,16 @@ SceneImportSettingsDialog::SceneImportSettingsDialog() {
 	animation_play_button = memnew(Button);
 	animation_hbox->add_child(animation_play_button);
 	animation_play_button->set_flat(true);
-	animation_play_button->set_accessibility_name(TTRC("Selected Animation Play/Pause"));
+	animation_play_button->set_accessibility_name(TTRC("Play or Pause"));
 	animation_play_button->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
-	animation_play_button->set_shortcut(ED_SHORTCUT("scene_import_settings/play_selected_animation", TTRC("Selected Animation Play/Pause"), Key::SPACE));
+	animation_play_button->set_shortcut(ED_SHORTCUT("scene_import_settings/play_selected_animation", TTRC("Play or Pause"), Key::SPACE));
 	animation_play_button->connect(SceneStringName(pressed), callable_mp(this, &SceneImportSettingsDialog::_play_animation));
 
 	animation_stop_button = memnew(Button);
 	animation_hbox->add_child(animation_stop_button);
 	animation_stop_button->set_flat(true);
 	animation_stop_button->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
-	animation_stop_button->set_tooltip_text(TTR("Selected Animation Stop"));
+	animation_stop_button->set_tooltip_text(TTR("Stop"));
 	animation_stop_button->connect(SceneStringName(pressed), callable_mp(this, &SceneImportSettingsDialog::_stop_current_animation));
 
 	animation_slider = memnew(HSlider);
@@ -1798,7 +1798,7 @@ SceneImportSettingsDialog::SceneImportSettingsDialog() {
 	animation_toggle_skeleton_visibility->set_toggle_mode(true);
 	animation_toggle_skeleton_visibility->set_theme_type_variation("FlatButton");
 	animation_toggle_skeleton_visibility->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
-	animation_toggle_skeleton_visibility->set_tooltip_text(TTR("Toggle Animation Skeleton Visibility"));
+	animation_toggle_skeleton_visibility->set_tooltip_text(TTR("Show Skeleton"));
 
 	animation_toggle_skeleton_visibility->connect(SceneStringName(pressed), callable_mp(this, &SceneImportSettingsDialog::_animation_update_skeleton_visibility));
 
@@ -1948,7 +1948,7 @@ SceneImportSettingsDialog::SceneImportSettingsDialog() {
 
 	scene_import_settings_data = memnew(SceneImportSettingsData);
 
-	set_ok_button_text(TTR("Reimport"));
+	set_ok_button_text(TTR("Reload Model"));
 	set_cancel_button_text(TTR("Close"));
 
 	external_paths = memnew(ConfirmationDialog);

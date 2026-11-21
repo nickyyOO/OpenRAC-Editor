@@ -330,7 +330,7 @@ void SectionedInspector::_search_changed(const String &p_what) {
 		} else {
 			advanced_toggle->set_pressed_no_signal(true);
 			advanced_toggle->set_disabled(true);
-			advanced_toggle->set_tooltip_text(TTRC("Advanced settings are always shown when searching."));
+			advanced_toggle->set_tooltip_text(TTRC("Advanced settings show when you search."));
 		}
 	}
 	update_category_list();

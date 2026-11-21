@@ -71,7 +71,7 @@ void ReparentDialog::_bind_methods() {
 }
 
 ReparentDialog::ReparentDialog() {
-	set_title(TTR("Reparent Node"));
+	set_title(TTR("Move Into Another Object"));
 
 	VBoxContainer *vbc = memnew(VBoxContainer);
 	add_child(vbc);
@@ -80,12 +80,12 @@ ReparentDialog::ReparentDialog() {
 	tree->set_update_when_invisible(false);
 	tree->set_show_enabled_subscene(true);
 	tree->get_scene_tree()->connect("item_activated", callable_mp(this, &ReparentDialog::_reparent));
-	vbc->add_margin_child(TTR("Select new parent:"), tree, true);
+	vbc->add_margin_child(TTR("Pick the new holder:"), tree, true);
 
 	keep_transform = memnew(CheckBox);
-	keep_transform->set_text(TTR("Keep Global Transform"));
+	keep_transform->set_text(TTR("Keep Place in Level"));
 	keep_transform->set_pressed(true);
 	vbc->add_child(keep_transform);
 
-	set_ok_button_text(TTR("Reparent"));
+	set_ok_button_text(TTR("Move Into"));
 }

@@ -3288,7 +3288,7 @@ GraphEdit::GraphEdit() {
 	toggle_grid_button->set_visible(show_grid_buttons);
 	toggle_grid_button->set_toggle_mode(true);
 	toggle_grid_button->set_pressed(true);
-	toggle_grid_button->set_tooltip_text(ETR("Toggle the visual grid."));
+	toggle_grid_button->set_tooltip_text(ETR("Show or hide the grid."));
 	toggle_grid_button->set_focus_mode(FOCUS_ACCESSIBILITY);
 	toggle_grid_button->set_use_parent_material(true);
 	menu_hbox->add_child(toggle_grid_button);
@@ -3298,7 +3298,7 @@ GraphEdit::GraphEdit() {
 	toggle_snapping_button->set_theme_type_variation(SceneStringName(FlatButton));
 	toggle_snapping_button->set_visible(show_grid_buttons);
 	toggle_snapping_button->set_toggle_mode(true);
-	toggle_snapping_button->set_tooltip_text(ETR("Toggle snapping to the grid."));
+	toggle_snapping_button->set_tooltip_text(ETR("Turn grid snap on or off."));
 	toggle_snapping_button->set_pressed(snapping_enabled);
 	toggle_snapping_button->set_focus_mode(FOCUS_ACCESSIBILITY);
 	menu_hbox->add_child(toggle_snapping_button);
@@ -3310,7 +3310,7 @@ GraphEdit::GraphEdit() {
 	snapping_distance_spinbox->set_max(GRID_MAX_SNAPPING_DISTANCE);
 	snapping_distance_spinbox->set_step(1);
 	snapping_distance_spinbox->set_value(snapping_distance);
-	snapping_distance_spinbox->set_tooltip_text(ETR("Change the snapping distance."));
+	snapping_distance_spinbox->set_tooltip_text(ETR("Change the snap step."));
 	snapping_distance_spinbox->set_use_parent_material(true);
 	menu_hbox->add_child(snapping_distance_spinbox);
 	snapping_distance_spinbox->connect(SceneStringName(value_changed), callable_mp(this, &GraphEdit::_snapping_distance_changed));
@@ -3321,7 +3321,7 @@ GraphEdit::GraphEdit() {
 	minimap_button->set_theme_type_variation(SceneStringName(FlatButton));
 	minimap_button->set_visible(show_minimap_button);
 	minimap_button->set_toggle_mode(true);
-	minimap_button->set_tooltip_text(ETR("Toggle the graph minimap."));
+	minimap_button->set_tooltip_text(ETR("Show or hide the minimap."));
 	minimap_button->set_pressed(show_grid);
 	minimap_button->set_focus_mode(FOCUS_ACCESSIBILITY);
 	minimap_button->set_use_parent_material(true);

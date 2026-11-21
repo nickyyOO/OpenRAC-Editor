@@ -205,9 +205,9 @@ void EditorSceneTabs::_update_context_menu() {
 		scene_tabs_context_menu->add_separator();
 		scene_tabs_context_menu->add_item(TTR("Show in FileSystem"), SCENE_SHOW_IN_FILESYSTEM);
 		DISABLE_LAST_OPTION_IF(!ResourceLoader::exists(scene_path));
-		scene_tabs_context_menu->add_item(TTR("Play This Scene"), SCENE_RUN);
+		scene_tabs_context_menu->add_item(TTR("Play This Level"), SCENE_RUN);
 		DISABLE_LAST_OPTION_IF(no_root_node);
-		scene_tabs_context_menu->add_item(TTR("Set as Main Scene"), SCENE_SET_AS_MAIN_SCENE);
+		scene_tabs_context_menu->add_item(TTR("Set as Starting Level"), SCENE_SET_AS_MAIN_SCENE);
 		DISABLE_LAST_OPTION_IF(no_root_node || (!main_scene_path.is_empty() && ResourceUID::ensure_path(main_scene_path) == scene_path));
 
 		scene_tabs_context_menu->add_separator();
@@ -485,7 +485,7 @@ EditorSceneTabs::EditorSceneTabs() {
 
 	scene_tab_add = memnew(Button);
 	scene_tab_add->set_flat(true);
-	scene_tab_add->set_tooltip_text(TTR("Add a new scene."));
+	scene_tab_add->set_tooltip_text(TTR("Add a new level."));
 	scene_tabs->add_child(scene_tab_add);
 	scene_tab_add->connect(SceneStringName(pressed), callable_mp(EditorNode::get_singleton(), &EditorNode::trigger_menu_option).bind(EditorNode::SCENE_NEW_SCENE, false));
 
@@ -497,8 +497,8 @@ EditorSceneTabs::EditorSceneTabs() {
 	scene_list = memnew(MenuButton);
 	scene_list->set_flat(false);
 	scene_list->set_theme_type_variation("FlatMenuButton");
-	scene_list->set_accessibility_name(TTRC("Show Opened Scenes List"));
-	scene_list->set_shortcut(ED_SHORTCUT("editor/show_opened_scenes_list", TTRC("Show Opened Scenes List"), KeyModifierMask::ALT | Key::T));
+	scene_list->set_accessibility_name(TTRC("Show Open Levels"));
+	scene_list->set_shortcut(ED_SHORTCUT("editor/show_opened_scenes_list", TTRC("Show Open Levels"), KeyModifierMask::ALT | Key::T));
 	scene_list->get_popup()->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	scene_list->get_popup()->set_search_bar_enabled(true);
 	scene_list->get_popup()->set_search_bar_min_item_count(10);

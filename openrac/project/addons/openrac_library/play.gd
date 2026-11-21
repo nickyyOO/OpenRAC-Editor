@@ -22,13 +22,13 @@ func _init() -> void:
 	check_button = Button.new()
 	check_button.text = "Check level"
 	check_button.flat = true
-	check_button.tooltip_text = "Saves, then packs every level of this folder into a throwaway folder and lists each edit the game cannot take. Click one to select it."
+	check_button.tooltip_text = "Saves and lists each edit the game can't take. Click one to pick it."
 	check_button.pressed.connect(start.bind("check"))
 	add_child(check_button)
 	play_button = Button.new()
 	play_button.text = "Play level"
 	play_button.flat = true
-	play_button.tooltip_text = "Saves, packs your edits and starts the game on this level."
+	play_button.tooltip_text = "Saves, builds your edits and starts the game here."
 	play_button.pressed.connect(start.bind("play"))
 	add_child(play_button)
 	dialog = AcceptDialog.new()
@@ -78,10 +78,10 @@ static func command_for(kind: String, level: Dictionary) -> Variant:
 	var tools: String = user_arg("--openrac-tools")
 
 	if level.is_empty():
-		return "This project is not a Ratchet & Clank level, so there is nothing to pack."
+		return "This isn't a Ratchet & Clank level, so there is nothing to build."
 
 	if python == "" or tools == "":
-		return "Open the level from the launcher (Mods, Level editor, Open) to check or play it."
+		return "Open the level from the launcher (Mods, Level editor, Open) first."
 
 	var args: PackedStringArray = [tools.path_join("openrac_editor.py"), kind, level["project"]]
 
@@ -112,8 +112,8 @@ func start(kind: String) -> void:
 	EditorInterface.save_all_scenes()
 	check_button.disabled = true
 	play_button.disabled = true
-	check_button.text = "Checking..." if kind == "check" else "Check level"
-	play_button.text = "Packing..." if kind == "play" else "Play level"
+	check_button.text = "Checking" if kind == "check" else "Check level"
+	play_button.text = "Building" if kind == "play" else "Play level"
 	worker = Thread.new()
 	worker.start(run.bind(kind, command))
 
@@ -156,11 +156,11 @@ func show_result(kind: String, code: int, lines: PackedStringArray) -> void:
 	dialog.title = "Check level" if kind == "check" else "Play level"
 
 	if problems.item_count > 0:
-		summary.text = "%d edit(s) cannot be packed. Click one to select it, fix it and check again." % problems.item_count
+		summary.text = "%d edits can't be built. Click one, fix it, then check again." % problems.item_count
 	elif code == 0:
 		summary.text = "\n".join(said) if not said.is_empty() else "Done."
 	else:
-		summary.text = "\n".join(said) if not said.is_empty() else "The check could not run."
+		summary.text = "\n".join(said) if not said.is_empty() else "Couldn't check the level. Try again."
 
 	problems.visible = problems.item_count > 0
 	# Sized for the editor's display scale, never past most of its window.

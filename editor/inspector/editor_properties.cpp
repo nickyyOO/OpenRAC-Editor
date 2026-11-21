@@ -582,7 +582,7 @@ EditorPropertyTextEnum::EditorPropertyTextEnum() {
 	hb->add_child(edit_custom_layout);
 
 	option_button = memnew(OptionButton);
-	option_button->set_accessibility_name(TTRC("Enum Options"));
+	option_button->set_accessibility_name(TTRC("Choices"));
 	option_button->set_h_size_flags(SIZE_EXPAND_FILL);
 	option_button->set_clip_text(true);
 	option_button->set_fit_to_longest_item(false);
@@ -609,14 +609,14 @@ EditorPropertyTextEnum::EditorPropertyTextEnum() {
 	custom_value_edit->connect(SceneStringName(text_submitted), callable_mp(this, &EditorPropertyTextEnum::_custom_value_submitted));
 
 	accept_button = memnew(Button);
-	accept_button->set_accessibility_name(TTRC("Accept Custom Value Edit"));
+	accept_button->set_accessibility_name(TTRC("Apply"));
 	accept_button->set_flat(true);
 	accept_button->set_theme_type_variation(SNAME("EditorInspectorButton"));
 	edit_custom_layout->add_child(accept_button);
 	accept_button->connect(SceneStringName(pressed), callable_mp(this, &EditorPropertyTextEnum::_custom_value_accepted));
 
 	cancel_button = memnew(Button);
-	cancel_button->set_accessibility_name(TTRC("Cancel Custom Value Edit"));
+	cancel_button->set_accessibility_name(TTRC("Cancel"));
 	cancel_button->set_flat(true);
 	cancel_button->set_theme_type_variation(SNAME("EditorInspectorButton"));
 	edit_custom_layout->add_child(cancel_button);
@@ -673,7 +673,7 @@ EditorPropertyLocale::EditorPropertyLocale() {
 	HBoxContainer *locale_hb = memnew(HBoxContainer);
 	add_child(locale_hb);
 	locale = memnew(LineEdit);
-	locale->set_accessibility_name(TTRC("Locale"));
+	locale->set_accessibility_name(TTRC("Language"));
 	locale_hb->add_child(locale);
 	locale->connect(SceneStringName(text_submitted), callable_mp(this, &EditorPropertyLocale::_locale_selected));
 	locale->connect(SceneStringName(focus_exited), callable_mp(this, &EditorPropertyLocale::_locale_focus_exited));
@@ -1091,7 +1091,7 @@ void EditorPropertyLayersGrid::_rename_pressed(int p_menu) {
 	// Show rename popup for active layer.
 	ERR_FAIL_INDEX(renamed_layer_index, names.size());
 	String name = names[renamed_layer_index];
-	rename_dialog->set_title(vformat(TTR("Renaming Layer %d:"), renamed_layer_index + 1));
+	rename_dialog->set_title(vformat(TTR("Rename Layer %d:"), renamed_layer_index + 1));
 	rename_dialog_text->set_text(name);
 	// Indicate that leaving it blank reverts back to "Layer [Number]".
 	rename_dialog_text->set_placeholder(vformat(TTR("Layer %d"), renamed_layer_index + 1));
@@ -1103,7 +1103,7 @@ void EditorPropertyLayersGrid::_rename_pressed(int p_menu) {
 void EditorPropertyLayersGrid::_rename_operation_confirm() {
 	String new_name = rename_dialog_text->get_text().strip_edges();
 	if (new_name.contains_char('/') || new_name.contains_char('\\') || new_name.contains_char(':')) {
-		EditorNode::get_singleton()->show_warning(TTR("Name contains invalid characters."));
+		EditorNode::get_singleton()->show_warning(TTR("The name has characters that aren't allowed."));
 		return;
 	}
 
@@ -1671,7 +1671,7 @@ void EditorPropertyObjectID::update_property() {
 		edit->set_disabled(false);
 		edit->set_button_icon(EditorNode::get_singleton()->get_class_icon(type));
 	} else {
-		edit->set_text(TTR("<empty>"));
+		edit->set_text(TTR("(empty)"));
 		edit->set_tooltip_text("");
 		edit->set_disabled(true);
 		edit->set_button_icon(Ref<Texture2D>());
@@ -1986,13 +1986,13 @@ void EditorPropertyEasing::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_TRANSLATION_CHANGED: {
-			preset->set_item_text(preset->get_item_index(EASING_LINEAR), TTR("Linear", "Ease Type"));
-			preset->set_item_text(preset->get_item_index(EASING_IN), TTR("Ease In", "Ease Type"));
-			preset->set_item_text(preset->get_item_index(EASING_OUT), TTR("Ease Out", "Ease Type"));
-			preset->set_item_text(preset->get_item_index(EASING_ZERO), TTR("Zero", "Ease Type"));
+			preset->set_item_text(preset->get_item_index(EASING_LINEAR), TTR("Even", "Ease Type"));
+			preset->set_item_text(preset->get_item_index(EASING_IN), TTR("Slow Start", "Ease Type"));
+			preset->set_item_text(preset->get_item_index(EASING_OUT), TTR("Slow End", "Ease Type"));
+			preset->set_item_text(preset->get_item_index(EASING_ZERO), TTR("Instant", "Ease Type"));
 			if (!positive_only) {
-				preset->set_item_text(preset->get_item_index(EASING_IN_OUT), TTR("Ease In-Out", "Ease Type"));
-				preset->set_item_text(preset->get_item_index(EASING_OUT_IN), TTR("Ease Out-In", "Ease Type"));
+				preset->set_item_text(preset->get_item_index(EASING_IN_OUT), TTR("Slow Start and End", "Ease Type"));
+				preset->set_item_text(preset->get_item_index(EASING_OUT_IN), TTR("Fast Start and End", "Ease Type"));
 			}
 		} break;
 	}
@@ -2467,16 +2467,16 @@ EditorPropertyQuaternion::EditorPropertyQuaternion() {
 	}
 
 	warning = memnew(Button);
-	warning->set_text(TTR("Temporary Euler may be changed implicitly!"));
+	warning->set_text(TTR("Rotation may change slightly."));
 	warning->set_clip_text(true);
 	warning->set_theme_type_variation(SNAME("EditorInspectorButton"));
 	warning->connect(SceneStringName(pressed), callable_mp(this, &EditorPropertyQuaternion::_warning_pressed));
 	warning_dialog = memnew(AcceptDialog);
 	add_child(warning_dialog);
-	warning_dialog->set_text(TTR("Temporary Euler will not be stored in the object with the original value. Instead, it will be stored as Quaternion with irreversible conversion.\nThis is due to the fact that the result of Euler->Quaternion can be determined uniquely, but the result of Quaternion->Euler can be multi-existent."));
+	warning_dialog->set_text(TTR("This rotation is turned into another form when saved, so it may change slightly."));
 
 	euler_label = memnew(Label);
-	euler_label->set_text(TTR("Temporary Euler"));
+	euler_label->set_text(TTR("Rotation (Editing)"));
 
 	edit_custom_bc->add_child(warning);
 	edit_custom_bc->add_child(edit_custom_layout);
@@ -2486,7 +2486,7 @@ EditorPropertyQuaternion::EditorPropertyQuaternion() {
 		euler[i] = memnew(EditorSpinSlider);
 		euler[i]->set_flat(true);
 		euler[i]->set_label(desc[i]);
-		euler[i]->set_accessibility_name(vformat(TTR("Temporary Euler %s"), desc[i]));
+		euler[i]->set_accessibility_name(vformat(TTR("Rotation (Editing) %s"), desc[i]));
 		edit_custom_layout->add_child(euler[i]);
 		add_focusable(euler[i]);
 		euler[i]->connect(SceneStringName(value_changed), callable_mp(this, &EditorPropertyQuaternion::_custom_value_changed));
@@ -3225,7 +3225,7 @@ void EditorPropertyNodePath::update_property() {
 
 	if (p.is_empty()) {
 		assign->set_button_icon(Ref<Texture2D>());
-		assign->set_text(TTR("Assign..."));
+		assign->set_text(TTR("Choose..."));
 		assign->set_flat(false);
 		return;
 	}
@@ -3339,7 +3339,7 @@ EditorPropertyNodePath::EditorPropertyNodePath() {
 	hbc->add_theme_constant_override("separation", 0);
 	add_child(hbc);
 	assign = memnew(Button);
-	assign->set_accessibility_name(TTRC("Assign Node"));
+	assign->set_accessibility_name(TTRC("Choose Object"));
 	assign->set_flat(true);
 	assign->set_theme_type_variation(SNAME("EditorInspectorButton"));
 	assign->set_h_size_flags(SIZE_EXPAND_FILL);
@@ -3359,11 +3359,11 @@ EditorPropertyNodePath::EditorPropertyNodePath() {
 	menu->get_popup()->add_item(TTR("Clear"), ACTION_CLEAR);
 	menu->get_popup()->add_item(TTR("Copy as Text"), ACTION_COPY);
 	menu->get_popup()->add_item(TTR("Edit"), ACTION_EDIT);
-	menu->get_popup()->add_item(TTR("Show Node in Tree"), ACTION_SELECT);
+	menu->get_popup()->add_item(TTR("Show in Level List"), ACTION_SELECT);
 	menu->get_popup()->connect(SceneStringName(id_pressed), callable_mp(this, &EditorPropertyNodePath::_menu_option));
 
 	edit = memnew(LineEdit);
-	edit->set_accessibility_name(TTRC("Node Path"));
+	edit->set_accessibility_name(TTRC("Object Link"));
 	edit->set_h_size_flags(SIZE_EXPAND_FILL);
 	edit->hide();
 	edit->connect(SceneStringName(focus_exited), callable_mp(this, &EditorPropertyNodePath::_accept_text));
@@ -3379,7 +3379,7 @@ void EditorPropertyRID::update_property() {
 		uint64_t id = rid.get_id();
 		label->set_text("RID: " + uitos(id));
 	} else {
-		label->set_text(TTR("Invalid RID"));
+		label->set_text(TTR("Nothing set"));
 	}
 }
 
@@ -3429,7 +3429,7 @@ void EditorPropertyResource::_resource_changed(const Ref<Resource> &p_resource) 
 		resources_found.insert(r);
 		bool found = EditorNode::find_recursive_resources(p_resource, resources_found);
 		if (found) {
-			callable_mp(EditorNode::get_singleton(), &EditorNode::show_warning).call_deferred(TTR("Recursion detected, unable to assign resource to property."), TTR("Warning!"));
+			callable_mp(EditorNode::get_singleton(), &EditorNode::show_warning).call_deferred(TTR("This file can't be put inside itself."), TTR("Warning"));
 			emit_changed(get_edited_property(), Ref<Resource>());
 			update_property();
 			return;

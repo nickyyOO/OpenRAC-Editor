@@ -60,7 +60,7 @@ func section(node: Node3D) -> Control:
 ## not appear.
 func partial_toggle(node: Node) -> Control:
 	var check := CheckBox.new()
-	check.text = "Import without what does not fit"
+	check.text = "Leave Out Extras"
 	check.tooltip_text = ("A level has room for only so many classes. If this class and what it makes do not fit, "
 		+ "the pack refuses it. Turn this on to import it anyway: the extra classes it makes "
 		+ "(shots, effects, parts) will be missing.")
@@ -68,7 +68,7 @@ func partial_toggle(node: Node) -> Control:
 	check.toggled.connect(func(on: bool) -> void:
 		if undo_redo == null:
 			return
-		undo_redo.create_action("Import %s %s" % [node.name, "without what does not fit" if on else "whole"])
+		undo_redo.create_action("Bring in %s %s" % [node.name, "without extras" if on else "whole"])
 		if on:
 			undo_redo.add_do_method(node, "set_meta", "rc1_foreign_partial", true)
 			undo_redo.add_undo_method(node, "remove_meta", "rc1_foreign_partial")

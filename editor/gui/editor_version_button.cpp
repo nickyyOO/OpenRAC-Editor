@@ -74,7 +74,7 @@ void EditorVersionButton::_notification(int p_what) {
 			if (GODOT_VERSION_TIMESTAMP > 0) {
 				build_date = Time::get_singleton()->get_datetime_string_from_unix_time(GODOT_VERSION_TIMESTAMP, true) + " UTC";
 			} else {
-				build_date = TTR("unknown");
+				build_date = TTR("Unknown");
 			}
 			set_tooltip_text(vformat(TTR("Built on %s.\nClick to copy."), build_date));
 		} break;

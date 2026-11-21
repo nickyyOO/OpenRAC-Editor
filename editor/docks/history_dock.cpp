@@ -59,7 +59,7 @@ void HistoryDock::refresh_history() {
 	bool include_global = global_history_checkbox->is_pressed();
 
 	if (!include_scene && !include_global) {
-		action_list->add_item(TTRC("The Beginning"));
+		action_list->add_item(TTRC("Start"));
 		action_list->set_item_auto_translate_mode(-1, AUTO_TRANSLATE_MODE_ALWAYS);
 		return;
 	}
@@ -109,7 +109,7 @@ void HistoryDock::refresh_history() {
 		}
 	}
 
-	action_list->add_item(TTRC("The Beginning"));
+	action_list->add_item(TTRC("Start"));
 	action_list->set_item_auto_translate_mode(-1, AUTO_TRANSLATE_MODE_ALWAYS);
 	refresh_version();
 }
@@ -239,7 +239,7 @@ HistoryDock::HistoryDock() {
 	set_name(TTRC("Undo History")); // OpenRAC Editor: a plain name; the layout key stays "History" so saved layouts still work.
 	set_layout_key("History");
 	set_icon_name("History");
-	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("docks/open_history", TTRC("Open History Dock")));
+	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("docks/open_history", TTRC("Open History Panel")));
 	set_default_slot(EditorDock::DOCK_SLOT_LEFT_BR);
 
 	ur_manager = EditorUndoRedoManager::get_singleton();
@@ -255,7 +255,7 @@ HistoryDock::HistoryDock() {
 	current_scene_checkbox = memnew(CheckBox);
 	mode_hb->add_child(current_scene_checkbox);
 	current_scene_checkbox->set_flat(true);
-	current_scene_checkbox->set_text(TTRC("Scene"));
+	current_scene_checkbox->set_text(TTRC("Level"));
 	current_scene_checkbox->set_h_size_flags(SIZE_EXPAND_FILL);
 	current_scene_checkbox->set_clip_text(true);
 	current_scene_checkbox->set_pressed(true);
@@ -264,7 +264,7 @@ HistoryDock::HistoryDock() {
 	global_history_checkbox = memnew(CheckBox);
 	mode_hb->add_child(global_history_checkbox);
 	global_history_checkbox->set_flat(true);
-	global_history_checkbox->set_text(TTRC("Global"));
+	global_history_checkbox->set_text(TTRC("Whole Editor"));
 	global_history_checkbox->set_h_size_flags(SIZE_EXPAND_FILL);
 	global_history_checkbox->set_clip_text(true);
 	global_history_checkbox->set_pressed(true);

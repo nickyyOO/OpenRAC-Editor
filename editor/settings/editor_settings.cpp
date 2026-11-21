@@ -1475,7 +1475,7 @@ fail:
 }
 
 void EditorSettings::init_shortcuts() {
-	ED_SHORTCUT("editor/open_search", TTRC("Focus Search/Filter Bar"), KeyModifierMask::CMD_OR_CTRL | Key::F);
+	ED_SHORTCUT("editor/open_search", TTRC("Focus Search Bar"), KeyModifierMask::CMD_OR_CTRL | Key::F);
 }
 
 void EditorSettings::setup_language(bool p_initial_setup) {

@@ -42,7 +42,7 @@ ColorChannelSelector::ColorChannelSelector() {
 	toggle_button->set_flat(true);
 	toggle_button->set_toggle_mode(true);
 	toggle_button->connect(SceneStringName(toggled), callable_mp(this, &ColorChannelSelector::on_toggled));
-	toggle_button->set_tooltip_text(TTRC("Toggle color channel preview selection."));
+	toggle_button->set_tooltip_text(TTRC("Show one color channel."));
 	toggle_button->set_v_size_flags(Control::SIZE_SHRINK_BEGIN);
 	toggle_button->set_theme_type_variation("PreviewLightButton");
 	add_child(toggle_button);

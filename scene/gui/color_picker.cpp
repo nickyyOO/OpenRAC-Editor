@@ -119,7 +119,7 @@ void ColorPicker::_notification(int p_what) {
 				btn_pick->connect(SceneStringName(pressed), callable_mp(this, &ColorPicker::_pick_button_pressed));
 			} else {
 				// On unsupported platforms, use a legacy method for color picking.
-				btn_pick->set_tooltip_text(ETR("Pick a color from the application window."));
+				btn_pick->set_tooltip_text(ETR("Pick a color from the editor window."));
 				btn_pick->connect(SceneStringName(pressed), callable_mp(this, &ColorPicker::_pick_button_pressed_legacy));
 			}
 		} break;
@@ -300,12 +300,12 @@ void ColorPicker::_update_controls() {
 		values[i]->set_accessibility_name(modes[current_mode]->get_slider_label(i));
 	}
 	alpha_label->set_text("A");
-	alpha_slider->set_accessibility_name(ETR("Alpha"));
-	alpha_value->set_accessibility_name(ETR("Alpha"));
+	alpha_slider->set_accessibility_name(ETR("Opacity"));
+	alpha_value->set_accessibility_name(ETR("Opacity"));
 
 	intensity_label->set_text("I");
-	intensity_slider->set_accessibility_name(ETR("Intensity"));
-	intensity_value->set_accessibility_name(ETR("Intensity"));
+	intensity_slider->set_accessibility_name(ETR("Brightness"));
+	intensity_value->set_accessibility_name(ETR("Brightness"));
 
 	alpha_value->set_visible(edit_alpha);
 	alpha_slider->set_visible(edit_alpha);
@@ -792,7 +792,7 @@ void ColorPicker::_update_presets() {
 
 			if (palette_edited) {
 				palette_name->set_text(vformat("%s*", palette_name->get_text().remove_char('*')));
-				palette_name->set_tooltip_text(TTRC("The changes to this palette have not been saved to a file."));
+				palette_name->set_tooltip_text(TTRC("This palette isn't saved."));
 			}
 		}
 	}
@@ -851,7 +851,7 @@ void ColorPicker::_text_type_toggled() {
 		text_type->set_text("#");
 		text_type->set_button_icon(nullptr);
 
-		c_text->set_tooltip_text(ETR("Enter a hex code (\"#ff0000\") or named color (\"red\")."));
+		c_text->set_tooltip_text(ETR("Type a color code (\"#ff0000\") or name (\"red\")."));
 	}
 	_update_color();
 }
@@ -1141,7 +1141,7 @@ void ColorPicker::add_preset(const Color &p_color) {
 
 	if (!palette_name->get_text().is_empty()) {
 		palette_name->set_text(vformat("%s*", palette_name->get_text().trim_suffix("*")));
-		palette_name->set_tooltip_text(ETR("The changes to this palette have not been saved to a file."));
+		palette_name->set_tooltip_text(ETR("This palette isn't saved."));
 	}
 
 #ifdef TOOLS_ENABLED
@@ -1194,7 +1194,7 @@ void ColorPicker::erase_preset(const Color &p_color) {
 		}
 
 		palette_name->set_text(vformat("%s*", palette_name->get_text().remove_char('*')));
-		palette_name->set_tooltip_text(ETR("The changes to this palette have not been saved to a file."));
+		palette_name->set_tooltip_text(ETR("This palette isn't saved."));
 		if (presets.is_empty()) {
 			palette_name->set_text("");
 			palette_path = String();
@@ -1351,7 +1351,7 @@ void ColorPicker::_update_text_value() {
 		text_type->set_disabled(false);
 		hex_label->set_text(ETR("Hex"));
 		c_text->set_text(color.to_html(edit_alpha && color.a < 1));
-		c_text->set_tooltip_text(ETR("Enter a hex code (\"#ff0000\") or named color (\"red\")."));
+		c_text->set_tooltip_text(ETR("Type a color code (\"#ff0000\") or name (\"red\")."));
 	}
 }
 
@@ -1672,21 +1672,21 @@ void ColorPicker::_update_menu_items() {
 	options_menu->set_item_disabled(-1, presets.is_empty());
 
 	options_menu->add_icon_item(get_theme_icon(SNAME("save"), SNAME("FileDialog")), ETR("Save As"), static_cast<int>(MenuOption::MENU_SAVE_AS));
-	options_menu->set_item_tooltip(-1, ETR("Save the current color palette as a new to reuse later."));
+	options_menu->set_item_tooltip(-1, ETR("Save this palette as a new file."));
 	options_menu->set_item_disabled(-1, palette_path.is_empty());
 
 	options_menu->add_icon_item(get_theme_icon(SNAME("load"), SNAME("FileDialog")), ETR("Load"), static_cast<int>(MenuOption::MENU_LOAD));
-	options_menu->set_item_tooltip(-1, ETR("Load existing color palette."));
+	options_menu->set_item_tooltip(-1, ETR("Load a color palette."));
 
 #ifdef TOOLS_ENABLED
 	if (Engine::get_singleton()->is_editor_hint()) {
 		options_menu->add_icon_item(get_theme_icon(SNAME("load"), SNAME("FileDialog")), TTRC("Quick Load"), static_cast<int>(MenuOption::MENU_QUICKLOAD));
-		options_menu->set_item_tooltip(-1, TTRC("Load existing color palette."));
+		options_menu->set_item_tooltip(-1, TTRC("Load a color palette."));
 	}
 #endif // TOOLS_ENABLED
 
 	options_menu->add_icon_item(get_theme_icon(SNAME("clear"), SNAME("FileDialog")), ETR("Clear"), static_cast<int>(MenuOption::MENU_CLEAR));
-	options_menu->set_item_tooltip(-1, ETR("Clear the currently loaded color palettes in the picker."));
+	options_menu->set_item_tooltip(-1, ETR("Clear the loaded palettes."));
 	options_menu->set_item_disabled(-1, presets.is_empty());
 }
 
@@ -2120,7 +2120,7 @@ ColorPicker::ColorPicker() {
 	btn_shape->set_theme_type_variation("FlatMenuButton");
 	sample_hbc->add_child(btn_shape);
 	btn_shape->set_toggle_mode(true);
-	btn_shape->set_tooltip_text(ETR("Select a picker shape."));
+	btn_shape->set_tooltip_text(ETR("Pick a color wheel shape."));
 	btn_shape->set_icon_alignment(HORIZONTAL_ALIGNMENT_CENTER);
 	btn_shape->set_focus_mode(FOCUS_ALL);
 
@@ -2171,8 +2171,8 @@ ColorPicker::ColorPicker() {
 	btn_mode->set_theme_type_variation("FlatMenuButton");
 	mode_hbc->add_child(btn_mode);
 	btn_mode->set_toggle_mode(true);
-	btn_mode->set_accessibility_name(ETR("Select a picker mode."));
-	btn_mode->set_tooltip_text(ETR("Select a picker mode."));
+	btn_mode->set_accessibility_name(ETR("Pick a color mode."));
+	btn_mode->set_tooltip_text(ETR("Pick a color mode."));
 	btn_mode->set_icon_alignment(HORIZONTAL_ALIGNMENT_CENTER);
 	btn_mode->set_focus_mode(FOCUS_ALL);
 
@@ -2185,7 +2185,7 @@ ColorPicker::ColorPicker() {
 		}
 	}
 	mode_popup->add_separator();
-	mode_popup->add_check_item(ETR("Colorized Sliders"), MODE_MAX);
+	mode_popup->add_check_item(ETR("Colored Sliders"), MODE_MAX);
 	mode_popup->set_item_checked(current_mode, true);
 	mode_popup->set_item_checked(MODE_MAX + 1, true);
 	mode_popup->connect(SceneStringName(id_pressed), callable_mp(this, &ColorPicker::_set_mode_popup_value));
@@ -2214,7 +2214,7 @@ ColorPicker::ColorPicker() {
 	hex_hbc = memnew(HBoxContainer);
 	hex_hbc->set_alignment(ALIGNMENT_BEGIN);
 	real_vbox->add_child(hex_hbc);
-	hex_label = memnew(Label(ETR("Hex")));
+	hex_label = memnew(Label(ETR("Color Code")));
 	hex_hbc->add_child(hex_label);
 
 	text_type = memnew(Button);
@@ -2224,13 +2224,13 @@ ColorPicker::ColorPicker() {
 	text_type->set_text("#");
 #ifdef TOOLS_ENABLED
 	if (Engine::get_singleton()->is_editor_hint()) {
-		text_type->set_tooltip_text(TTRC("Switch between hexadecimal and code values."));
+		text_type->set_tooltip_text(TTRC("Switch between color codes and numbers."));
 		text_type->connect(SceneStringName(pressed), callable_mp(this, &ColorPicker::_text_type_toggled));
 	} else {
-		text_type->set_accessibility_name(ETR("Hexadecimal Values"));
+		text_type->set_accessibility_name(ETR("Color Codes"));
 #else
 	{
-		text_type->set_accessibility_name(ETR("Hexadecimal Values"));
+		text_type->set_accessibility_name(ETR("Color Codes"));
 #endif // TOOLS_ENABLED
 		text_type->set_flat(true);
 	}
@@ -2239,9 +2239,9 @@ ColorPicker::ColorPicker() {
 	hex_hbc->add_child(c_text);
 	c_text->set_h_size_flags(SIZE_EXPAND_FILL);
 	c_text->set_select_all_on_focus(true);
-	c_text->set_accessibility_name(ETR("Hex code or named color"));
-	c_text->set_tooltip_text(ETR("Enter a hex code (\"#ff0000\") or named color (\"red\")."));
-	c_text->set_placeholder(ETR("Hex code or named color"));
+	c_text->set_accessibility_name(ETR("Color code or name"));
+	c_text->set_tooltip_text(ETR("Type a color code (\"#ff0000\") or name (\"red\")."));
+	c_text->set_placeholder(ETR("Color code or name"));
 	c_text->connect(SceneStringName(text_submitted), callable_mp(this, &ColorPicker::_html_submitted));
 	c_text->connect(SceneStringName(text_changed), callable_mp(this, &ColorPicker::_text_changed));
 	c_text->connect(SceneStringName(focus_exited), callable_mp(this, &ColorPicker::_html_focus_exit));
@@ -2284,7 +2284,7 @@ ColorPicker::ColorPicker() {
 	menu_btn->set_flat(false);
 	menu_btn->set_theme_type_variation("FlatMenuButton");
 	menu_btn->set_focus_mode(FOCUS_ALL);
-	menu_btn->set_tooltip_text(ETR("Show all options available."));
+	menu_btn->set_tooltip_text(ETR("Show all options."));
 	menu_btn->connect("about_to_popup", callable_mp(this, &ColorPicker::_update_menu_items));
 	palette_box->add_child(menu_btn);
 
@@ -2320,7 +2320,7 @@ ColorPicker::ColorPicker() {
 
 	btn_add_preset = memnew(Button);
 	btn_add_preset->set_icon_alignment(HORIZONTAL_ALIGNMENT_CENTER);
-	btn_add_preset->set_tooltip_text(ETR("Add current color as a preset."));
+	btn_add_preset->set_tooltip_text(ETR("Save this color to the swatches."));
 	btn_add_preset->connect(SceneStringName(pressed), callable_mp(this, &ColorPicker::_add_preset_pressed));
 	preset_container->add_child(btn_add_preset);
 
@@ -2328,8 +2328,8 @@ ColorPicker::ColorPicker() {
 	perm_hb->set_alignment(BoxContainer::ALIGNMENT_CENTER);
 
 	LinkButton *perm_link = memnew(LinkButton);
-	perm_link->set_text(ETR("Screen Recording permission missing!"));
-	perm_link->set_tooltip_text(ETR("Screen Recording permission is required to pick colors from the other application windows.\nClick here to request access..."));
+	perm_link->set_text(ETR("Screen recording permission needed"));
+	perm_link->set_tooltip_text(ETR("Allow screen recording to pick colors from other windows.\nClick here to allow it."));
 	perm_link->connect(SceneStringName(pressed), callable_mp(this, &ColorPicker::_req_permission));
 	perm_hb->add_child(perm_link);
 	real_vbox->add_child(perm_hb);
@@ -2660,9 +2660,9 @@ Color ColorPresetButton::get_preset_color() const {
 String ColorPresetButton::get_tooltip(const Point2 &p_pos) const {
 	Color color = get_preset_color();
 	if (recent) {
-		return vformat(atr(ETR("Color: %s\nLMB: Apply color")), color_to_string(color, color.a < 1));
+		return vformat(atr(ETR("Color: %s\nLeft-click: Use color")), color_to_string(color, color.a < 1));
 	}
-	return vformat(atr(ETR("Color: %s\nLMB: Apply color\nRMB: Remove preset")), color_to_string(color, color.a < 1));
+	return vformat(atr(ETR("Color: %s\nLeft-click: Use color\nRight-click: Remove")), color_to_string(color, color.a < 1));
 }
 
 void ColorPresetButton::_bind_methods() {

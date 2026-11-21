@@ -104,7 +104,7 @@ protected:
 	virtual void _update_cursor(const Vector2 &p_color_change_vector, bool p_is_echo) override;
 
 public:
-	virtual String get_name() const override { return ETR("HSV Rectangle"); }
+	virtual String get_name() const override { return ETR("Square (HSV)"); }
 	virtual Ref<Texture2D> get_icon() const override { return color_picker->theme_cache.shape_rect; }
 	virtual void update_theme() override;
 	virtual void grab_focus() override;
@@ -134,7 +134,7 @@ protected:
 	virtual void _value_slider_draw();
 
 public:
-	virtual String get_name() const override { return ETR("OK HS Rectangle"); }
+	virtual String get_name() const override { return ETR("Square (OK HS)"); }
 	virtual bool is_ok_hsl() const override { return true; }
 	virtual Ref<Texture2D> get_icon() const override { return color_picker->theme_cache.shape_rect; }
 	virtual void update_theme() override;
@@ -159,7 +159,7 @@ protected:
 	virtual void _value_slider_draw() override;
 
 public:
-	virtual String get_name() const override { return ETR("OK HL Rectangle"); }
+	virtual String get_name() const override { return ETR("Square (OK HL)"); }
 	virtual bool is_ok_hsl() const override { return true; }
 	virtual Ref<Texture2D> get_icon() const override { return color_picker->theme_cache.shape_rect; }
 
@@ -192,7 +192,7 @@ protected:
 	virtual void _update_cursor(const Vector2 &p_color_change_vector, bool p_is_echo) override;
 
 public:
-	virtual String get_name() const override { return ETR("HSV Wheel"); }
+	virtual String get_name() const override { return ETR("Wheel (HSV)"); }
 	virtual Ref<Texture2D> get_icon() const override { return color_picker->theme_cache.shape_rect_wheel; }
 	virtual void update_theme() override;
 	virtual void grab_focus() override;
@@ -247,7 +247,7 @@ protected:
 	virtual void _value_slider_draw() override;
 
 public:
-	virtual String get_name() const override { return ETR("VHS Circle"); }
+	virtual String get_name() const override { return ETR("Circle (HSV)"); }
 
 	ColorPickerShapeVHSCircle(ColorPicker *p_color_picker) :
 			ColorPickerShapeCircle(p_color_picker) {}
@@ -268,7 +268,7 @@ protected:
 	virtual void _value_slider_draw() override;
 
 public:
-	virtual String get_name() const override { return ETR("OKHSL Circle"); }
+	virtual String get_name() const override { return ETR("Circle (OK HSL)"); }
 	virtual bool is_ok_hsl() const override { return true; }
 
 	ColorPickerShapeOKHSLCircle(ColorPicker *p_color_picker) :

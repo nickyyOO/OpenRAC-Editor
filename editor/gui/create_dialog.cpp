@@ -74,8 +74,8 @@ void CreateDialog::popup_create(bool p_dont_clear, bool p_replace_mode, const St
 		set_title(vformat(TTR("Change Type of \"%s\""), p_current_name));
 		set_ok_button_text(TTR("Change"));
 	} else {
-		set_title(vformat(TTR("Create New %s"), base_type));
-		set_ok_button_text(TTR("Create"));
+		set_title(vformat(TTR("Add New %s"), base_type));
+		set_ok_button_text(TTR("Add"));
 	}
 
 	_load_favorites_and_history();
@@ -335,7 +335,7 @@ void CreateDialog::_update_search() {
 		select_type(best_match);
 	} else {
 		favorite->set_disabled(true);
-		help_bit->set_custom_text(String(), String(), vformat(TTR("No results for \"%s\"."), search_text.replace("[", "[lb]")));
+		help_bit->set_custom_text(String(), String(), vformat(TTR("Nothing found for \"%s\"."), search_text.replace("[", "[lb]")));
 		get_ok_button()->set_disabled(true);
 		search_options->deselect_all();
 	}
@@ -439,7 +439,7 @@ void CreateDialog::_configure_search_option_item(TreeItem *r_item, const StringN
 	}
 
 	if (!p_match_keyword.is_empty()) {
-		text += "      - " + vformat(TTR("Matches the \"%s\" keyword."), p_match_keyword);
+		text += "      - " + vformat(TTR("Matches the word \"%s\"."), p_match_keyword);
 	}
 	r_item->set_text(0, text);
 
@@ -465,9 +465,9 @@ void CreateDialog::_configure_search_option_item(TreeItem *r_item, const StringN
 	bool is_experimental = (class_doc && class_doc->value.is_experimental);
 
 	if (is_deprecated) {
-		r_item->add_button(0, get_editor_theme_icon("StatusError"), 0, false, TTR("This class is marked as deprecated."));
+		r_item->add_button(0, get_editor_theme_icon("StatusError"), 0, false, TTR("This type is old and may be removed."));
 	} else if (is_experimental) {
-		r_item->add_button(0, get_editor_theme_icon("NodeWarning"), 0, false, TTR("This class is marked as experimental."));
+		r_item->add_button(0, get_editor_theme_icon("NodeWarning"), 0, false, TTR("This type is still being tested."));
 	}
 
 	if (!search_box->get_text().is_empty()) {
@@ -688,7 +688,7 @@ void CreateDialog::select_type(const String &p_type, bool p_center_on_item) {
 		get_ok_button()->set_tooltip_text(String());
 	} else {
 		get_ok_button()->set_disabled(true);
-		get_ok_button()->set_tooltip_text(TTR("The selected class can't be instantiated."));
+		get_ok_button()->set_tooltip_text(TTR("This type can't be added."));
 	}
 }
 
@@ -997,7 +997,7 @@ CreateDialog::CreateDialog() {
 	vsc->add_child(fav_vb);
 
 	favorites = memnew(Tree);
-	favorites->set_accessibility_name(TTRC("Favorites:"));
+	favorites->set_accessibility_name(TTRC("Favorites"));
 	favorites->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	favorites->set_hide_root(true);
 	favorites->set_hide_folding(true);
@@ -1007,7 +1007,7 @@ CreateDialog::CreateDialog() {
 	favorites->add_theme_constant_override("draw_guides", 1);
 	favorites->set_theme_type_variation("TreeSecondary");
 	SET_DRAG_FORWARDING_GCD(favorites, CreateDialog);
-	fav_vb->add_margin_child(TTR("Favorites:"), favorites, true);
+	fav_vb->add_margin_child(TTR("Favorites"), favorites, true);
 
 	VBoxContainer *rec_vb = memnew(VBoxContainer);
 	vsc->add_child(rec_vb);
@@ -1015,9 +1015,9 @@ CreateDialog::CreateDialog() {
 	rec_vb->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 
 	recent = memnew(ItemList);
-	recent->set_accessibility_name(TTRC("Recent:"));
+	recent->set_accessibility_name(TTRC("Recent"));
 	recent->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
-	rec_vb->add_margin_child(TTR("Recent:"), recent, true);
+	rec_vb->add_margin_child(TTR("Recent"), recent, true);
 	recent->set_allow_reselect(true);
 	recent->connect(SceneStringName(item_selected), callable_mp(this, &CreateDialog::_history_selected));
 	recent->connect("item_activated", callable_mp(this, &CreateDialog::_history_activated));
@@ -1040,7 +1040,7 @@ CreateDialog::CreateDialog() {
 
 	favorite = memnew(Button);
 	favorite->set_toggle_mode(true);
-	favorite->set_tooltip_text(TTR("(Un)favorite selected item."));
+	favorite->set_tooltip_text(TTR("Add to or remove from favorites."));
 	favorite->connect(SceneStringName(pressed), callable_mp(this, &CreateDialog::_favorite_toggled));
 	search_hb->add_child(favorite);
 	vbc->add_margin_child(TTR("Search:"), search_hb);

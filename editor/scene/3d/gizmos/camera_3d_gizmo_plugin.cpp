@@ -118,7 +118,7 @@ void Camera3DGizmoPlugin::commit_handle(const EditorNode3DGizmo *p_gizmo, int p_
 			camera->set("fov", p_restore);
 		} else {
 			EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
-			ur->create_action(TTR("Change Camera FOV"));
+			ur->create_action(TTR("Change Camera View Angle"));
 			ur->add_do_property(camera, "fov", camera->get_fov());
 			ur->add_undo_property(camera, "fov", p_restore);
 			ur->commit_action();

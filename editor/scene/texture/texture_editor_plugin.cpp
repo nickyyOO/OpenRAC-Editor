@@ -210,7 +210,7 @@ void TexturePreview::_update_metadata_label_text() {
 
 		if (mipmaps >= 1) {
 			metadata_label->set_text(
-					vformat(String::utf8("%d×%d %s\n") + TTR("%s Mipmaps") + "\n" + TTR("Memory: %s"),
+					vformat(String::utf8("%d×%d %s\n") + TTR("%s Detail Levels") + "\n" + TTR("Memory: %s"),
 							texture->get_width(),
 							texture->get_height(),
 							format_name,
@@ -220,7 +220,7 @@ void TexturePreview::_update_metadata_label_text() {
 			// "No Mipmaps" is easier to distinguish than "0 Mipmaps",
 			// especially since 0, 6, and 8 look quite close with the default code font.
 			metadata_label->set_text(
-					vformat(String::utf8("%d×%d %s\n") + TTR("No Mipmaps") + "\n" + TTR("Memory: %s"),
+					vformat(String::utf8("%d×%d %s\n") + TTR("No Detail Levels") + "\n" + TTR("Memory: %s"),
 							texture->get_width(),
 							texture->get_height(),
 							format_name,
@@ -294,7 +294,7 @@ TexturePreview::TexturePreview(Ref<Texture2D> p_texture, bool p_show_metadata) {
 	const int mipmaps = get_texture_mipmaps_count(p_texture);
 	if (mipmaps > 0) {
 		mipmap_spinbox = memnew(SpinBox);
-		mipmap_spinbox->set_tooltip_text(TTRC("Mipmap level index selector."));
+		mipmap_spinbox->set_tooltip_text(TTRC("Pick a detail level."));
 		mipmap_spinbox->set_max(mipmaps);
 		mipmap_spinbox->set_modulate(Color(1, 1, 1, 0.8));
 		mipmap_spinbox->set_h_grow_direction(GROW_DIRECTION_BEGIN);

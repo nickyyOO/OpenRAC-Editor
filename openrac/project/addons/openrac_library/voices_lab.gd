@@ -70,12 +70,12 @@ func start(python: String, args: PackedStringArray) -> String:
 	last_lines = PackedStringArray()
 
 	if python == "" or not FileAccess.file_exists(args[0]):
-		return "Open the level from the launcher (Mods, Level editor, Open): it names the Python and tools the voices need."
+		return "Open the level from the launcher (Mods, Level editor, Open) first."
 
 	pipe = OS.execute_with_pipe(python, args)
 
 	if pipe.is_empty():
-		return "Could not start %s." % python
+		return "Couldn't start %s." % python
 
 	reader = Thread.new()
 	reader.start(read.bind(pipe["stdio"], false))

@@ -1041,7 +1041,7 @@ String EditorNode3DGizmoPlugin::get_gizmo_name() const {
 	}
 
 	WARN_PRINT_ONCE("A 3D editor gizmo has no name defined (it will appear as \"Unnamed Gizmo\" in the \"View > Gizmos\" menu). To resolve this, override the `_get_gizmo_name()` function to return a String in the script that extends EditorNode3DGizmoPlugin.");
-	return TTR("Unnamed Gizmo");
+	return TTR("Unnamed Handles");
 }
 
 int EditorNode3DGizmoPlugin::get_priority() const {

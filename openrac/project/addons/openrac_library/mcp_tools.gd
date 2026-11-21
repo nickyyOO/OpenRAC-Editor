@@ -211,7 +211,7 @@ func level_check(_args: Dictionary) -> Variant:
 
 
 func level_pack(_args: Dictionary) -> Variant:
-	return run_tool("play", "Pack the levels", PackedStringArray(["--no-start"]))
+	return run_tool("play", "Build", PackedStringArray(["--no-start"]))
 
 
 func level_play(_args: Dictionary) -> Variant:
@@ -272,7 +272,7 @@ func moby_states_refresh(_args: Dictionary) -> Variant:
 	var args: PackedStringArray = ["-u", tools.path_join("moby_states.py"), ProjectSettings.globalize_path("res://").trim_suffix("/"),
 		"--data", Play.user_arg("--openrac-data"), "--levels", Play.user_arg("--openrac-levels"),
 		"--program", Play.user_arg("--openrac-states")]
-	var job: String = server.job_run_process("Moby start states", python, args)
+	var job: String = server.job_run_process("Object start states", python, args)
 	return {"job": job, "state": "running", "next": "job_wait with this id"}
 
 
@@ -583,7 +583,7 @@ func moby_remove(args: Dictionary) -> Variant:
 		return fail("Name the mobys: nodes or spawn_ids.")
 
 	var undo_redo: EditorUndoRedoManager = plugin.get_undo_redo()
-	undo_redo.create_action("Delete %d moby(s) (AI)" % found.size(), UndoRedo.MERGE_DISABLE, root())
+	undo_redo.create_action("Delete %d objects (AI)" % found.size(), UndoRedo.MERGE_DISABLE, root())
 
 	for node in found:
 		var parent: Node = node.get_parent()

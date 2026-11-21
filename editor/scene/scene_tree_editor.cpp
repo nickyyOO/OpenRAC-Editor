@@ -73,13 +73,13 @@ PackedStringArray SceneTreeEditor::_get_node_configuration_warnings(Node *p_node
 			// Note: Warn for Node2D but not all CanvasItems, don't warn for Control nodes.
 			// Control nodes may have reasons to use a transformed root node like anchors.
 			if (!node_2d->get_position().is_zero_approx()) {
-				warnings.append(TTR("The root node of a scene is recommended to not be transformed, since instances of the scene will usually override this. Reset the transform and reload the scene to remove this warning."));
+				warnings.append(TTR("The level's top object has been moved. Reset its position, rotation and size, then reopen the level."));
 			}
 		}
 		Node3D *node_3d = Object::cast_to<Node3D>(p_node);
 		if (node_3d) {
 			if (!node_3d->get_position().is_zero_approx()) {
-				warnings.append(TTR("The root node of a scene is recommended to not be transformed, since instances of the scene will usually override this. Reset the transform and reload the scene to remove this warning."));
+				warnings.append(TTR("The level's top object has been moved. Reset its position, rotation and size, then reopen the level."));
 			}
 		}
 	}
@@ -125,7 +125,7 @@ void SceneTreeEditor::_cell_button_pressed(Object *p_item, int p_column, int p_i
 		}
 
 	} else if (p_id == BUTTON_VISIBILITY) {
-		undo_redo->create_action(TTR("Toggle Visible"));
+		undo_redo->create_action(TTR("Show or Hide"));
 		_toggle_visible(n);
 		List<Node *> selection = editor_selection->get_top_selected_node_list();
 		if (selection.size() > 1 && selection.find(n) != nullptr) {
@@ -139,7 +139,7 @@ void SceneTreeEditor::_cell_button_pressed(Object *p_item, int p_column, int p_i
 		}
 		undo_redo->commit_action();
 	} else if (p_id == BUTTON_LOCK) {
-		undo_redo->create_action(TTR("Unlock Node"));
+		undo_redo->create_action(TTR("Unlock Object"));
 		undo_redo->add_do_method(n, "remove_meta", "_edit_lock_");
 		undo_redo->add_undo_method(n, "set_meta", "_edit_lock_", true);
 		undo_redo->add_do_method(this, "emit_signal", "node_changed");
@@ -154,7 +154,7 @@ void SceneTreeEditor::_cell_button_pressed(Object *p_item, int p_column, int p_i
 		}
 
 	} else if (p_id == BUTTON_GROUP) {
-		undo_redo->create_action(TTR("Ungroup Children"));
+		undo_redo->create_action(TTR("Ungroup Parts"));
 
 		if (n->is_class("CanvasItem") || n->is_class("Node3D")) {
 			undo_redo->add_do_method(n, "remove_meta", "_edit_group_");
@@ -516,7 +516,7 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 				all_warnings.remove_at(0); // With only one warning, two newlines do not look great.
 			}
 
-			p_item->add_button(0, get_editor_theme_icon(warning_icon), BUTTON_WARNING, false, TTR("Node configuration warning:") + all_warnings);
+			p_item->add_button(0, get_editor_theme_icon(warning_icon), BUTTON_WARNING, false, TTR("Problem with this object:") + all_warnings);
 		}
 
 		if (p_node->is_unique_name_in_owner()) {
@@ -607,18 +607,18 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 		}
 
 		if (p_node->has_meta("_edit_lock_")) {
-			p_item->add_button(0, get_editor_theme_icon(SNAME("Lock")), BUTTON_LOCK, false, TTR("Node is locked.\nClick to unlock it."));
+			p_item->add_button(0, get_editor_theme_icon(SNAME("Lock")), BUTTON_LOCK, false, TTR("Object is locked.\nClick to unlock it."));
 		}
 		if (p_node->has_meta("_edit_group_")) {
-			p_item->add_button(0, get_editor_theme_icon(SNAME("Group")), BUTTON_GROUP, false, TTR("Children are not selectable.\nClick to make them selectable."));
+			p_item->add_button(0, get_editor_theme_icon(SNAME("Group")), BUTTON_GROUP, false, TTR("Parts can't be selected.\nClick to make them selectable."));
 		}
 
 		if (p_node->has_method("is_visible") && p_node->has_method("set_visible") && p_node->has_signal(SceneStringName(visibility_changed))) {
 			bool is_visible = p_node->call("is_visible");
 			if (is_visible) {
-				p_item->add_button(0, get_editor_theme_icon(SNAME("GuiVisibilityVisible")), BUTTON_VISIBILITY, false, TTR("Toggle Visibility"));
+				p_item->add_button(0, get_editor_theme_icon(SNAME("GuiVisibilityVisible")), BUTTON_VISIBILITY, false, TTR("Show or Hide"));
 			} else {
-				p_item->add_button(0, get_editor_theme_icon(SNAME("GuiVisibilityHidden")), BUTTON_VISIBILITY, false, TTR("Toggle Visibility"));
+				p_item->add_button(0, get_editor_theme_icon(SNAME("GuiVisibilityHidden")), BUTTON_VISIBILITY, false, TTR("Show or Hide"));
 			}
 			const Callable vis_changed = callable_mp(this, &SceneTreeEditor::_node_visibility_changed);
 			if (!p_node->is_connected(SceneStringName(visibility_changed), vis_changed)) {
@@ -631,7 +631,7 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 			bool is_pinned = AnimationPlayerEditor::get_singleton()->get_editing_node() == p_node && AnimationPlayerEditor::get_singleton()->is_pinned();
 
 			if (is_pinned) {
-				p_item->add_button(0, get_editor_theme_icon(SNAME("Pin")), BUTTON_PIN, false, TTR("AnimationPlayer is pinned.\nClick to unpin."));
+				p_item->add_button(0, get_editor_theme_icon(SNAME("Pin")), BUTTON_PIN, false, TTR("Keys panel is pinned.\nClick to unpin."));
 			}
 		}
 	}
@@ -1219,7 +1219,7 @@ bool SceneTreeEditor::_item_matches_all_terms(TreeItem *p_item, const PackedStri
 					}
 				}
 			} else if (filter_term_warning.is_empty()) {
-				filter_term_warning = vformat(TTR("\"%s\" is not a known filter."), parameter);
+				filter_term_warning = vformat(TTR("%s isn't a known search word."), parameter);
 				continue;
 			}
 		} else {
@@ -1541,7 +1541,7 @@ void SceneTreeEditor::rename_node(Node *p_node, const String &p_name, TreeItem *
 
 	// If p_name only has "%" at the beginning and no other invalid characters, do not error.
 	if (new_name != substr_name) {
-		String text = TTR("Invalid node name, the following characters are not allowed:") + "\n" + String::get_invalid_node_name_characters();
+		String text = TTR("This name can't use these characters:") + "\n" + String::get_invalid_node_name_characters();
 		if (error->is_visible()) {
 			if (!error->get_meta("invalid_character", false)) {
 				error->set_text(error->get_text() + "\n\n" + text);
@@ -1635,7 +1635,7 @@ void SceneTreeEditor::rename_node(Node *p_node, const String &p_name, TreeItem *
 		emit_signal(SNAME("node_renamed"));
 	} else {
 		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-		undo_redo->create_action(TTR("Rename Node"), UndoRedo::MERGE_DISABLE, p_node);
+		undo_redo->create_action(TTR("Rename Object"), UndoRedo::MERGE_DISABLE, p_node);
 
 		if (check_for_unique_name_token) {
 			undo_redo->add_undo_method(p_node, "set_unique_name_in_owner", false);
@@ -1675,7 +1675,7 @@ void SceneTreeEditor::_edited() {
 		ERR_FAIL_COND(nodes_to_rename.is_empty());
 
 		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-		undo_redo->create_action(TTR("Rename Nodes"), UndoRedo::MERGE_DISABLE, nodes_to_rename.front()->get(), true);
+		undo_redo->create_action(TTR("Rename Objects"), UndoRedo::MERGE_DISABLE, nodes_to_rename.front()->get(), true);
 
 		TreeItem *item = which;
 		String new_name = edited->get_text(0);
@@ -2164,7 +2164,7 @@ SceneTreeEditor::SceneTreeEditor(bool p_label, bool p_can_rename, bool p_can_ope
 		Label *label = memnew(Label);
 		label->set_theme_type_variation("HeaderSmall");
 		label->set_position(Point2(10, 0));
-		label->set_text(TTR("Scene Tree (Nodes):"));
+		label->set_text(TTR("Level List"));
 
 		add_child(label);
 	}
@@ -2198,7 +2198,7 @@ SceneTreeEditor::SceneTreeEditor(bool p_label, bool p_can_rename, bool p_can_ope
 
 	warning = memnew(AcceptDialog);
 	add_child(warning);
-	warning->set_title(TTR("Node Configuration Warning!"));
+	warning->set_title(TTR("Object Problem"));
 	warning->set_flag(Window::FLAG_POPUP, true);
 
 	last_hash = 0;
@@ -2375,7 +2375,7 @@ LineEdit *SceneTreeDialog::get_filter_line_edit() {
 }
 
 SceneTreeDialog::SceneTreeDialog() {
-	set_title(TTRC("Select a Node"));
+	set_title(TTRC("Select an Object"));
 	content = memnew(VBoxContainer);
 	add_child(content);
 
@@ -2384,7 +2384,7 @@ SceneTreeDialog::SceneTreeDialog() {
 
 	filter = memnew(FilterLineEdit);
 	filter->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-	filter->set_placeholder(TTRC("Filter Nodes"));
+	filter->set_placeholder(TTRC("Search Objects"));
 	filter->add_theme_constant_override("minimum_character_width", 0);
 	filter->connect(SceneStringName(text_changed), callable_mp(this, &SceneTreeDialog::_filter_changed));
 

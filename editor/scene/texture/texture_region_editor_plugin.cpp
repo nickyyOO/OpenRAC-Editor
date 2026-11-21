@@ -382,7 +382,7 @@ void TextureRegionEditor::_commit_drag() {
 		}
 		edited_margin = -1;
 	} else {
-		undo_redo->create_action(TTR("Set Region Rect"));
+		undo_redo->create_action(TTR("Set Area"));
 		if (node_sprite_2d) {
 			undo_redo->add_do_method(node_sprite_2d, "set_region_rect", node_sprite_2d->get_region_rect());
 			undo_redo->add_undo_method(node_sprite_2d, "set_region_rect", rect_prev);
@@ -477,7 +477,7 @@ void TextureRegionEditor::_texture_overlay_input(const Ref<InputEvent> &p_input)
 									rect.expand_to(r.get_end());
 								}
 
-								undo_redo->create_action(TTR("Set Region Rect"));
+								undo_redo->create_action(TTR("Set Area"));
 								if (node_sprite_2d) {
 									undo_redo->add_do_method(node_sprite_2d, "set_region_rect", rect);
 									undo_redo->add_undo_method(node_sprite_2d, "set_region_rect", node_sprite_2d->get_region_rect());
@@ -1218,7 +1218,7 @@ void TextureRegionEditor::_bind_methods() {
 }
 
 TextureRegionEditor::TextureRegionEditor() {
-	set_title(TTR("Region Editor"));
+	set_title(TTR("Area Editor"));
 	set_flag(FLAG_MAXIMIZE_DISABLED, false);
 	set_process_shortcut_input(true);
 	set_ok_button_text(TTR("Close"));
@@ -1239,15 +1239,15 @@ TextureRegionEditor::TextureRegionEditor() {
 
 	HBoxContainer *hb_tools = memnew(HBoxContainer);
 	vb->add_child(hb_tools);
-	hb_tools->add_child(memnew(Label(TTR("Snap Mode:"))));
+	hb_tools->add_child(memnew(Label(TTR("Snap"))));
 
 	snap_mode_button = memnew(OptionButton);
 	hb_tools->add_child(snap_mode_button);
-	snap_mode_button->set_accessibility_name(TTRC("Snap Mode:"));
+	snap_mode_button->set_accessibility_name(TTRC("Snap"));
 	snap_mode_button->add_item(TTR("None"), 0);
 	snap_mode_button->add_item(TTR("Pixel Snap"), 1);
 	snap_mode_button->add_item(TTR("Grid Snap"), 2);
-	snap_mode_button->add_item(TTR("Auto Slice"), 3);
+	snap_mode_button->add_item(TTR("Auto Split"), 3);
 	snap_mode_button->select(snap_mode);
 	snap_mode_button->connect(SceneStringName(item_selected), callable_mp(this, &TextureRegionEditor::_set_snap_mode));
 
@@ -1291,14 +1291,14 @@ TextureRegionEditor::TextureRegionEditor() {
 	hb_grid->add_child(sb_step_y);
 
 	hb_grid->add_child(memnew(VSeparator));
-	hb_grid->add_child(memnew(Label(TTR("Separation:"))));
+	hb_grid->add_child(memnew(Label(TTR("Gap:"))));
 
 	sb_sep_x = memnew(SpinBox);
 	sb_sep_x->set_min(0);
 	sb_sep_x->set_step(1);
 	sb_sep_x->set_suffix("px");
 	sb_sep_x->connect(SceneStringName(value_changed), callable_mp(this, &TextureRegionEditor::_set_snap_sep_x));
-	sb_sep_x->set_accessibility_name(TTRC("Separation X"));
+	sb_sep_x->set_accessibility_name(TTRC("Gap X"));
 	hb_grid->add_child(sb_sep_x);
 
 	sb_sep_y = memnew(SpinBox);
@@ -1306,7 +1306,7 @@ TextureRegionEditor::TextureRegionEditor() {
 	sb_sep_y->set_step(1);
 	sb_sep_y->set_suffix("px");
 	sb_sep_y->connect(SceneStringName(value_changed), callable_mp(this, &TextureRegionEditor::_set_snap_sep_y));
-	sb_sep_y->set_accessibility_name(TTRC("Separation Y"));
+	sb_sep_y->set_accessibility_name(TTRC("Gap Y"));
 	hb_grid->add_child(sb_sep_y);
 
 	hb_grid->hide();
@@ -1352,7 +1352,7 @@ TextureRegionEditor::TextureRegionEditor() {
 
 	zoom_reset = memnew(Button);
 	zoom_reset->set_flat(true);
-	zoom_reset->set_tooltip_text(TTR("Zoom Reset"));
+	zoom_reset->set_tooltip_text(TTR("Reset Zoom"));
 	zoom_reset->connect(SceneStringName(pressed), callable_mp(this, &TextureRegionEditor::_zoom_reset));
 	zoom_hb->add_child(zoom_reset);
 
@@ -1388,7 +1388,7 @@ void EditorInspectorPluginTextureRegion::_region_edit(Object *p_object) {
 bool EditorInspectorPluginTextureRegion::parse_property(Object *p_object, const Variant::Type p_type, const String &p_path, const PropertyHint p_hint, const String &p_hint_text, const BitField<PropertyUsageFlags> p_usage, const bool p_wide) {
 	if ((p_type == Variant::RECT2 || p_type == Variant::RECT2I)) {
 		if (((Object::cast_to<Sprite2D>(p_object) || Object::cast_to<Sprite3D>(p_object) || Object::cast_to<NinePatchRect>(p_object) || Object::cast_to<StyleBoxTexture>(p_object)) && p_path == "region_rect") || (Object::cast_to<AtlasTexture>(p_object) && p_path == "region")) {
-			EditorInspectorActionButton *button = memnew(EditorInspectorActionButton(TTRC("Edit Region"), SNAME("RegionEdit")));
+			EditorInspectorActionButton *button = memnew(EditorInspectorActionButton(TTRC("Edit Area"), SNAME("RegionEdit")));
 			button->connect(SceneStringName(pressed), callable_mp(this, &EditorInspectorPluginTextureRegion::_region_edit).bind(p_object));
 			add_property_editor(p_path, button, true);
 		}

@@ -270,16 +270,16 @@ static func status(asset: Dictionary, here: Dictionary) -> String:
 ## or "" when it can.
 static func import_refusal(asset: Dictionary, here: Dictionary) -> String:
 	if asset.is_empty() or here.is_empty():
-		return "Open a level scene first."
+		return "Open a level first."
 
 	if asset["kind"] != "mobys":
-		return "Only mobys have logic of their own."
+		return "Only objects can act on their own."
 
 	if status(asset, here) == FULL:
-		return "This level has the class already."
+		return "This level has this type already."
 
 	if asset["game"] != "rac1" or here["game"] != "rac1":
-		return "Only for Ratchet & Clank 1 levels, for now."
+		return "Only for Ratchet & Clank levels for now."
 
 	if asset["disc"] != here["disc"]:
 		return "Only between levels of the same disc."
@@ -341,7 +341,7 @@ static func prepare_skin(asset: Dictionary, error: Array) -> String:
 
 		# A project folder that cannot be written: said, not a script error.
 		if ignore == null:
-			error.append("Cannot write in %s (is the project folder read-only or full?)." % SKINS_DIR)
+			error.append("Couldn't save in %s. Is the folder full or read-only?" % SKINS_DIR)
 			return ""
 
 		ignore.close()
@@ -365,7 +365,7 @@ static func copy_in(asset: Dictionary, name: String, still_model: bool, error: A
 	var document: Dictionary = read_glb(source)
 
 	if document.is_empty():
-		error.append("%s is not a glTF model the library can read." % asset["model"])
+		error.append("%s isn't a model the editor can read." % asset["model"])
 		return ""
 
 	var json: Dictionary = document["json"]
@@ -386,7 +386,7 @@ static func copy_in(asset: Dictionary, name: String, still_model: bool, error: A
 		var to: String = target.get_base_dir().path_join(uri).simplify_path()
 
 		if not to.begins_with(level_dir + "/"):
-			error.append("%s names a texture outside its level (%s)." % [asset["model"], uri])
+			error.append("%s uses a texture from another level (%s)." % [asset["model"], uri])
 			return ""
 
 		if not FileAccess.file_exists(to):
@@ -399,7 +399,7 @@ static func copy_in(asset: Dictionary, name: String, still_model: bool, error: A
 			var file := FileAccess.open(to, FileAccess.WRITE)
 
 			if file == null:
-				error.append("Cannot write %s." % to)
+				error.append("Couldn't save %s." % to)
 				return ""
 
 			file.store_buffer(data)
@@ -411,7 +411,7 @@ static func copy_in(asset: Dictionary, name: String, still_model: bool, error: A
 	var out := FileAccess.open(target, FileAccess.WRITE)
 
 	if out == null:
-		error.append("Cannot write %s." % target)
+		error.append("Couldn't save %s." % target)
 		return ""
 
 	out.store_buffer(write_glb(json, document["bin"]))
@@ -421,7 +421,7 @@ static func copy_in(asset: Dictionary, name: String, still_model: bool, error: A
 	var note := FileAccess.open(target.trim_suffix(".glb") + ".source.json", FileAccess.WRITE)
 
 	if note == null:
-		error.append("Cannot write %s." % target.trim_suffix(".glb"))
+		error.append("Couldn't save %s." % target.trim_suffix(".glb"))
 		return ""
 
 	note.store_string(JSON.stringify({"format": 1, "game": asset["game"], "disc": asset["disc"],
@@ -533,7 +533,7 @@ static func animation_names(path: String) -> PackedStringArray:
 
 ## The name a class scene gives its class (rc1_class_name), or "Class N".
 static func class_label(scene_path: String, number: int) -> String:
-	var asset: Dictionary = {"name": "Class %d" % number}
+	var asset: Dictionary = {"name": "Type %d" % number}
 	read_class_scene(asset, FileAccess.get_file_as_string(scene_path))
 	return String(asset["name"])
 

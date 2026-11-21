@@ -390,7 +390,7 @@ void EditorSettingsDialog::_update_builtin_action(const String &p_name, const Ar
 		_settings_changed();
 	} else {
 		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-		undo_redo->create_action(vformat(TTR("Edit Built-in Action: %s"), p_name));
+		undo_redo->create_action(vformat(TTR("Edit Shortcut: %s"), p_name));
 		undo_redo->add_do_method(EditorSettings::get_singleton(), "mark_setting_changed", "builtin_action_overrides");
 		undo_redo->add_undo_method(EditorSettings::get_singleton(), "mark_setting_changed", "builtin_action_overrides");
 		undo_redo->add_do_method(EditorSettings::get_singleton(), "set_builtin_action_override", p_name, p_events);
@@ -502,7 +502,7 @@ TreeItem *EditorSettingsDialog::_create_shortcut_treeitem(TreeItem *p_parent, co
 		TreeItem *event_item = shortcuts->create_item(shortcut_item);
 
 		// TRANSLATORS: This is the label for the main input event of a shortcut.
-		event_item->set_text(0, shortcut_item->get_child_count() == 1 ? TTRC("Primary") : "");
+		event_item->set_text(0, shortcut_item->get_child_count() == 1 ? TTRC("Main") : "");
 		event_item->set_text(1, ie->as_text());
 		event_item->set_auto_translate_mode(1, AUTO_TRANSLATE_MODE_DISABLED);
 
@@ -821,7 +821,7 @@ Variant EditorSettingsDialog::get_drag_data_fw(const Point2 &p_point, Control *p
 		return Variant();
 	}
 
-	String label_text = vformat(TTR("Event %d"), selected->get_meta("event_index"));
+	String label_text = vformat(TTR("Key %d"), selected->get_meta("event_index"));
 	Label *label = memnew(Label(label_text));
 	label->set_modulate(Color(1, 1, 1, 1.0f));
 	shortcuts->set_drag_preview(label);
@@ -960,7 +960,7 @@ void EditorSettingsDialog::_bind_methods() {
 }
 
 EditorSettingsDialog::EditorSettingsDialog() {
-	set_title(TTRC("Editor Settings"));
+	set_title(TTRC("Settings"));
 	set_flag(FLAG_MAXIMIZE_DISABLED, false);
 	set_clamp_to_embedder(true);
 
@@ -1059,7 +1059,7 @@ EditorSettingsDialog::EditorSettingsDialog() {
 	shortcuts->set_hide_root(true);
 	shortcuts->set_column_titles_visible(true);
 	shortcuts->set_column_title(0, TTRC("Name"));
-	shortcuts->set_column_title(1, TTRC("Binding"));
+	shortcuts->set_column_title(1, TTRC("Keys"));
 	shortcuts->connect("button_clicked", callable_mp(this, &EditorSettingsDialog::_shortcut_button_pressed));
 	shortcuts->connect("item_activated", callable_mp(this, &EditorSettingsDialog::_shortcut_cell_double_clicked));
 	mc->add_child(shortcuts);

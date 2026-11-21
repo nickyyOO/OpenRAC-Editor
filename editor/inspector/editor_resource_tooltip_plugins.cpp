@@ -76,7 +76,7 @@ VBoxContainer *EditorResourceTooltipPlugin::make_default_tooltip(const String &p
 			Label *label = memnew(Label(vformat(TTR("Size: %s"), String::humanize_size(f->get_length()))));
 			vb->add_child(label);
 		} else {
-			Label *label = memnew(Label(TTR("Invalid file or broken link.")));
+			Label *label = memnew(Label(TTR("This file is missing or broken.")));
 			label->add_theme_color_override(SceneStringName(font_color), EditorNode::get_singleton()->get_gui_base()->get_theme_color(SNAME("error_color"), EditorStringName(Editor)));
 			vb->add_child(label);
 			return vb;
@@ -91,7 +91,7 @@ VBoxContainer *EditorResourceTooltipPlugin::make_default_tooltip(const String &p
 
 	Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);
 	if (da->is_link(p_resource_path)) {
-		Label *link = memnew(Label(vformat(TTR("Link to: %s"), da->read_link(p_resource_path))));
+		Label *link = memnew(Label(vformat(TTR("Points to: %s"), da->read_link(p_resource_path))));
 		vb->add_child(link);
 	}
 	return vb;
