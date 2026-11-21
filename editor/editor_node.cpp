@@ -3830,6 +3830,9 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 		case EDITOR_OPEN_SETTINGS: {
 			editor_settings_dialog->popup_edit_settings();
 		} break;
+		case LAYOUT_DEFAULT: { // OpenRAC Editor: View > Reset Panels.
+			_layout_menu_option(LAYOUT_DEFAULT);
+		} break;
 		case EDITOR_OPEN_DATA_FOLDER: {
 			OS::get_singleton()->shell_show_in_file_manager(EditorPaths::get_singleton()->get_data_dir(), true);
 		} break;
@@ -7808,7 +7811,6 @@ void EditorNode::_feature_profile_changed() {
 		editor_dock_manager->set_dock_enabled(history_dock, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_HISTORY_DOCK));
 
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_3D, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_3D));
-		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_SCRIPT, !profile->is_feature_disabled(EditorFeatureProfile::FEATURE_SCRIPT));
 		// OpenRAC Editor: the Game screen stays hidden.
 	} else {
 		editor_dock_manager->set_dock_enabled(ImportDock::get_singleton(), true);
@@ -7817,7 +7819,6 @@ void EditorNode::_feature_profile_changed() {
 		editor_dock_manager->set_dock_enabled(FileSystemDock::get_singleton(), true);
 		editor_dock_manager->set_dock_enabled(history_dock, true);
 		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_3D, true);
-		editor_main_screen->set_button_enabled(EditorMainScreen::EDITOR_SCRIPT, true);
 	}
 
 	editor_dock_manager->update_docks_menu();
@@ -7941,8 +7942,8 @@ void EditorNode::_build_file_menu() {
 	}
 	file_menu->clear(false);
 
-	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/new_scene"), SCENE_NEW_SCENE);
-	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/new_inherited_scene"), SCENE_NEW_INHERITED_SCENE);
+	// OpenRAC Editor: only what a level needs: open, save, undo, close. New scenes, inherited scenes and
+	// quick open of files and scripts belong to making games, not levels (the launcher makes levels).
 	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/open_scene"), SCENE_OPEN_SCENE);
 	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/reopen_closed_scene"), SCENE_OPEN_PREV);
 	if (!recent_scenes) {
@@ -7954,13 +7955,6 @@ void EditorNode::_build_file_menu() {
 	file_menu->add_separator();
 
 	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/save_scene"), SCENE_SAVE_SCENE);
-	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/save_scene_as"), SCENE_SAVE_AS_SCENE);
-	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/save_all_scenes"), SCENE_SAVE_ALL_SCENES);
-	file_menu->add_separator();
-
-	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/quick_open"), SCENE_QUICK_OPEN);
-	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/quick_open_scene"), SCENE_QUICK_OPEN_SCENE);
-	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/quick_open_script"), SCENE_QUICK_OPEN_SCRIPT);
 	file_menu->add_separator();
 
 	// OpenRAC Editor: "Export As..." keeps what plugins add (glTF), without the GridMap MeshLibrary.
@@ -7977,7 +7971,6 @@ void EditorNode::_build_file_menu() {
 
 	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/reload_saved_scene"), SCENE_RELOAD_SAVED_SCENE);
 	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/close_scene"), SCENE_CLOSE);
-	file_menu->add_shortcut(ED_GET_SHORTCUT("editor/close_all_scenes"), SCENE_CLOSE_ALL);
 #ifdef MACOS_ENABLED
 	if (menu_type != MENU_TYPE_GLOBAL) {
 		// On macOS "Quit" option is in the "app" menu.
@@ -8031,34 +8024,17 @@ void EditorNode::_build_settings_menu() {
 #else
 	settings_menu->add_shortcut(ED_GET_SHORTCUT("editor/editor_settings"), EDITOR_OPEN_SETTINGS);
 #endif
-	settings_menu->add_shortcut(ED_GET_SHORTCUT("editor/command_palette"), EDITOR_COMMAND_PALETTE);
 	settings_menu->add_separator();
 
-	settings_menu->add_submenu_node_item(TTRC("Editor Docks"), editor_dock_manager->get_docks_menu());
-
+	// OpenRAC Editor: the panels, full screen and a default layout to go back to. No command palette,
+	// saved layouts, screenshots or settings folders.
+	settings_menu->add_submenu_node_item(TTRC("Panels"), editor_dock_manager->get_docks_menu());
 	if (!editor_layouts) {
 		editor_layouts = memnew(PopupMenu);
 		editor_layouts->connect(SceneStringName(id_pressed), callable_mp(this, &EditorNode::_layout_menu_option));
 	}
-	settings_menu->add_submenu_node_item(TTRC("Editor Layout"), editor_layouts);
-	settings_menu->add_separator();
-
-	settings_menu->add_shortcut(ED_GET_SHORTCUT("editor/take_screenshot"), EDITOR_TAKE_SCREENSHOT);
-	settings_menu->set_item_tooltip(-1, TTRC("Screenshots are stored in the user data folder (\"user://\")."));
-
+	settings_menu->add_item(TTRC("Reset Panels"), LAYOUT_DEFAULT);
 	settings_menu->add_shortcut(ED_GET_SHORTCUT("editor/fullscreen_mode"), EDITOR_TOGGLE_FULLSCREEN);
-	settings_menu->add_separator();
-
-#ifndef ANDROID_ENABLED
-	if (EditorPaths::get_singleton()->get_data_dir() == EditorPaths::get_singleton()->get_config_dir()) {
-		// Configuration and data folders are located in the same place.
-		settings_menu->add_item(TTRC("Open Editor Data/Settings Folder"), EDITOR_OPEN_DATA_FOLDER);
-	} else {
-		// Separate configuration and data folders.
-		settings_menu->add_item(TTRC("Open Editor Data Folder"), EDITOR_OPEN_DATA_FOLDER);
-		settings_menu->add_item(TTRC("Open Editor Settings Folder"), EDITOR_OPEN_CONFIG_FOLDER);
-	}
-#endif
 
 }
 
@@ -8074,13 +8050,12 @@ void EditorNode::_build_help_menu() {
 		help_menu->set_system_menu(NativeMenu::INVALID_MENU_ID);
 	}
 	bool dark_mode = DisplayServer::get_singleton()->is_dark_mode_supported() && DisplayServer::get_singleton()->is_dark_mode();
-	help_menu->add_icon_shortcut(get_editor_theme_native_menu_icon(SNAME("HelpSearch"), menu_type == MENU_TYPE_GLOBAL, dark_mode), ED_GET_SHORTCUT("editor/editor_help"), HELP_SEARCH);
-	help_menu->add_separator();
+	// OpenRAC Editor: no Search Help (Godot's class reference).
 	// OpenRAC Editor: OpenRAC's own guide and bug tracker.
 	help_menu->add_item(TTRC("Level Editor Guide"), HELP_DOCS);
 	help_menu->add_item(TTRC("Report a Bug"), HELP_REPORT_A_BUG);
 	help_menu->add_icon_shortcut(get_editor_theme_native_menu_icon(SNAME("ActionCopy"), menu_type == MENU_TYPE_GLOBAL, dark_mode), ED_GET_SHORTCUT("editor/copy_system_info"), HELP_COPY_SYSTEM_INFO);
-	help_menu->set_item_tooltip(-1, TTRC("Copies the system info as a single-line text into the clipboard."));
+	help_menu->set_item_tooltip(-1, TTRC("Copies details about your computer, to paste into a bug report."));
 	help_menu->add_separator();
 #ifdef MACOS_ENABLED
 	if (menu_type != MENU_TYPE_GLOBAL) {
@@ -8947,19 +8922,23 @@ EditorNode::EditorNode() {
 	file_menu = memnew(PopupMenu);
 	file_menu->connect(SceneStringName(id_pressed), callable_mp(this, &EditorNode::_menu_option));
 	file_menu->connect("about_to_popup", callable_mp(this, &EditorNode::_update_file_menu_opened));
-	_add_to_main_menu(TTRC("Scene"), file_menu);
+	_add_to_main_menu(TTRC("Level"), file_menu); // OpenRAC Editor: a plain name.
 
+	// OpenRAC Editor: no Project menu (project settings, scripts, Godot's tools) and no Debug menu (the
+	// game runs in OpenRAC). Both still exist for the code that fills them, out of sight.
 	project_menu = memnew(PopupMenu);
 	project_menu->connect(SceneStringName(id_pressed), callable_mp(this, &EditorNode::_menu_option));
-	_add_to_main_menu(TTRC("Project"), project_menu);
+	project_menu->set_name("Project");
+	gui_base->add_child(project_menu);
 
 	debug_menu = memnew(PopupMenu);
 	// Options are added and handled by DebuggerEditorPlugin, do not rebuild.
-	_add_to_main_menu(TTRC("Debug"), debug_menu);
+	debug_menu->set_name("Debug");
+	gui_base->add_child(debug_menu);
 
 	settings_menu = memnew(PopupMenu);
 	settings_menu->connect(SceneStringName(id_pressed), callable_mp(this, &EditorNode::_menu_option));
-	_add_to_main_menu(TTRC("Editor"), settings_menu);
+	_add_to_main_menu(TTRC("View"), settings_menu);
 
 	help_menu = memnew(PopupMenu);
 	help_menu->connect(SceneStringName(id_pressed), callable_mp(this, &EditorNode::_menu_option));

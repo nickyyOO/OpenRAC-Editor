@@ -705,7 +705,8 @@ void InspectorDock::shortcut_input(const Ref<InputEvent> &p_event) {
 
 InspectorDock::InspectorDock(EditorData &p_editor_data) {
 	singleton = this;
-	set_name(TTRC("Inspector"));
+	set_name(TTRC("Properties")); // OpenRAC Editor: a plain name; the layout key stays "Inspector" so saved layouts still work.
+	set_layout_key("Inspector");
 	set_icon_name("AnimationTrackList");
 	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("docks/open_inspector", TTRC("Open Inspector Dock")));
 	set_default_slot(EditorDock::DOCK_SLOT_RIGHT_UL);

@@ -283,8 +283,14 @@ void EditorMainScreen::add_main_plugin(EditorPlugin *p_editor) {
 
 	tb->connect(SceneStringName(pressed), callable_mp(this, &EditorMainScreen::select).bind(buttons.size()));
 
-	// OpenRAC Editor: levels are 3D and the game runs in OpenRAC, so the 2D and Game screens have no button.
-	if (p_editor->get_plugin_name() == "2D" || p_editor->get_plugin_name() == "Game") {
+	// OpenRAC Editor: the 3D view is the only screen. Levels are 3D, the game runs in OpenRAC (no 2D or
+	// Game screen) and scripts do nothing in the game (no Script screen). select() only goes to a screen
+	// whose button is visible, so the 3D button stays "visible" but is not drawn, and the others are hidden.
+	if (p_editor->get_plugin_name() == "3D") {
+		tb->set_modulate(Color(1, 1, 1, 0));
+		tb->set_mouse_filter(MOUSE_FILTER_IGNORE);
+		tb->set_focus_mode(FOCUS_NONE);
+	} else {
 		tb->hide();
 	}
 

@@ -115,7 +115,7 @@ var actions: Array[Button] = []
 
 func _init() -> void:
 	title = "Voices"
-	default_slot = EditorDock.DOCK_SLOT_RIGHT_BL
+	default_slot = EditorDock.DOCK_SLOT_RIGHT_UL  # a tab beside Properties, so Properties keeps its full height
 	custom_minimum_size.x = px(260.0)
 	# Scrolls rather than asks for its full height, so it never pushes the editor's other docks off.
 	var scroll := ScrollContainer.new()

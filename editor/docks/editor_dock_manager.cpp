@@ -621,7 +621,7 @@ void EditorDockManager::set_dock_enabled(EditorDock *p_dock, bool p_enabled) {
 	ERR_FAIL_NULL(p_dock);
 	ERR_FAIL_COND_MSG(!all_docks.has(p_dock), vformat("Cannot set enabled unknown dock '%s'.", p_dock->get_display_title()));
 
-	if (p_dock->enabled == p_enabled) {
+	if (p_dock->enabled == p_enabled || p_dock->openrac_hidden) { // OpenRAC Editor: hidden docks stay closed.
 		return;
 	}
 
@@ -655,6 +655,10 @@ void EditorDockManager::close_dock(EditorDock *p_dock) {
 void EditorDockManager::open_dock(EditorDock *p_dock, bool p_set_current) {
 	ERR_FAIL_NULL(p_dock);
 	ERR_FAIL_COND_MSG(!all_docks.has(p_dock), vformat("Cannot open unknown dock '%s'.", p_dock->get_display_title()));
+
+	if (p_dock->openrac_hidden) { // OpenRAC Editor: hidden docks stay closed.
+		return;
+	}
 
 	if (p_dock->is_open) {
 		// Show the dock if it is already open.
@@ -731,6 +735,20 @@ void EditorDockManager::focus_dock(EditorDock *p_dock) {
 	_make_dock_visible(p_dock, true);
 }
 
+// OpenRAC Editor: Godot's docks a level editor has no use for. They still exist (other parts of the
+// editor reach them), but they never open and are not in the Docks menu.
+static bool _is_openrac_hidden_dock(const EditorDock *p_dock) {
+	static const char *classes[] = { "ImportDock", "FileSystemDock", "SignalsDock", "GroupsDock", "EditorDebuggerNode",
+		"EditorAudioBuses", "AnimationTreeEditor", "ResourcePreloaderEditor", "FindInFilesContainer" };
+	for (const char *name : classes) {
+		if (p_dock->is_class(name)) {
+			return true;
+		}
+	}
+	const String title = p_dock->get_effective_layout_key();
+	return title == "Shader Editor" || title == "ShaderFile" || title == "Search Results";
+}
+
 void EditorDockManager::add_dock(EditorDock *p_dock) {
 	ERR_FAIL_NULL(p_dock);
 	ERR_FAIL_COND_MSG(all_docks.has(p_dock), vformat("Cannot add dock '%s', already added.", p_dock->get_display_title()));
@@ -739,6 +757,15 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
 	all_docks.push_back(p_dock);
 	p_dock->connect("_tab_style_changed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
 	p_dock->connect("renamed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
+
+	if (_is_openrac_hidden_dock(p_dock)) {
+		p_dock->openrac_hidden = true;
+		p_dock->enabled = false;
+		closed_dock_parent->add_child(p_dock);
+		p_dock->hide();
+		_update_layout();
+		return;
+	}
 
 	if (p_dock->default_slot != EditorDock::DOCK_SLOT_NONE) {
 		open_dock(p_dock, false);

@@ -236,7 +236,8 @@ void HistoryDock::_notification(int p_notification) {
 }
 
 HistoryDock::HistoryDock() {
-	set_name(TTRC("History"));
+	set_name(TTRC("Undo History")); // OpenRAC Editor: a plain name; the layout key stays "History" so saved layouts still work.
+	set_layout_key("History");
 	set_icon_name("History");
 	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("docks/open_history", TTRC("Open History Dock")));
 	set_default_slot(EditorDock::DOCK_SLOT_LEFT_BR);

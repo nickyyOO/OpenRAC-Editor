@@ -904,6 +904,7 @@ public:
 	String get_selected_path() const;
 
 	void update_tree();
+	static void _openrac_simplify_property_list(Object *p_object, List<PropertyInfo> &r_list); // OpenRAC Editor.
 	void update_property(const String &p_prop);
 	void edit(Object *p_object);
 	Object *get_edited_object();

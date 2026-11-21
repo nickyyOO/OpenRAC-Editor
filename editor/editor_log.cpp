@@ -485,7 +485,8 @@ void EditorLog::_reset_message_counts() {
 }
 
 EditorLog::EditorLog() {
-	set_name(TTRC("Output"));
+	set_name(TTRC("Messages")); // OpenRAC Editor: a plain name; the layout key stays "Output" so saved layouts still work.
+	set_layout_key("Output");
 	set_icon_name("Output");
 	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("bottom_panels/toggle_output_bottom_panel", TTRC("Toggle Output Dock"), KeyModifierMask::ALT | Key::O));
 	set_default_slot(EditorDock::DOCK_SLOT_BOTTOM);

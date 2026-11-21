@@ -9454,9 +9454,9 @@ void Node3DEditor::_refresh_menu_icons() {
 	tool_button[TOOL_UNLOCK_SELECTED]->set_visible(all_locked);
 	tool_button[TOOL_UNLOCK_SELECTED]->set_disabled(!has_node3d_item);
 
-	tool_button[TOOL_GROUP_SELECTED]->set_visible(!all_grouped);
+	tool_button[TOOL_GROUP_SELECTED]->set_visible(false); // OpenRAC Editor: no selection groups.
 	tool_button[TOOL_GROUP_SELECTED]->set_disabled(!has_node3d_item);
-	tool_button[TOOL_UNGROUP_SELECTED]->set_visible(all_grouped);
+	tool_button[TOOL_UNGROUP_SELECTED]->set_visible(false);
 	tool_button[TOOL_UNGROUP_SELECTED]->set_disabled(!has_node3d_item);
 }
 
@@ -10751,6 +10751,17 @@ Node3DEditor::Node3DEditor() {
 	sun_environ_settings->connect(SceneStringName(pressed), callable_mp(this, &Node3DEditor::_sun_environ_settings_pressed));
 
 	main_menu_hbox->add_child(sun_environ_settings);
+
+	// OpenRAC Editor: fewer buttons. A level brings its own sky and sun, so no preview sun and sky; and no
+	// pick-from-a-list, selection groups, trackball or keep-children-in-place options.
+	sun_button->hide();
+	environ_button->hide();
+	sun_environ_settings->hide();
+	tool_button[TOOL_MODE_LIST_SELECT]->hide();
+	tool_button[TOOL_GROUP_SELECTED]->hide();
+	tool_button[TOOL_UNGROUP_SELECTED]->hide();
+	tool_option_button[TOOL_OPT_USE_TRACKBALL]->hide();
+	tool_option_button[TOOL_OPT_PRESERVE_CHILDREN_TRANSFORM]->hide();
 
 	main_menu_hbox->add_child(memnew(VSeparator));
 

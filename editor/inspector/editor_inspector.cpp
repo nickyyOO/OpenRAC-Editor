@@ -4151,6 +4151,34 @@ void EditorInspector::_add_section_in_tree(EditorInspectorSection *p_section, VB
 	container->add_child(p_section);
 }
 
+// OpenRAC Editor: an object of a level shows only what matters for the game: where it is, how it is
+// turned, its size, whether it shows, the camera's view angle, a path's curve, its game data
+// (metadata) and the sections of its own type (OpenRAC's scripts, the Cutscene types). Godot's own
+// settings (process, physics, rendering, script, editor description...) do nothing in the game.
+void EditorInspector::_openrac_simplify_property_list(Object *p_object, List<PropertyInfo> &r_list) {
+	if (!Object::cast_to<Node>(p_object)) {
+		return;
+	}
+	static const HashSet<String> kept = { "position", "rotation", "scale", "visible", "fov", "curve" };
+	bool keep_category = false;
+	for (List<PropertyInfo>::Element *E = r_list.front(); E;) {
+		List<PropertyInfo>::Element *next = E->next();
+		const PropertyInfo &p = E->get();
+		if (p.usage & PROPERTY_USAGE_CATEGORY) {
+			// A script's category names its file; a native one its class.
+			keep_category = p.hint_string.ends_with(".gd") || String(p.name).begins_with("Cutscene");
+			if (!keep_category) {
+				r_list.erase(E);
+			}
+		} else if (!(p.usage & (PROPERTY_USAGE_GROUP | PROPERTY_USAGE_SUBGROUP))) {
+			if (p.name == "script" || (!keep_category && !kept.has(p.name) && !String(p.name).begins_with("metadata/"))) {
+				r_list.erase(E);
+			}
+		}
+		E = next;
+	}
+}
+
 void EditorInspector::update_tree() {
 	if (!object) {
 		return;
@@ -4249,6 +4277,7 @@ void EditorInspector::update_tree() {
 
 	List<PropertyInfo> plist;
 	object->get_property_list(&plist, true);
+	_openrac_simplify_property_list(object, plist);
 
 	HashMap<VBoxContainer *, HashMap<String, VBoxContainer *>> vbox_per_path;
 	HashMap<String, EditorInspectorArray *> editor_inspector_array_per_prefix;
@@ -5161,7 +5190,8 @@ void EditorInspector::update_tree() {
 		}
 	}
 
-	if (!hide_metadata && !object->call("_hide_metadata_from_inspector")) {
+	// OpenRAC Editor: a level object's game data is set in its own sections, never as raw metadata.
+	if (!hide_metadata && !object->call("_hide_metadata_from_inspector") && !Object::cast_to<Node>(object)) {
 		// Add 4px of spacing between the "Add Metadata" button and the content above it.
 		Control *spacer = memnew(Control);
 		spacer->set_custom_minimum_size(Size2(0, 4) * EDSCALE);

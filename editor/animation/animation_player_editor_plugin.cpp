@@ -2074,7 +2074,8 @@ AnimationPlayerEditor::AnimationPlayerEditor(AnimationPlayerEditorPlugin *p_plug
 	plugin = p_plugin;
 	singleton = this;
 
-	set_name(TTRC("Animation"));
+	set_name(TTRC("Keys")); // OpenRAC Editor: a plain name; the layout key stays "Animation" so saved layouts still work.
+	set_layout_key("Animation");
 	set_icon_name("Animation");
 	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("bottom_panels/toggle_animation_bottom_panel", TTRC("Toggle Animation Dock"), KeyModifierMask::ALT | Key::N));
 	set_default_slot(EditorDock::DOCK_SLOT_BOTTOM);
