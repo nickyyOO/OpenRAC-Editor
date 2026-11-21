@@ -7,7 +7,7 @@ extends EditorDock
 ## 3. Lines: any line's words, changed if you like, spoken in its character's voice; pick the take.
 ## 4. Cutscene: a subtitle of a cutscene of this level spoken in a character's voice, as its voice
 ##    line (the actor's jaw follows it in the game).
-## "Put the voices in your mods" makes the overrides pack the game plays (Play with your edits).
+## "Add to Mods" makes the overrides pack the game plays (Play with your edits).
 ## The work is openrac/tools/voice_lab.py's (docs/VOICES.md), run by voices_lab.gd.
 
 const Lab = preload("voices_lab.gd")
