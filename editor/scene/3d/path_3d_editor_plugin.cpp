@@ -54,7 +54,7 @@ String Path3DGizmo::get_handle_name(int p_id, bool p_secondary) const {
 
 	// Primary handles: position.
 	if (!p_secondary) {
-		return TTR("Curve Point #") + itos(p_id);
+		return TTR("Path Point #") + itos(p_id);
 	}
 
 	// Secondary handles: in, out, tilt.
@@ -65,7 +65,7 @@ String Path3DGizmo::get_handle_name(int p_id, bool p_secondary) const {
 		case HandleType::HANDLE_TYPE_OUT:
 			return TTR("Handle Out #") + itos(info.point_idx);
 		case HandleType::HANDLE_TYPE_TILT:
-			return TTR("Handle Tilt #") + itos(info.point_idx);
+			return TTR("Tilt Handle #") + itos(info.point_idx);
 	}
 
 	return "";
@@ -263,7 +263,7 @@ void Path3DGizmo::commit_handle(int p_id, bool p_secondary, const Variant &p_res
 			c->set_point_position(idx, p_restore);
 			return;
 		}
-		ur->create_action(TTR("Set Curve Point Position"));
+		ur->create_action(TTR("Move Path Point"));
 		ur->add_do_method(c.ptr(), "set_point_position", idx, c->get_point_position(idx));
 		ur->add_undo_method(c.ptr(), "set_point_position", idx, p_restore);
 		ur->commit_action();
@@ -282,7 +282,7 @@ void Path3DGizmo::commit_handle(int p_id, bool p_secondary, const Variant &p_res
 				return;
 			}
 
-			ur->create_action(TTR("Set Curve Out Position"));
+			ur->create_action(TTR("Move Path Out Handle"));
 			ur->add_do_method(c.ptr(), "set_point_out", idx, c->get_point_out(idx));
 			ur->add_undo_method(c.ptr(), "set_point_out", idx, p_restore);
 
@@ -300,7 +300,7 @@ void Path3DGizmo::commit_handle(int p_id, bool p_secondary, const Variant &p_res
 				return;
 			}
 
-			ur->create_action(TTR("Set Curve In Position"));
+			ur->create_action(TTR("Move Path In Handle"));
 			ur->add_do_method(c.ptr(), "set_point_in", idx, c->get_point_in(idx));
 			ur->add_undo_method(c.ptr(), "set_point_in", idx, p_restore);
 
@@ -317,7 +317,7 @@ void Path3DGizmo::commit_handle(int p_id, bool p_secondary, const Variant &p_res
 				c->set_point_tilt(idx, p_restore);
 				return;
 			}
-			ur->create_action(TTR("Set Curve Point Tilt"));
+			ur->create_action(TTR("Tilt Path Point"));
 			ur->add_do_method(c.ptr(), "set_point_tilt", idx, c->get_point_tilt(idx));
 			ur->add_undo_method(c.ptr(), "set_point_tilt", idx, p_restore);
 
@@ -724,7 +724,7 @@ EditorPlugin::AfterGUIInput Path3DEditorPlugin::forward_3d_gui_input(Camera3D *p
 
 				Vector3 inters;
 				if (p.intersects_ray(ray_from, ray_dir, &inters)) {
-					ur->create_action(TTR("Add Point to Curve"));
+					ur->create_action(TTR("Add Point to Path"));
 					ur->add_do_method(c.ptr(), "add_point", it.xform(inters), Vector3(), Vector3(), -1);
 					ur->add_undo_method(c.ptr(), "remove_point", c->get_point_count());
 					ur->commit_action();
@@ -753,14 +753,14 @@ EditorPlugin::AfterGUIInput Path3DEditorPlugin::forward_3d_gui_input(Camera3D *p
 					return EditorPlugin::AFTER_GUI_INPUT_STOP;
 				} else if (dist_to_p_out < click_dist) {
 					EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
-					ur->create_action(TTR("Reset Out-Control Point"));
+					ur->create_action(TTR("Reset Out Handle"));
 					ur->add_do_method(c.ptr(), "set_point_out", i, Vector3());
 					ur->add_undo_method(c.ptr(), "set_point_out", i, c->get_point_out(i));
 					ur->commit_action();
 					return EditorPlugin::AFTER_GUI_INPUT_STOP;
 				} else if (dist_to_p_in < click_dist) {
 					EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
-					ur->create_action(TTR("Reset In-Control Point"));
+					ur->create_action(TTR("Reset In Handle"));
 					ur->add_do_method(c.ptr(), "set_point_in", i, Vector3());
 					ur->add_undo_method(c.ptr(), "set_point_in", i, c->get_point_in(i));
 					ur->commit_action();
@@ -834,7 +834,7 @@ void Path3DEditorPlugin::_toggle_closed_curve() {
 		return;
 	}
 	EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
-	ur->create_action(TTR("Toggle Open/Closed Curve"));
+	ur->create_action(TTR("Open or Close Path"));
 	ur->add_do_method(c.ptr(), "set_closed", !c.ptr()->is_closed());
 	ur->add_undo_method(c.ptr(), "set_closed", c.ptr()->is_closed());
 	ur->commit_action();
@@ -871,7 +871,7 @@ void Path3DEditorPlugin::_create_curve() {
 	new_curve.instantiate();
 
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->create_action(TTR("Create Curve in Path3D"));
+	undo_redo->create_action(TTR("Add Path"));
 	undo_redo->add_do_property(path, "curve", new_curve);
 	undo_redo->add_undo_property(path, "curve", Ref<Curve3D>());
 	undo_redo->add_do_method(this, "_update_toolbar");
@@ -891,7 +891,7 @@ void Path3DEditorPlugin::_clear_points() {
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
 	PackedVector3Array points = path->get_curve()->get_points().duplicate();
 
-	undo_redo->create_action(TTR("Clear Curve Points"));
+	undo_redo->create_action(TTR("Clear Path Points"));
 	undo_redo->add_do_method(this, "_clear_curve_points");
 	undo_redo->add_undo_method(this, "_restore_curve_points", points);
 	undo_redo->commit_action();
@@ -979,7 +979,7 @@ void Path3DEditorPlugin::_notification(int p_what) {
 						}
 					}
 					if (hit_something) {
-						ur->create_action(TTR("Add Point to Curve"));
+						ur->create_action(TTR("Add Point to Path"));
 						ur->add_do_method(c.ptr(), "add_point", it.xform(inters), Vector3(), Vector3(), -1);
 						ur->add_undo_method(c.ptr(), "remove_point", c->get_point_count());
 						ur->commit_action();
@@ -1032,7 +1032,7 @@ Path3DEditorPlugin::Path3DEditorPlugin() {
 	curve_edit->set_theme_type_variation(SceneStringName(FlatButton));
 	curve_edit->set_toggle_mode(true);
 	curve_edit->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
-	curve_edit->set_tooltip_text(TTR("Select Points") + "\n" + TTR("Shift+Click: Select multiple Points") + "\n" + vformat(TTR("%s+Click: Add Point"), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + TTR("Right Click: Delete Point"));
+	curve_edit->set_tooltip_text(TTR("Select Points") + "\n" + TTR("Shift+Click: Select several points") + "\n" + vformat(TTR("%s+Click: Add point"), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + TTR("Right Click: Delete point"));
 	curve_edit->set_accessibility_name(TTRC("Select Points"));
 	toolbar->add_child(curve_edit);
 	curve_edit->connect(SceneStringName(pressed), callable_mp(this, &Path3DEditorPlugin::_mode_changed).bind(MODE_EDIT));
@@ -1041,8 +1041,8 @@ Path3DEditorPlugin::Path3DEditorPlugin() {
 	curve_edit_curve->set_theme_type_variation(SceneStringName(FlatButton));
 	curve_edit_curve->set_toggle_mode(true);
 	curve_edit_curve->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
-	curve_edit_curve->set_tooltip_text(TTR("Select Control Points") + "\n" + TTR("Shift+Click: Drag out Control Points"));
-	curve_edit_curve->set_accessibility_name(TTRC("Select Control Points"));
+	curve_edit_curve->set_tooltip_text(TTR("Select Handles") + "\n" + TTR("Shift+Click: Drag out handles"));
+	curve_edit_curve->set_accessibility_name(TTRC("Select Handles"));
 	toolbar->add_child(curve_edit_curve);
 	curve_edit_curve->connect(SceneStringName(pressed), callable_mp(this, &Path3DEditorPlugin::_mode_changed).bind(MODE_EDIT_CURVE));
 
@@ -1058,8 +1058,8 @@ Path3DEditorPlugin::Path3DEditorPlugin() {
 	curve_create->set_theme_type_variation(SceneStringName(FlatButton));
 	curve_create->set_toggle_mode(true);
 	curve_create->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
-	curve_create->set_tooltip_text(TTR("Add Point (in empty space)") + "\n" + TTR("Split Segment (in curve)"));
-	curve_create->set_accessibility_name(TTRC("Add Point (in empty space)"));
+	curve_create->set_tooltip_text(TTR("Add Point") + "\n" + TTR("Split Path"));
+	curve_create->set_accessibility_name(TTRC("Add Point"));
 	toolbar->add_child(curve_create);
 	curve_create->connect(SceneStringName(pressed), callable_mp(this, &Path3DEditorPlugin::_mode_changed).bind(MODE_CREATE));
 
@@ -1074,7 +1074,7 @@ Path3DEditorPlugin::Path3DEditorPlugin() {
 	curve_closed = memnew(Button);
 	curve_closed->set_theme_type_variation(SceneStringName(FlatButton));
 	curve_closed->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
-	curve_closed->set_tooltip_text(TTR("Close Curve"));
+	curve_closed->set_tooltip_text(TTR("Close Path"));
 	toolbar->add_child(curve_closed);
 	curve_closed->connect(SceneStringName(pressed), callable_mp(this, &Path3DEditorPlugin::_toggle_closed_curve));
 
@@ -1086,8 +1086,8 @@ Path3DEditorPlugin::Path3DEditorPlugin() {
 	toolbar->add_child(curve_clear_points);
 
 	clear_points_dialog = memnew(ConfirmationDialog);
-	clear_points_dialog->set_title(TTR("Please Confirm..."));
-	clear_points_dialog->set_text(TTR("Remove all curve points?"));
+	clear_points_dialog->set_title(TTR("Please Confirm"));
+	clear_points_dialog->set_text(TTR("Remove all path points?"));
 	clear_points_dialog->connect(SceneStringName(confirmed), callable_mp(this, &Path3DEditorPlugin::_clear_points));
 	toolbar->add_child(clear_points_dialog);
 
@@ -1098,7 +1098,7 @@ Path3DEditorPlugin::Path3DEditorPlugin() {
 	toolbar->add_child(handle_menu);
 
 	create_curve_button = memnew(Button);
-	create_curve_button->set_text(TTR("Create Curve"));
+	create_curve_button->set_text(TTR("Add Path"));
 	create_curve_button->hide();
 	topmenu_bar->add_child(create_curve_button);
 	create_curve_button->connect(SceneStringName(pressed), callable_mp(this, &Path3DEditorPlugin::_create_curve));
@@ -1108,7 +1108,7 @@ Path3DEditorPlugin::Path3DEditorPlugin() {
 	menu->set_item_checked(HANDLE_OPTION_ANGLE, mirror_handle_angle);
 	menu->add_check_item(TTR("Mirror Handle Lengths"));
 	menu->set_item_checked(HANDLE_OPTION_LENGTH, mirror_handle_length);
-	menu->add_check_item(TTR("Snap to Colliders"));
+	menu->add_check_item(TTR("Snap to Collision"));
 	menu->set_item_checked(HANDLE_OPTION_SNAP_COLLIDER, snap_to_collider);
 	menu->connect(SceneStringName(id_pressed), callable_mp(this, &Path3DEditorPlugin::_handle_option_pressed));
 
@@ -1285,7 +1285,7 @@ void Path3DGizmoPlugin::commit_subgizmos(const EditorNode3DGizmo *p_gizmo, const
 
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
 
-	undo_redo->create_action(TTR("Set Curve Point Position"));
+	undo_redo->create_action(TTR("Move Path Point"));
 
 	for (int i = 0; i < p_ids.size(); ++i) {
 		const int idx = p_ids[i];

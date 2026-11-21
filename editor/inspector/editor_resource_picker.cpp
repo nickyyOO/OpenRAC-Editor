@@ -98,7 +98,7 @@ void EditorResourcePicker::_update_resource() {
 		assign_button->set_custom_minimum_size(assign_button_min_size);
 		if (edited_resource == Ref<Resource>()) {
 			assign_button->set_button_icon(Ref<Texture2D>());
-			assign_button->set_text(TTR("<empty>"));
+			assign_button->set_text(TTR("(empty)"));
 			assign_button->set_tooltip_text("");
 		} else {
 			assign_button->set_button_icon(EditorNode::get_singleton()->get_object_icon(edited_resource.operator->()));
@@ -153,24 +153,24 @@ void EditorResourcePicker::_update_resource() {
 		}
 
 		if (num_of_copies > 1) {
-			tooltip = vformat(TTRN("This %s is used in %d place.", "This %s is used in %d places.", num_of_copies), resource_name, num_of_copies);
+			tooltip = vformat(TTRN("This %s is used in %d places.", "This %s is used in %d places.", num_of_copies), resource_name, num_of_copies);
 		} else if (!is_internal) {
-			tooltip = vformat(TTR("This %s is external to scene."), resource_name);
+			tooltip = vformat(TTR("This %s comes from another file."), resource_name);
 		}
 
 		if (!editable) {
-			tooltip += "\n" + vformat(TTR("The %s cannot be edited in the inspector and can't be made unique directly."), resource_name);
+			tooltip += "\n" + vformat(TTR("This %s can't be changed here."), resource_name);
 		} else {
 			if (unique_enable) {
-				tooltip += "\n" + TTR("Left-click to make it unique.");
+				tooltip += "\n" + TTR("Left-click to make your own copy.");
 			}
 
 			if (unique_recursive_enabled) {
-				tooltip += "\n" + TTR("It is possible to make its subresources unique.") + "\n" + TTR("Right-click to make them unique.");
+				tooltip += "\n" + TTR("Its parts can also be copied.") + "\n" + TTR("Right-click to copy its parts.");
 			}
 
 			if (!unique_enable && EditorNode::get_singleton()->get_editor_selection()->get_full_selected_node_list().size() == 1) {
-				tooltip += "\n" + TTR("In order to duplicate it, make its parent Resource unique.");
+				tooltip += "\n" + TTR("To copy it, first copy the thing that holds it.");
 			}
 		}
 
@@ -262,7 +262,7 @@ void EditorResourcePicker::_file_selected(const String &p_path) {
 		}
 
 		if (!any_type_matches) {
-			EditorNode::get_singleton()->show_warning(vformat(TTR("The selected resource (%s) does not match any type expected for this property (%s)."), res_type, base_type));
+			EditorNode::get_singleton()->show_warning(vformat(TTR("This file (%s) doesn't fit here. It needs: %s."), res_type, base_type));
 			return;
 		}
 	}
@@ -304,11 +304,11 @@ void EditorResourcePicker::_update_menu_items() {
 		set_create_options(edit_menu);
 
 		// Add an option to load a resource from a file using the QuickOpen dialog.
-		edit_menu->add_icon_item(get_editor_theme_icon(SNAME("LoadQuick")), TTR("Quick Load..."), OBJ_MENU_QUICKLOAD);
-		edit_menu->set_item_tooltip(-1, TTR("Opens a quick menu to select from a list of allowed Resource files."));
+		edit_menu->add_icon_item(get_editor_theme_icon(SNAME("LoadQuick")), TTR("Quick Pick..."), OBJ_MENU_QUICKLOAD);
+		edit_menu->set_item_tooltip(-1, TTR("Pick from a list of files that fit."));
 
 		// Add an option to load a resource from a file using the regular file dialog.
-		edit_menu->add_icon_item(get_editor_theme_icon(SNAME("Load")), TTR("Load..."), OBJ_MENU_LOAD);
+		edit_menu->add_icon_item(get_editor_theme_icon(SNAME("Load")), TTR("Load File..."), OBJ_MENU_LOAD);
 	}
 
 	// Add options for changing existing value of the resource.
@@ -320,7 +320,7 @@ void EditorResourcePicker::_update_menu_items() {
 		// since will only be able to view its properties in read-only mode.
 		if (is_edited_resource_foreign_import) {
 			// The 'Search' icon is a magnifying glass, which seems appropriate, but maybe a bespoke icon is preferred here.
-			edit_menu->add_icon_item(get_editor_theme_icon(SNAME("Search")), TTR("Inspect"), OBJ_MENU_INSPECT);
+			edit_menu->add_icon_item(get_editor_theme_icon(SNAME("Search")), TTR("Show Properties"), OBJ_MENU_INSPECT);
 		} else {
 			edit_menu->add_icon_item(get_editor_theme_icon(SNAME("Edit")), TTR("Edit"), OBJ_MENU_INSPECT);
 			edit_menu->set_item_disabled(-1, force_allow_unique);
@@ -332,20 +332,20 @@ void EditorResourcePicker::_update_menu_items() {
 				edit_menu->set_item_disabled(-1, force_allow_unique);
 			}
 			bool unique_enabled = _is_uniqueness_enabled();
-			edit_menu->add_icon_item(get_editor_theme_icon(SNAME("Duplicate")), TTR("Make Unique"), OBJ_MENU_MAKE_UNIQUE);
+			edit_menu->add_icon_item(get_editor_theme_icon(SNAME("Duplicate")), TTR("Make Own Copy"), OBJ_MENU_MAKE_UNIQUE);
 			edit_menu->set_item_disabled(-1, !unique_enabled);
 
 			String modifier = "Ctrl";
 			if (OS::get_singleton()->has_feature("macos") || OS::get_singleton()->has_feature("web_macos") || OS::get_singleton()->has_feature("web_ios")) {
 				modifier = "Cmd";
 			}
-			const String drag_and_drop_text = vformat(TTR("Hold %s while drag-and-dropping from the FileSystem dock or another resource picker to automatically make a dropped resource unique."), modifier);
+			const String drag_and_drop_text = vformat(TTR("Hold %s while dropping a file here to make your own copy."), modifier);
 
 			if (!unique_enabled) {
 				if (EditorNode::get_singleton()->is_resource_internal_to_scene(edited_resource) && EditorNode::get_singleton()->get_resource_count(edited_resource) == 1) {
-					edit_menu->set_item_tooltip(-1, TTR("This Resource is already unique.") + "\n" + drag_and_drop_text);
+					edit_menu->set_item_tooltip(-1, TTR("This is already your own copy.") + "\n" + drag_and_drop_text);
 				} else if (_has_parent_resource().is_valid()) {
-					edit_menu->set_item_tooltip(-1, TTR("In order to duplicate it, make its parent Resource unique.") + "\n" + drag_and_drop_text);
+					edit_menu->set_item_tooltip(-1, TTR("To copy it, first copy the thing that holds it.") + "\n" + drag_and_drop_text);
 				}
 			} else {
 				edit_menu->set_item_tooltip(-1, drag_and_drop_text);
@@ -353,12 +353,12 @@ void EditorResourcePicker::_update_menu_items() {
 
 			if (_has_sub_resources(edited_resource)) {
 				unique_enabled = _is_uniqueness_enabled(true);
-				edit_menu->add_icon_item(get_editor_theme_icon(SNAME("Duplicate")), TTR("Make Unique (Recursive)"), OBJ_MENU_MAKE_UNIQUE_RECURSIVE);
+				edit_menu->add_icon_item(get_editor_theme_icon(SNAME("Duplicate")), TTR("Make Own Copy (With Parts)"), OBJ_MENU_MAKE_UNIQUE_RECURSIVE);
 				edit_menu->set_item_disabled(-1, !unique_enabled);
 				if (!unique_enabled) {
 					Ref<Resource> parent_res = _has_parent_resource();
 					if (EditorNode::get_singleton()->get_editor_selection()->get_full_selected_node_list().size() == 1) {
-						edit_menu->set_item_tooltip(-1, (parent_res.is_valid() && EditorNode::get_singleton()->get_resource_count(parent_res) > 1) ? TTRC("In order to duplicate recursively, make its parent Resource unique.") : TTRC("Subresources have already been made unique."));
+						edit_menu->set_item_tooltip(-1, (parent_res.is_valid() && EditorNode::get_singleton()->get_resource_count(parent_res) > 1) ? TTRC("To copy it with its parts, first copy the thing that holds it.") : TTRC("Its parts are already copied."));
 					}
 				}
 			}
@@ -405,7 +405,7 @@ void EditorResourcePicker::_update_menu_items() {
 
 		if (paste_valid) {
 			edit_menu->add_icon_item(get_editor_theme_icon(SNAME("ActionPaste")), TTRC("Paste"), OBJ_MENU_PASTE);
-			edit_menu->add_icon_item(get_editor_theme_icon(SNAME("ActionPaste")), TTRC("Paste as Unique"), OBJ_MENU_PASTE_AS_UNIQUE);
+			edit_menu->add_icon_item(get_editor_theme_icon(SNAME("ActionPaste")), TTRC("Paste as Copy"), OBJ_MENU_PASTE_AS_UNIQUE);
 		}
 	}
 
@@ -425,7 +425,7 @@ void EditorResourcePicker::_update_menu_items() {
 				icon = get_editor_theme_icon(SNAME("Object"));
 			}
 
-			edit_menu->add_icon_item(icon, vformat(TTR("Convert to %s"), what), CONVERT_BASE_ID + relative_id);
+			edit_menu->add_icon_item(icon, vformat(TTR("Change to %s"), what), CONVERT_BASE_ID + relative_id);
 			relative_id++;
 		}
 	}
@@ -513,17 +513,17 @@ void EditorResourcePicker::_edit_menu_cbk(int p_which) {
 			if (!duplicate_resources_dialog) {
 				duplicate_resources_dialog = memnew(ConfirmationDialog);
 				add_child(duplicate_resources_dialog);
-				duplicate_resources_dialog->set_title(TTR("Make Unique (Recursive)"));
+				duplicate_resources_dialog->set_title(TTR("Make Own Copy (With Parts)"));
 				duplicate_resources_dialog->connect(SceneStringName(confirmed), callable_mp(this, &EditorResourcePicker::_duplicate_selected_resources));
 
 				VBoxContainer *vb = memnew(VBoxContainer);
 				duplicate_resources_dialog->add_child(vb);
 
-				Label *label = memnew(Label(TTR("Select resources to make unique:")));
+				Label *label = memnew(Label(TTR("Pick what to copy:")));
 				vb->add_child(label);
 
 				duplicate_resources_tree = memnew(Tree);
-				duplicate_resources_tree->set_accessibility_name(TTRC("Duplicate resources"));
+				duplicate_resources_tree->set_accessibility_name(TTRC("Copy Files"));
 				duplicate_resources_tree->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 				vb->add_child(duplicate_resources_tree);
 				duplicate_resources_tree->set_columns(2);
@@ -1470,7 +1470,7 @@ Ref<Resource> EditorResourcePicker::_has_parent_resource() {
 EditorResourcePicker::EditorResourcePicker(bool p_hide_assign_button_controls) {
 	make_unique_button = memnew(Button);
 	make_unique_button->set_flat(true);
-	make_unique_button->set_accessibility_name(TTRC("Number of Linked Resources."));
+	make_unique_button->set_accessibility_name(TTRC("Number of places that use this."));
 	make_unique_button->set_tooltip_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	make_unique_button->set_button_mask(MouseButtonMask::LEFT | MouseButtonMask::RIGHT);
 	make_unique_button->set_action_mode(BaseButton::ACTION_MODE_BUTTON_PRESS);
@@ -1481,7 +1481,7 @@ EditorResourcePicker::EditorResourcePicker(bool p_hide_assign_button_controls) {
 	assign_button = memnew(Button);
 	assign_button->set_flat(true);
 	assign_button->set_h_size_flags(SIZE_EXPAND_FILL);
-	assign_button->set_accessibility_name(TTRC("Assign Resource"));
+	assign_button->set_accessibility_name(TTRC("Choose File"));
 	assign_button->set_expand_icon(true);
 	assign_button->set_clip_text(true);
 	assign_button->set_theme_type_variation(SNAME("EditorInspectorButton"));
@@ -1505,7 +1505,7 @@ EditorResourcePicker::EditorResourcePicker(bool p_hide_assign_button_controls) {
 
 	quick_load_button = memnew(Button);
 	quick_load_button->set_theme_type_variation(SNAME("EditorInspectorFlatButton"));
-	quick_load_button->set_tooltip_text(TTRC("Quick Load"));
+	quick_load_button->set_tooltip_text(TTRC("Quick Pick"));
 	add_child(quick_load_button);
 	quick_load_button->connect(SceneStringName(pressed), callable_mp(this, &EditorResourcePicker::_edit_menu_cbk).bind(OBJ_MENU_QUICKLOAD));
 
@@ -1696,7 +1696,7 @@ void EditorAudioStreamPicker::_update_resource() {
 void EditorAudioStreamPicker::_preview_draw() {
 	Ref<AudioStream> audio_stream = get_edited_resource();
 	if (audio_stream.is_null()) {
-		get_assign_button()->set_text(TTR("<empty>"));
+		get_assign_button()->set_text(TTR("(empty)"));
 		return;
 	}
 

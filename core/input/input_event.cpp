@@ -409,7 +409,7 @@ String InputEventKey::as_text_physical_keycode() const {
 	if (physical_keycode != Key::NONE) {
 		kc = keycode_get_string(physical_keycode);
 	} else {
-		kc = "(" + RTR("unset") + ")";
+		kc = "(" + RTR("Not Set") + ")";
 	}
 
 	if (kc.is_empty()) {
@@ -426,7 +426,7 @@ String InputEventKey::as_text_keycode() const {
 	if (keycode != Key::NONE) {
 		kc = keycode_get_string(keycode);
 	} else {
-		kc = "(" + RTR("unset") + ")";
+		kc = "(" + RTR("Not Set") + ")";
 	}
 
 	if (kc.is_empty()) {
@@ -443,7 +443,7 @@ String InputEventKey::as_text_key_label() const {
 	if (key_label != Key::NONE) {
 		kc = keycode_get_string(key_label);
 	} else {
-		kc = "(" + RTR("unset") + ")";
+		kc = "(" + RTR("Not Set") + ")";
 	}
 
 	if (kc.is_empty()) {
@@ -481,10 +481,10 @@ String InputEventKey::as_text() const {
 	} else if (physical_keycode != Key::NONE) {
 		kc = keycode_get_string(physical_keycode);
 		if ((physical_keycode & Key::SPECIAL) != Key::SPECIAL) {
-			kc += " - " + RTR("Physical");
+			kc += " - " + RTR("Key Position");
 		}
 	} else {
-		kc = "(" + RTR("unset") + ")";
+		kc = "(" + RTR("Not Set") + ")";
 	}
 
 	if (kc.is_empty()) {
@@ -515,7 +515,7 @@ String InputEventKey::_to_string() {
 		kc = itos((int64_t)physical_keycode) + " (" + keycode_get_string(physical_keycode) + ")";
 		physical = "true";
 	} else {
-		kc = "(" + RTR("unset") + ")";
+		kc = "(" + RTR("Not Set") + ")";
 	}
 
 	String mods = InputEventWithModifiers::as_text();
@@ -827,8 +827,8 @@ static const char *_mouse_button_descriptions[9] = {
 	TTRC("Mouse Wheel Down"),
 	TTRC("Mouse Wheel Left"),
 	TTRC("Mouse Wheel Right"),
-	TTRC("Mouse Thumb Button 1"),
-	TTRC("Mouse Thumb Button 2")
+	TTRC("Mouse Back Button"),
+	TTRC("Mouse Forward Button")
 };
 
 String InputEventMouseButton::as_text() const {
@@ -1181,12 +1181,12 @@ bool InputEventJoypadMotion::is_match(const Ref<InputEvent> &p_event, bool p_exa
 }
 
 static const char *_joy_axis_descriptions[(size_t)JoyAxis::MAX] = {
-	TTRC("Left Stick X-Axis, Joystick 0 X-Axis"),
-	TTRC("Left Stick Y-Axis, Joystick 0 Y-Axis"),
-	TTRC("Right Stick X-Axis, Joystick 1 X-Axis"),
-	TTRC("Right Stick Y-Axis, Joystick 1 Y-Axis"),
-	TTRC("Joystick 2 X-Axis, Left Trigger, Sony L2, Xbox LT"),
-	TTRC("Joystick 2 Y-Axis, Right Trigger, Sony R2, Xbox RT"),
+	TTRC("Left Stick Sideways"),
+	TTRC("Left Stick Up and Down"),
+	TTRC("Right Stick Sideways"),
+	TTRC("Right Stick Up and Down"),
+	TTRC("Left Trigger (LT / L2)"),
+	TTRC("Right Trigger (RT / R2)"),
 	TTRC("Joystick 3 X-Axis"),
 	TTRC("Joystick 3 Y-Axis"),
 	TTRC("Joystick 4 X-Axis"),
@@ -1194,7 +1194,7 @@ static const char *_joy_axis_descriptions[(size_t)JoyAxis::MAX] = {
 };
 
 String InputEventJoypadMotion::as_text() const {
-	String desc = axis < JoyAxis::MAX ? TTRGET(_joy_axis_descriptions[(size_t)axis]) : RTR("Unknown Joypad Axis");
+	String desc = axis < JoyAxis::MAX ? TTRGET(_joy_axis_descriptions[(size_t)axis]) : RTR("Unknown Stick");
 
 	return vformat(RTR("Joypad Motion on Axis %d (%s) with Value %.2f"), axis, desc, axis_value);
 }
@@ -1281,31 +1281,31 @@ bool InputEventJoypadButton::is_match(const Ref<InputEvent> &p_event, bool p_exa
 }
 
 static const char *_joy_button_descriptions[(size_t)JoyButton::SDL_MAX] = {
-	TTRC("Bottom Action, Sony Cross, Xbox A, Nintendo B"),
-	TTRC("Right Action, Sony Circle, Xbox B, Nintendo A"),
-	TTRC("Left Action, Sony Square, Xbox X, Nintendo Y"),
-	TTRC("Top Action, Sony Triangle, Xbox Y, Nintendo X"),
-	TTRC("Back, Sony Select, Xbox Back, Nintendo -"),
-	TTRC("Guide, Sony PS, Xbox Home"),
-	TTRC("Start, Xbox Menu, Nintendo +"),
-	TTRC("Left Stick, Sony L3, Xbox L/LS"),
-	TTRC("Right Stick, Sony R3, Xbox R/RS"),
-	TTRC("Left Shoulder, Sony L1, Xbox LB"),
-	TTRC("Right Shoulder, Sony R1, Xbox RB"),
+	TTRC("A (Cross)"),
+	TTRC("B (Circle)"),
+	TTRC("X (Square)"),
+	TTRC("Y (Triangle)"),
+	TTRC("View (Select)"),
+	TTRC("Xbox / Steam Button"),
+	TTRC("Menu (Start)"),
+	TTRC("Left Stick Press (L3)"),
+	TTRC("Right Stick Press (R3)"),
+	TTRC("LB (L1)"),
+	TTRC("RB (R1)"),
 	TTRC("D-pad Up"),
 	TTRC("D-pad Down"),
 	TTRC("D-pad Left"),
 	TTRC("D-pad Right"),
-	TTRC("Xbox Share, PS5 Microphone, Nintendo Capture"),
-	TTRC("Xbox Paddle 1"),
-	TTRC("Xbox Paddle 2"),
-	TTRC("Xbox Paddle 3"),
-	TTRC("Xbox Paddle 4"),
-	TTRC("PS4/5 Touchpad"),
+	TTRC("Share Button"),
+	TTRC("Back Button L4"),
+	TTRC("Back Button R4"),
+	TTRC("Back Button L5"),
+	TTRC("Back Button R5"),
+	TTRC("Touchpad"),
 };
 
 String InputEventJoypadButton::as_text() const {
-	String text = vformat(RTR("Joypad Button %d"), (int64_t)button_index);
+	String text = vformat(RTR("Gamepad Button %d"), (int64_t)button_index);
 
 	if (button_index > JoyButton::INVALID && button_index < JoyButton::SDL_MAX) {
 		text += vformat(" (%s)", TTRGET(_joy_button_descriptions[(size_t)button_index]));

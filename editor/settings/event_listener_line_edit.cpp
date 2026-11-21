@@ -38,18 +38,18 @@
 
 // Maps to 2*axis if value is neg, or 2*axis+1 if value is pos.
 static const char *_joy_axis_descriptions[(size_t)JoyAxis::MAX * 2] = {
-	TTRC("Left Stick Left, Joystick 0 Left"),
-	TTRC("Left Stick Right, Joystick 0 Right"),
-	TTRC("Left Stick Up, Joystick 0 Up"),
-	TTRC("Left Stick Down, Joystick 0 Down"),
-	TTRC("Right Stick Left, Joystick 1 Left"),
-	TTRC("Right Stick Right, Joystick 1 Right"),
-	TTRC("Right Stick Up, Joystick 1 Up"),
-	TTRC("Right Stick Down, Joystick 1 Down"),
+	TTRC("Left Stick Left"),
+	TTRC("Left Stick Right"),
+	TTRC("Left Stick Up"),
+	TTRC("Left Stick Down"),
+	TTRC("Right Stick Left"),
+	TTRC("Right Stick Right"),
+	TTRC("Right Stick Up"),
+	TTRC("Right Stick Down"),
 	TTRC("Joystick 2 Left"),
-	TTRC("Left Trigger, Sony L2, Xbox LT, Joystick 2 Right"),
+	TTRC("Left Trigger (LT / L2)"),
 	TTRC("Joystick 2 Up"),
-	TTRC("Right Trigger, Sony R2, Xbox RT, Joystick 2 Down"),
+	TTRC("Right Trigger (RT / R2)"),
 	TTRC("Joystick 3 Left"),
 	TTRC("Joystick 3 Right"),
 	TTRC("Joystick 3 Up"),
@@ -83,7 +83,7 @@ String EventListenerLineEdit::get_event_text(const Ref<InputEvent> &p_event, boo
 			if (!text.is_empty()) {
 				text += " " + TTR("or") + " ";
 			}
-			text += mods_text + keycode_get_string(key->get_physical_keycode()) + " (" + TTR("Physical");
+			text += mods_text + keycode_get_string(key->get_physical_keycode()) + " (" + TTR("Key Position");
 			if (key->get_location() != KeyLocation::UNSPECIFIED) {
 				text += " " + key->as_text_location();
 			}
@@ -93,11 +93,11 @@ String EventListenerLineEdit::get_event_text(const Ref<InputEvent> &p_event, boo
 			if (!text.is_empty()) {
 				text += " " + TTR("or") + " ";
 			}
-			text += mods_text + keycode_get_string(key->get_key_label()) + " (" + TTR("Unicode") + ")";
+			text += mods_text + keycode_get_string(key->get_key_label()) + " (" + TTR("Typed Character") + ")";
 		}
 
 		if (text.is_empty()) {
-			text = "(" + TTR("unset") + ")";
+			text = "(" + TTR("Not Set") + ")";
 		}
 	} else {
 		text = p_event->as_text();
@@ -108,13 +108,13 @@ String EventListenerLineEdit::get_event_text(const Ref<InputEvent> &p_event, boo
 	Ref<InputEventJoypadButton> jp_button = p_event;
 	if (jp_motion.is_valid()) {
 		// Joypad motion events will display slightly differently than what the event->as_text() provides. See #43660.
-		String desc = TTR("Unknown Joypad Axis");
+		String desc = TTR("Unknown Stick");
 		if (jp_motion->get_axis() < JoyAxis::MAX) {
 			desc = TTR(_joy_axis_descriptions[2 * (size_t)jp_motion->get_axis() + (jp_motion->get_axis_value() < 0 ? 0 : 1)]);
 		}
 
 		// TRANSLATORS: %d is the axis number, the first %s is either "-" or "+", and the second %s is the description of the axis.
-		text = vformat(TTR("Joypad Axis %d %s (%s)"), (int64_t)jp_motion->get_axis(), jp_motion->get_axis_value() < 0 ? "-" : "+", desc);
+		text = vformat(TTR("Stick %d %s (%s)"), (int64_t)jp_motion->get_axis(), jp_motion->get_axis_value() < 0 ? "-" : "+", desc);
 	}
 	if (p_include_device && (mouse.is_valid() || jp_button.is_valid() || jp_motion.is_valid())) {
 		String device_string = get_device_string(p_event->get_device());
@@ -236,7 +236,7 @@ void EventListenerLineEdit::_notification(int p_what) {
 			RID ae = get_accessibility_element();
 			ERR_FAIL_COND(ae.is_null());
 
-			AccessibilityServer::get_singleton()->update_set_extra_info(ae, vformat(TTR("Listening for Input. Hold %s to release focus."), InputMap::get_singleton()->get_action_description("ui_cancel")));
+			AccessibilityServer::get_singleton()->update_set_extra_info(ae, vformat(TTR("Press a key or button. Hold %s to stop."), InputMap::get_singleton()->get_action_description("ui_cancel")));
 		} break;
 
 		case NOTIFICATION_THEME_CHANGED: {
@@ -254,7 +254,7 @@ void EventListenerLineEdit::_notification(int p_what) {
 				dialog->set_close_on_escape(false);
 			}
 
-			set_placeholder(TTRC("Listening for Input"));
+			set_placeholder(TTRC("Press a Key or Button"));
 		} break;
 
 		case NOTIFICATION_FOCUS_EXIT: {
@@ -264,7 +264,7 @@ void EventListenerLineEdit::_notification(int p_what) {
 			}
 
 			ignore_next_event = true;
-			set_placeholder(TTRC("Filter by Event"));
+			set_placeholder(TTRC("Filter by Input"));
 		} break;
 	}
 }
@@ -276,5 +276,5 @@ void EventListenerLineEdit::_bind_methods() {
 
 EventListenerLineEdit::EventListenerLineEdit() {
 	set_caret_blink_enabled(false);
-	set_placeholder(TTRC("Filter by Event"));
+	set_placeholder(TTRC("Filter by Input"));
 }

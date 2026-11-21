@@ -332,7 +332,7 @@ void EditorPropertyArray::_create_new_property_slot() {
 	EditorProperty *prop = memnew(EditorPropertyNil);
 
 	Button *reorder_button = memnew(Button);
-	reorder_button->set_accessibility_name(TTRC("Reorder"));
+	reorder_button->set_accessibility_name(TTRC("Change Order"));
 	reorder_button->set_button_icon(get_editor_theme_icon(SNAME("TripleBar")));
 	reorder_button->set_default_cursor_shape(Control::CURSOR_MOVE);
 	reorder_button->set_disabled(is_read_only());
@@ -410,7 +410,7 @@ void EditorPropertyArray::update_property() {
 		} else {
 			edit->set_text_alignment(HORIZONTAL_ALIGNMENT_CENTER);
 			edit->set_button_icon(Ref<Texture2D>());
-			edit->set_text(vformat(TTR("(Nil) %s"), array_type_name));
+			edit->set_text(vformat(TTR("(Empty) %s"), array_type_name));
 		}
 		edit->set_pressed(false);
 		if (container) {
@@ -444,11 +444,11 @@ void EditorPropertyArray::update_property() {
 		edit->set_text_alignment(HORIZONTAL_ALIGNMENT_LEFT);
 		edit->set_button_icon(get_editor_theme_icon(array_type_name));
 		edit->set_text(vformat("%s%s", array_sub_type_name, ctr_str));
-		edit->set_tooltip_text(vformat(TTR("%s%s (size %d)"), array_type_name, array_sub_type_name, size));
+		edit->set_tooltip_text(vformat(TTR("%s%s (%d items)"), array_type_name, array_sub_type_name, size));
 	} else {
 		edit->set_text_alignment(HORIZONTAL_ALIGNMENT_CENTER);
 		edit->set_button_icon(Ref<Texture2D>());
-		edit->set_text(vformat(TTR("%s (size %d)"), array_type_name, size));
+		edit->set_text(vformat(TTR("%s (%d items)"), array_type_name, size));
 	}
 
 	bool unfolded = get_edited_object()->editor_is_section_unfolded(get_edited_property());
@@ -490,7 +490,7 @@ void EditorPropertyArray::update_property() {
 			property_vbox->set_h_size_flags(SIZE_EXPAND_FILL);
 			vbox->add_child(property_vbox);
 
-			button_add_item = memnew(EditorInspectorActionButton(TTRC("Add Element"), SNAME("Add")));
+			button_add_item = memnew(EditorInspectorActionButton(TTRC("Add Item"), SNAME("Add")));
 			button_add_item->connect(SceneStringName(pressed), callable_mp(this, &EditorPropertyArray::_add_element));
 			button_add_item->connect(SceneStringName(draw), callable_mp(this, &EditorPropertyArray::_button_add_item_draw));
 			SET_DRAG_FORWARDING_CD(button_add_item, EditorPropertyArray);
@@ -1296,7 +1296,7 @@ void EditorPropertyDictionary::update_property() {
 		} else {
 			edit->set_text_alignment(HORIZONTAL_ALIGNMENT_CENTER);
 			edit->set_button_icon(Ref<Texture2D>());
-			edit->set_text(vformat(TTR("(Nil) %s"), dict_type_name));
+			edit->set_text(vformat(TTR("(Empty) %s"), dict_type_name));
 		}
 		edit->set_pressed(false);
 		if (container) {
@@ -1326,11 +1326,11 @@ void EditorPropertyDictionary::update_property() {
 		edit->set_text_alignment(HORIZONTAL_ALIGNMENT_LEFT);
 		edit->set_button_icon(get_editor_theme_icon(dict_type_name));
 		edit->set_text(vformat("%s%s", dict_sub_type_name, ctr_str));
-		edit->set_tooltip_text(vformat(TTR("%s%s (size %d)"), dict_type_name, dict_sub_type_name, dict.size()));
+		edit->set_tooltip_text(vformat(TTR("%s%s (%d items)"), dict_type_name, dict_sub_type_name, dict.size()));
 	} else {
 		edit->set_text_alignment(HORIZONTAL_ALIGNMENT_CENTER);
 		edit->set_button_icon(Ref<Texture2D>());
-		edit->set_text(vformat(TTR("%s (size %d)"), dict_type_name, dict.size()));
+		edit->set_text(vformat(TTR("%s (%d items)"), dict_type_name, dict.size()));
 	}
 
 	bool unfolded = get_edited_object()->editor_is_section_unfolded(get_edited_property());
@@ -1373,7 +1373,7 @@ void EditorPropertyDictionary::update_property() {
 			_create_new_property_slot(EditorPropertyDictionaryObject::NEW_KEY_INDEX);
 			_create_new_property_slot(EditorPropertyDictionaryObject::NEW_VALUE_INDEX);
 
-			button_add_item = memnew(EditorInspectorActionButton(TTRC("Add Key/Value Pair"), SNAME("Add")));
+			button_add_item = memnew(EditorInspectorActionButton(TTRC("Add Key and Value"), SNAME("Add")));
 			button_add_item->set_disabled(is_read_only());
 			button_add_item->set_accessibility_name(TTRC("Add"));
 			button_add_item->connect(SceneStringName(pressed), callable_mp(this, &EditorPropertyDictionary::_add_key_value));

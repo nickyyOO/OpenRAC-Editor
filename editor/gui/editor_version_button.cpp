@@ -35,25 +35,28 @@
 #include "servers/display/display_server.h"
 
 String _get_version_string(EditorVersionButton::VersionFormat p_format) {
+	// OpenRAC Editor: its own version ("v0.2.0" or "dev"), not the engine's; a dev build adds its commit.
 	String main;
 	switch (p_format) {
 		case EditorVersionButton::FORMAT_BASIC: {
-			return GODOT_VERSION_FULL_CONFIG;
+			return OPENRAC_EDITOR_VERSION;
 		} break;
 		case EditorVersionButton::FORMAT_WITH_BUILD: {
-			main = "v" GODOT_VERSION_FULL_BUILD;
+			main = OPENRAC_EDITOR_VERSION;
 		} break;
 		case EditorVersionButton::FORMAT_WITH_NAME_AND_BUILD: {
-			main = GODOT_VERSION_FULL_NAME;
+			main = OPENRAC_EDITOR_VERSION_NAME;
 		} break;
 		default: {
-			ERR_FAIL_V_MSG(GODOT_VERSION_FULL_NAME, "Unexpected format: " + itos(p_format));
+			ERR_FAIL_V_MSG(OPENRAC_EDITOR_VERSION_NAME, "Unexpected format: " + itos(p_format));
 		} break;
 	}
 
 	String hash = GODOT_VERSION_HASH;
-	if (!hash.is_empty()) {
-		hash = vformat(" [%s]", hash.left(9));
+	if (String(OPENRAC_EDITOR_VERSION) == "dev" && !hash.is_empty()) {
+		hash = vformat(" (%s)", hash.left(7));
+	} else {
+		hash = String();
 	}
 	return main + hash;
 }
@@ -71,9 +74,9 @@ void EditorVersionButton::_notification(int p_what) {
 			if (GODOT_VERSION_TIMESTAMP > 0) {
 				build_date = Time::get_singleton()->get_datetime_string_from_unix_time(GODOT_VERSION_TIMESTAMP, true) + " UTC";
 			} else {
-				build_date = TTR("(unknown)");
+				build_date = TTR("Unknown");
 			}
-			set_tooltip_text(vformat(TTR("Git commit date: %s\nClick to copy the version information."), build_date));
+			set_tooltip_text(vformat(TTR("Built on %s.\nClick to copy."), build_date));
 		} break;
 	}
 }

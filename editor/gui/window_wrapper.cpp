@@ -381,7 +381,7 @@ void ScreenSelect::_build_advanced_menu() {
 
 		button->set_text(itos(i));
 		button->set_text_alignment(HORIZONTAL_ALIGNMENT_CENTER);
-		button->set_tooltip_text(vformat(TTR("Make this panel floating in the screen %d."), i));
+		button->set_tooltip_text(vformat(TTR("Open this panel in its own window on screen %d."), i));
 
 		if (i == current_screen) {
 			Color accent_color = get_theme_color("accent_color", EditorStringName(Editor));
@@ -467,7 +467,7 @@ ScreenSelect::ScreenSelect() {
 		set_disabled(true);
 		set_tooltip_text(EditorNode::get_singleton()->get_multiwindow_support_tooltip_text());
 	} else {
-		set_tooltip_text(TTR("Make this panel floating.") + "\n" + TTR("Right-click to open the screen selector."));
+		set_tooltip_text(TTR("Open this panel in its own window.") + "\n" + TTR("Right-click to pick a screen."));
 	}
 
 	// Create the popup.
@@ -488,7 +488,7 @@ ScreenSelect::ScreenSelect() {
 	vb->set_alignment(BoxContainer::ALIGNMENT_CENTER);
 	popup_root->add_child(vb);
 
-	Label *description = memnew(Label(TTR("Select Screen")));
+	Label *description = memnew(Label(TTR("Pick Screen")));
 	description->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER);
 	vb->add_child(description);
 

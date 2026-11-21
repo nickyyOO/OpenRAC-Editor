@@ -171,7 +171,7 @@ Vector<Ref<Texture2D>> EditorInterface::make_mesh_previews(const Vector<Ref<Mesh
 	RS::get_singleton()->light_set_color(light2, Color(0.7, 0.7, 0.7));
 	RID light_instance2 = RS::get_singleton()->instance_create2(light2, scenario);
 
-	EditorProgress ep("mlib", TTR("Creating Mesh Previews"), p_meshes.size());
+	EditorProgress ep("mlib", TTR("Making Model Previews"), p_meshes.size());
 
 	Vector<Ref<Texture2D>> textures;
 
@@ -213,7 +213,7 @@ Vector<Ref<Texture2D>> EditorInterface::make_mesh_previews(const Vector<Ref<Mesh
 		RS::get_singleton()->instance_set_transform(light_instance, xform * Transform3D().looking_at(Vector3(-2, -1, -1), Vector3(0, 1, 0)));
 		RS::get_singleton()->instance_set_transform(light_instance2, xform * Transform3D().looking_at(Vector3(+1, -1, -2), Vector3(0, 1, 0)));
 
-		ep.step(TTR("Thumbnail..."), i);
+		ep.step(TTR("Preview"), i);
 		DisplayServer::get_singleton()->process_events();
 		Main::iteration();
 		Main::iteration();
@@ -585,7 +585,7 @@ void EditorInterface::popup_create_dialog(const Callable &p_callback, const Stri
 
 	create_dialog->set_base_type(safe_base_type);
 	create_dialog->popup_create(false, true, p_current_type, "");
-	create_dialog->set_title(p_dialog_title.is_empty() ? vformat(TTR("Create New %s"), p_base_type) : p_dialog_title);
+	create_dialog->set_title(p_dialog_title.is_empty() ? vformat(TTR("New %s"), p_base_type) : p_dialog_title);
 
 	const Callable callback = callable_mp(this, &EditorInterface::_create_dialog_item_selected);
 	create_dialog->connect(SNAME("create"), callback.bind(false, p_callback), CONNECT_DEFERRED);

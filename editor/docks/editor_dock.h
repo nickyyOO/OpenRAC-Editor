@@ -87,6 +87,7 @@ private:
 
 	bool is_open = false;
 	bool enabled = true;
+	bool openrac_hidden = false; // OpenRAC Editor: a Godot dock a level editor has no use for (EditorDockManager::add_dock).
 	int previous_tab_index = -1;
 	WindowWrapper *dock_window = nullptr;
 	DockTabContainer *parent_dock_container = nullptr;

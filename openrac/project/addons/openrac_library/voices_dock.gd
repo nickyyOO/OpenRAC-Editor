@@ -7,7 +7,7 @@ extends EditorDock
 ## 3. Lines: any line's words, changed if you like, spoken in its character's voice; pick the take.
 ## 4. Cutscene: a subtitle of a cutscene of this level spoken in a character's voice, as its voice
 ##    line (the actor's jaw follows it in the game).
-## "Put the voices in your mods" makes the overrides pack the game plays (Play with your edits).
+## "Add to Mods" makes the overrides pack the game plays (Play with your edits).
 ## The work is openrac/tools/voice_lab.py's (docs/VOICES.md), run by voices_lab.gd.
 
 const Lab = preload("voices_lab.gd")
@@ -25,7 +25,7 @@ const FOLD_AFTER: int = 12
 
 ## The languages' names, for the lists.
 const LANGUAGE_NAMES: Dictionary = {"en": "English", "fr": "French", "de": "German", "es": "Spanish",
-	"it": "Italian", "ja": "Japanese", "ko": "Korean", "?": "Not known yet"}
+	"it": "Italian", "ja": "Japanese", "ko": "Korean", "?": "Unknown"}
 
 ## Where the voice tools are and what they work on (the launcher's editor-open names them).
 var python: String = ""
@@ -115,7 +115,7 @@ var actions: Array[Button] = []
 
 func _init() -> void:
 	title = "Voices"
-	default_slot = EditorDock.DOCK_SLOT_RIGHT_BL
+	default_slot = EditorDock.DOCK_SLOT_RIGHT_UL  # a tab beside Properties, so Properties keeps its full height
 	custom_minimum_size.x = px(260.0)
 	# Scrolls rather than asks for its full height, so it never pushes the editor's other docks off.
 	var scroll := ScrollContainer.new()
@@ -136,7 +136,7 @@ func _init() -> void:
 	top.add_child(status)
 	stop_button = Button.new()
 	stop_button.text = "Stop"
-	stop_button.tooltip_text = "Stops the work under way (what is done so far is kept)."
+	stop_button.tooltip_text = "Stops now; what's done is kept."
 	stop_button.visible = false
 	stop_button.pressed.connect(stop_work)
 	top.add_child(stop_button)
@@ -156,8 +156,8 @@ func _init() -> void:
 	tabs.add_child(build_lines_tab())
 	tabs.add_child(build_cutscene_tab())
 
-	pack_button = action_button("Put the voices in your mods",
-		"Makes the AI voices pack from the takes you kept and adds it to your mods. Switch it on in the launcher's Mods page and play with your edits.")
+	pack_button = action_button("Add to Mods",
+		"Adds your kept voice lines to your mods. Turn it on in the launcher's Mods page.")
 	pack_button.pressed.connect(make_pack)
 	box.add_child(pack_button)
 	pack_label = Label.new()
@@ -193,7 +193,7 @@ func wrapped_label(text: String = "") -> Label:
 
 func build_model_tab() -> Control:
 	var tab := VBoxContainer.new()
-	tab.name = "Model"
+	tab.name = "Voice"
 	hardware_label = wrapped_label()
 	tab.add_child(hardware_label)
 	model_list = ItemList.new()
@@ -207,7 +207,7 @@ func build_model_tab() -> Control:
 	model_info.selection_enabled = true
 	tab.add_child(model_info)
 	server_edit = LineEdit.new()
-	server_edit.placeholder_text = "Its server's address"
+	server_edit.placeholder_text = "Its web address"
 	server_edit.visible = false
 	server_edit.text_changed.connect(func(text: String) -> void:
 		var row: Dictionary = picked_model()
@@ -216,19 +216,19 @@ func build_model_tab() -> Control:
 	tab.add_child(server_edit)
 	var row := HFlowContainer.new()
 	tab.add_child(row)
-	use_button = action_button("Use this model", "Lines are spoken with this model.")
+	use_button = action_button("Use This Voice", "Lines are spoken with this voice.")
 	use_button.pressed.connect(use_model)
 	row.add_child(use_button)
-	install_button = action_button("Install", "Downloads what the model needs into the launcher's data folder.")
+	install_button = action_button("Install", "Downloads what this voice needs.")
 	install_button.pressed.connect(install_model)
 	row.add_child(install_button)
-	remove_button = action_button("Remove", "Frees its disc space; install it again any time.")
+	remove_button = action_button("Remove", "Frees disc space. You can install it again.")
 	remove_button.pressed.connect(remove_model)
 	row.add_child(remove_button)
 	tab.add_child(HSeparator.new())
 	listen_label = wrapped_label()
 	tab.add_child(listen_label)
-	listen_button = action_button("Install listening", "Whisper (the words) and a speaker model (who speaks): the Characters step needs them.")
+	listen_button = action_button("Install Listening", "Needed to find who speaks each line (Characters).")
 	listen_button.pressed.connect(func() -> void: run("install", {"model": "listen"}, "Installing listening", refresh_models))
 	tab.add_child(listen_button)
 	return tab
@@ -239,7 +239,7 @@ func build_characters_tab() -> Control:
 	tab.name = "Characters"
 	disc_label = wrapped_label()
 	tab.add_child(disc_label)
-	read_button = action_button("Read the disc", "Finds every spoken line on your disc (nothing leaves your computer).")
+	read_button = action_button("Read the Disc", "Finds every spoken line on your disc (nothing leaves your computer).")
 	read_button.pressed.connect(read_disc)
 	tab.add_child(read_button)
 	var row := HBoxContainer.new()
@@ -247,7 +247,7 @@ func build_characters_tab() -> Control:
 	language_pick = OptionButton.new()
 	language_pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(language_pick)
-	listen_run_button = action_button("Listen", "Writes down the lines without subtitles and groups the lines by voice. Takes a while the first time; Stop keeps what is done.")
+	listen_run_button = action_button("Listen", "Writes down each line and groups lines by voice. Slow the first time.")
 	listen_run_button.pressed.connect(listen)
 	row.add_child(listen_run_button)
 	voice_tree = Tree.new()
@@ -271,7 +271,7 @@ func build_characters_tab() -> Control:
 	voice_box.visible = false
 	tab.add_child(voice_box)
 	sample_button = Button.new()
-	sample_button.text = "Hear this voice"
+	sample_button.text = "Hear Voice"
 	sample_button.pressed.connect(hear_voice)
 	voice_box.add_child(sample_button)
 	var naming := HBoxContainer.new()
@@ -290,7 +290,7 @@ func build_characters_tab() -> Control:
 			name_edit.text = known_pick.get_item_text(index)
 		known_pick.select(0))
 	naming.add_child(known_pick)
-	name_button = action_button("Name", "Every line of this voice is this character's (the same lines in the disc's other languages too).")
+	name_button = action_button("Name It", "Gives every line of this voice to this character.")
 	name_button.pressed.connect(name_voice)
 	naming.add_child(name_button)
 	return tab
@@ -312,7 +312,7 @@ func build_lines_tab() -> Control:
 	line_language_pick.item_selected.connect(func(_index: int) -> void: refresh_lines())
 	row.add_child(line_language_pick)
 	search_edit = LineEdit.new()
-	search_edit.placeholder_text = "Words or scene"
+	search_edit.placeholder_text = "Words or cutscene"
 	search_edit.clear_button_enabled = true
 	search_edit.text_submitted.connect(func(_text: String) -> void: refresh_lines())
 	tab.add_child(search_edit)
@@ -321,7 +321,7 @@ func build_lines_tab() -> Control:
 	line_tree.column_titles_visible = true
 	line_tree.set_column_title(0, "Who")
 	line_tree.set_column_title(1, "Words")
-	line_tree.set_column_title(2, "AI")
+	line_tree.set_column_title(2, "New")
 	line_tree.set_column_expand(0, false)
 	line_tree.set_column_custom_minimum_width(0, int(px(80.0)))
 	line_tree.set_column_expand(2, false)
@@ -350,32 +350,32 @@ func build_lines_tab() -> Control:
 	var buttons := HFlowContainer.new()
 	line_box.add_child(buttons)
 	original_button = Button.new()
-	original_button.text = "Hear the disc's"
+	original_button.text = "Hear Original"
 	original_button.pressed.connect(func() -> void: hear(String(selected_line.get("snippet", ""))))
 	buttons.add_child(original_button)
-	save_words_button = action_button("Keep these words", "The words the next take says (the subtitles in the game stay the disc's).")
+	save_words_button = action_button("Keep Words", "The words the next take says. Subtitles don't change.")
 	save_words_button.pressed.connect(save_words)
 	buttons.add_child(save_words_button)
-	disc_words_button = action_button("The disc's words", "Back to what the disc says.")
+	disc_words_button = action_button("Original Words", "Back to the disc's words.")
 	disc_words_button.pressed.connect(func() -> void:
 		words_edit.text = String(selected_line.get("disc_text", ""))
 		save_words())
 	buttons.add_child(disc_words_button)
-	speak_button = action_button("Speak it", "A new take of this line in its character's voice, with these words.")
+	speak_button = action_button("Speak It", "Makes a new take of this line in the character's voice.")
 	speak_button.pressed.connect(speak_line)
 	buttons.add_child(speak_button)
 	var takes := HBoxContainer.new()
 	line_box.add_child(takes)
 	take_pick = OptionButton.new()
 	take_pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	take_pick.tooltip_text = "The take the game plays for this line, or the disc's own."
+	take_pick.tooltip_text = "The take the game plays for this line."
 	take_pick.item_selected.connect(choose_take)
 	takes.add_child(take_pick)
 	take_button = Button.new()
 	take_button.text = "Hear"
 	take_button.pressed.connect(hear_take)
 	takes.add_child(take_button)
-	speak_all_button = action_button("Speak every line shown", "A take of each line in the list (the character's whole part, with the list showing one character).")
+	speak_all_button = action_button("Speak All Shown", "Makes a take of every line in the list.")
 	speak_all_button.pressed.connect(speak_all)
 	tab.add_child(speak_all_button)
 	return tab
@@ -384,13 +384,13 @@ func build_lines_tab() -> Control:
 func build_cutscene_tab() -> Control:
 	var tab := VBoxContainer.new()
 	tab.name = "Cutscene"
-	cutscene_info = wrapped_label("Select a subtitle of a cutscene (a CutsceneSubtitle node) in the Scene dock.")
+	cutscene_info = wrapped_label("Pick a subtitle in a cutscene in the Level list.")
 	tab.add_child(cutscene_info)
 	var row := HBoxContainer.new()
 	tab.add_child(row)
 	cutscene_who = OptionButton.new()
 	cutscene_who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cutscene_who.tooltip_text = "Whose voice says it: a character you named."
+	cutscene_who.tooltip_text = "Who says it."
 	row.add_child(cutscene_who)
 	cutscene_language = OptionButton.new()
 	cutscene_language.item_selected.connect(func(_index: int) -> void: show_subtitle())
@@ -400,8 +400,8 @@ func build_cutscene_tab() -> Control:
 	cutscene_words.custom_minimum_size.y = px(60.0)
 	cutscene_words.placeholder_text = "The subtitle's words"
 	tab.add_child(cutscene_words)
-	cutscene_button = action_button("Speak this subtitle",
-		"Keeps the words in the subtitle, speaks them in the character's voice and adds the voice line (a CutsceneSound) beside it. An actor whose rig has a jaw moves its mouth with it.")
+	cutscene_button = action_button("Speak Subtitle",
+		"Speaks the subtitle's words in the character's voice and adds the sound to the cutscene.")
 	cutscene_button.pressed.connect(speak_subtitle)
 	tab.add_child(cutscene_button)
 	return tab
@@ -472,13 +472,13 @@ func begin() -> void:
 	started = true
 
 	if game not in ["rac1", "rac2"]:
-		say("AI voices are for Ratchet & Clank and Going Commando levels.", WARN_COLOUR)
+		say("AI voices work in Ratchet & Clank and Going Commando levels.", WARN_COLOUR)
 		return
 
 	var problem: String = ""
 
 	if data == "":
-		problem = "Open the level from the launcher (Mods, Level editor, Open): it names the folders the voices need."
+		problem = "Open the level from the launcher (Mods, Level editor, Open) first."
 	else:
 		problem = lab.start(python, Lab.arguments(tools, data, overrides, game, version))
 
@@ -486,7 +486,7 @@ func begin() -> void:
 		say(problem, WARN_COLOUR)
 		return
 
-	say("Looking at this computer...")
+	say("Checking this computer")
 	refresh_models()
 	refresh_summary()
 
@@ -612,12 +612,12 @@ func show_models(result: Variant) -> void:
 	catalogue = result
 	var hw: Dictionary = catalogue["hardware"]
 	var best: Variant = hw.get("best")
-	var card: String = "no graphics card the models can use"
+	var card: String = "no graphics card the voices can use"
 
 	if best is Dictionary:
 		card = "%s, %s GB" % [best.get("name", "a graphics card"), str(best.get("vram_gb", 0))]
 
-	hardware_label.text = "This computer: %s. Preset: %s." % [card, catalogue["preset"]["name"]]
+	hardware_label.text = "This computer: %s. Best choice: %s." % [card, catalogue["preset"]["name"]]
 	var chosen: String = chosen_model()
 	model_list.clear()
 
@@ -631,7 +631,7 @@ func show_models(result: Variant) -> void:
 			marks.append("installed")
 
 		if row["kind"] == "server":
-			marks.append("own server")
+			marks.append("runs elsewhere")
 
 		if not row["fits"]:
 			marks.append("too big here")
@@ -658,7 +658,7 @@ func show_models(result: Variant) -> void:
 				model_list.select(index)
 
 	listen_label.text = ("Listening is installed." if catalogue.get("listen") else
-		"Listening (to tell the voices apart and write down lines) is not installed yet.")
+		"Listening isn't installed yet.")
 	show_model()
 	update_buttons()
 
@@ -682,11 +682,11 @@ func show_model() -> void:
 		lines.append("[color=#ffcc73]%s[/color]" % row["why"])
 
 	if not row["missing"].is_empty():
-		lines.append("[color=#ffcc73]Does not speak: %s.[/color]" % ", ".join(PackedStringArray(row["missing"].map(language_name))))
+		lines.append("[color=#ffcc73]No voice for: %s.[/color]" % ", ".join(PackedStringArray(row["missing"].map(language_name))))
 
-	var size: String = "about %s GB to download" % str(row["download_gb"]) if row["kind"] == "python" else "runs in its own server"
-	lines.append("Licence: %s%s. Runs on: %s; %s." % [row["license"], "" if row["commercial"] else " (not for sale: fine here)",
-		{"cuda": "the graphics card", "mps": "the Mac's graphics", "cpu": "the processor (slow)", "server": "its server"}.get(row["device"], row["device"]), size])
+	var size: String = "about %s GB to download" % str(row["download_gb"]) if row["kind"] == "python" else "runs elsewhere"
+	lines.append("Licence: %s%s. Uses %s; %s." % [row["license"], "" if row["commercial"] else " (free for non-commercial use)",
+		{"cuda": "the graphics card", "mps": "the Mac's graphics", "cpu": "the processor (slow)", "server": "another computer"}.get(row["device"], row["device"]), size])
 	model_info.text = "\n".join(lines)
 
 	if row["kind"] == "server":
@@ -754,9 +754,9 @@ func refresh_summary(_result: Variant = null) -> void:
 			show_summary(result)
 		else:
 			summary = {}
-			disc_label.text = "Read your disc first: the voices are learnt from its lines."
+			disc_label.text = "Read your disc first: the voices come from its lines."
 			if known_disc == "":
-				disc_label.text += " Choose its image (.iso)."
+				disc_label.text += " Choose its disc image (.iso)."
 			update_buttons())
 
 
@@ -785,7 +785,7 @@ func show_summary(result: Variant) -> void:
 				pick.select(pick.item_count - 1)
 
 	known_pick.clear()
-	known_pick.add_item("Names...")
+	known_pick.add_item("Names")
 
 	for known in summary["known"]:
 		known_pick.add_item(known)
@@ -856,7 +856,7 @@ func refresh_voices() -> void:
 			if voice_rows.size() > FOLD_AFTER and int(row["lines"]) < SMALL_VOICE and row["character"] == null:
 				if small == null:
 					small = voice_tree.create_item(root)
-					small.set_text(0, "Voices with few lines (name these in Lines)")
+					small.set_text(0, "Voices with few lines (name them in Lines)")
 					small.set_custom_color(0, MUTED_COLOUR)
 					small.set_selectable(0, false)
 					small.set_selectable(1, false)
@@ -946,7 +946,7 @@ func refresh_lines() -> void:
 		for row in line_rows:
 			var item: TreeItem = line_tree.create_item(root)
 			item.set_text(0, String(row["character"]) if row["character"] != null else "?")
-			item.set_text(1, String(row["text"]) if row["text"] != "" else "(no words yet: listen)")
+			item.set_text(1, String(row["text"]) if row["text"] != "" else "(no words yet: press Listen)")
 			item.set_tooltip_text(1, "%s, %s" % [row["clip"], row["group"]])
 			item.set_text(2, "✓" if row["chosen"] != null else ("…" if not row["takes"].is_empty() else ""))
 			if row["edited"]:
@@ -956,7 +956,7 @@ func refresh_lines() -> void:
 				item.select(0)
 		line_info.text = ""
 		if int(result["total"]) > line_rows.size():
-			line_info.text = "Showing %d of %d lines: look for words to see the others." % [line_rows.size(), int(result["total"])]
+			line_info.text = "Showing %d of %d lines. Search to see the others." % [line_rows.size(), int(result["total"])]
 		update_buttons())
 
 
@@ -971,7 +971,7 @@ func show_line() -> void:
 	line_info.text = "%s (%s), %.1f s%s" % [selected_line["clip"], selected_line["group"],
 		float(selected_line["end"]) - float(selected_line["start"]), ", your words" if selected_line["edited"] else ""]
 	take_pick.clear()
-	take_pick.add_item("The disc's own line")
+	take_pick.add_item("Original line")
 	take_pick.set_item_metadata(0, -1)
 
 	for take in selected_line["takes"]:
@@ -1041,7 +1041,7 @@ func report_takes(result: Dictionary) -> void:
 	if failed.is_empty():
 		say("%d new take%s." % [result["takes"].size(), "" if result["takes"].size() == 1 else "s"], GOOD_COLOUR)
 	else:
-		say("%d new, %d not: %s" % [result["takes"].size(), failed.size(), failed[0]["error"]], WARN_COLOUR)
+		say("%d new, %d failed: %s" % [result["takes"].size(), failed.size(), failed[0]["error"]], WARN_COLOUR)
 
 
 func refresh_lines_then_show() -> void:
@@ -1090,7 +1090,7 @@ func cutscene_code() -> String:
 func show_subtitle() -> void:
 	if subtitle == null or not is_instance_valid(subtitle):
 		subtitle = null
-		cutscene_info.text = "Select a subtitle of a cutscene (a CutsceneSubtitle node) in the Scene dock."
+		cutscene_info.text = "Pick a subtitle in a cutscene in the Level list."
 		cutscene_words.text = ""
 		update_buttons()
 		return
@@ -1210,9 +1210,9 @@ func make_pack() -> void:
 	run("pack", {}, "Making the pack", func(result: Variant) -> void:
 		var notes: Array = result.get("notes", [])
 		if result.get("pack") == null:
-			pack_label.text = "No take is kept yet, so there is no pack (the disc's lines play)."
+			pack_label.text = "No take kept yet, so the disc's lines play."
 		else:
-			pack_label.text = "%d lines in %d recordings are in the AI voices pack. Switch it on in the launcher's Mods page and play with your edits." % [
+			pack_label.text = "%d lines in %d recordings are in the AI voices mod. Turn it on in the launcher's Mods page." % [
 				int(result["lines"]), int(result["clips"])]
 		if not notes.is_empty():
 			pack_label.text += "\n" + "\n".join(PackedStringArray(notes.slice(0, 5))))
@@ -1228,7 +1228,7 @@ func hear(path: String) -> void:
 	var stream: AudioStreamWAV = AudioStreamWAV.load_from_file(path)
 
 	if stream == null:
-		say("Cannot play " + path.get_file(), WARN_COLOUR)
+		say("Couldn't play " + path.get_file(), WARN_COLOUR)
 		return
 
 	player.stream = stream

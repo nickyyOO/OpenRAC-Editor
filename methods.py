@@ -133,6 +133,23 @@ def add_module_version_string(self, s):
     self.module_version_string += "." + s
 
 
+def openrac_version_label():
+    """OpenRAC Editor's version as people see it: "v0.2.0" for a release, "dev" for any other build."""
+    raw = os.getenv("OPENRAC_EDITOR_VERSION", "").strip().removeprefix("v")
+    if not raw or raw == "dev":
+        return "dev"
+    if not re.fullmatch(r"[0-9A-Za-z.+-]+", raw):
+        print_error(f'OPENRAC_EDITOR_VERSION "{raw}" is not a version like v0.2.0.')
+        sys.exit(255)
+    return "v" + raw
+
+
+def openrac_version_numbers():
+    """The label's first three numbers for Windows file properties ("0,2,0,0"); 0,0,0,0 for "dev"."""
+    numbers = [int(n) for n in re.findall(r"\d+", openrac_version_label())[:3]]
+    return ",".join(str(n) for n in numbers + [0] * (4 - len(numbers)))
+
+
 def get_version_info(module_version_string="", silent=False):
     build_name = "custom_build"
     if os.getenv("BUILD_NAME") is not None:
@@ -153,6 +170,10 @@ def get_version_info(module_version_string="", silent=False):
         "module_config": str(version.module_config) + module_version_string,
         "website": str(version.website),
         "docs_branch": str(version.docs),
+        # OpenRAC Editor: its own version, shown everywhere instead of the engine's. A release build
+        # gets its tag (OPENRAC_EDITOR_VERSION=v0.2.0, release.yml); any other build is "dev".
+        "openrac_label": openrac_version_label(),
+        "openrac_numbers": openrac_version_numbers(),
     }
 
     # For dev snapshots (alpha, beta, RC, etc.) we do not commit status change to Git,

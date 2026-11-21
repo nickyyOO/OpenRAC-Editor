@@ -73,7 +73,7 @@ class Dock(unittest.TestCase):
         self.assertFalse(steps["running_after_stop"])
         self.assertEqual(steps["after_stop"], [[False, "The voice tools are not running."]])
         self.assertGreaterEqual(steps["models_listed"], 7)
-        self.assertIn("Preset:", steps["hardware_text"])
+        self.assertIn("Best choice:", steps["hardware_text"])
         self.assertIn("3 lines", steps["disc_text"])
         self.assertEqual(steps["voices"], 2)
         self.assertEqual(steps["lines"], 3)

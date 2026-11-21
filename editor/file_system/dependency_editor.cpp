@@ -51,7 +51,7 @@
 #include "scene/gui/tree.h"
 
 static void _setup_search_file_dialog(EditorFileDialog *p_dialog, const String &p_file, const String &p_type) {
-	p_dialog->set_title(vformat(TTR("Search Replacement For: %s"), p_file.get_file()));
+	p_dialog->set_title(vformat(TTR("Find a Replacement for %s"), p_file.get_file()));
 
 	// Set directory to closest existing directory.
 	p_dialog->set_current_dir(p_file.get_base_dir());
@@ -329,7 +329,7 @@ void DependencyEditor::_update_list() {
 
 void DependencyEditor::edit(const String &p_path) {
 	editing = p_path;
-	set_title(TTR("Dependencies For:") + " " + p_path.get_file());
+	set_title(TTR("Files Needed By:") + " " + p_path.get_file());
 
 	filter->set_text("");
 
@@ -338,10 +338,10 @@ void DependencyEditor::edit(const String &p_path) {
 
 	if (EditorNode::get_singleton()->is_scene_open(p_path)) {
 		warning_label->show();
-		warning_label->set_text(vformat(TTR("Scene \"%s\" is currently being edited. Changes will only take effect when reloaded."), p_path.get_file()));
+		warning_label->set_text(vformat(TTR("Level \"%s\" is open. Changes show after you reopen it."), p_path.get_file()));
 	} else if (ResourceCache::has(p_path)) {
 		warning_label->show();
-		warning_label->set_text(vformat(TTR("Resource \"%s\" is in use. Changes will only take effect when reloaded."), p_path.get_file()));
+		warning_label->set_text(vformat(TTR("\"%s\" is in use. Changes show after you reopen it."), p_path.get_file()));
 	} else {
 		warning_label->hide();
 	}
@@ -383,12 +383,12 @@ DependencyEditor::DependencyEditor() {
 	tree->connect("button_clicked", callable_mp(this, &DependencyEditor::_load_pressed));
 
 	HBoxContainer *hbc = memnew(HBoxContainer);
-	Label *label = memnew(Label(TTR("Dependencies:")));
+	Label *label = memnew(Label(TTR("Files Needed:")));
 	label->set_theme_type_variation("HeaderSmall");
 
 	hbc->add_child(label);
 	hbc->add_spacer();
-	fixdeps = memnew(Button(TTR("Fix Broken")));
+	fixdeps = memnew(Button(TTR("Fix Missing")));
 	hbc->add_child(fixdeps);
 	fixdeps->connect(SceneStringName(pressed), callable_mp(this, &DependencyEditor::_fix_all));
 
@@ -397,8 +397,8 @@ DependencyEditor::DependencyEditor() {
 	HBoxContainer *hbc_filter = memnew(HBoxContainer);
 	vb->add_child(hbc_filter);
 	filter = memnew(LineEdit);
-	filter->set_accessibility_name(TTRC("Filter Dependencies"));
-	filter->set_placeholder(TTRC("Filter Dependencies"));
+	filter->set_accessibility_name(TTRC("Filter Files"));
+	filter->set_placeholder(TTRC("Filter Files"));
 	filter->set_clear_button_enabled(true);
 	filter->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	filter->connect(SceneStringName(text_changed), callable_mp(this, &DependencyEditor::_update_list).unbind(1));
@@ -407,17 +407,17 @@ DependencyEditor::DependencyEditor() {
 	menu_sort = memnew(MenuButton);
 	menu_sort->set_flat(false);
 	menu_sort->set_theme_type_variation("FlatMenuButton");
-	menu_sort->set_tooltip_text(TTRC("Sort Dependencies"));
-	menu_sort->set_accessibility_name(TTRC("Sort Dependencies"));
+	menu_sort->set_tooltip_text(TTRC("Sort Files"));
+	menu_sort->set_accessibility_name(TTRC("Sort Files"));
 
 	PopupMenu *popup_sort = menu_sort->get_popup();
 	popup_sort->connect(SceneStringName(id_pressed), callable_mp(this, &DependencyEditor::_sort_option_selected));
-	popup_sort->add_radio_check_item(TTRC("Sort by Type (Ascending)"), (int)DependencyEditorSortBy::TYPE);
-	popup_sort->add_radio_check_item(TTRC("Sort by Type (Descending)"), (int)DependencyEditorSortBy::TYPE_REVERSE);
-	popup_sort->add_radio_check_item(TTRC("Sort by Name (Ascending)"), (int)DependencyEditorSortBy::NAME);
-	popup_sort->add_radio_check_item(TTRC("Sort by Name (Descending)"), (int)DependencyEditorSortBy::NAME_REVERSE);
-	popup_sort->add_radio_check_item(TTRC("Sort by Path (Ascending)"), (int)DependencyEditorSortBy::PATH);
-	popup_sort->add_radio_check_item(TTRC("Sort by Path (Descending)"), (int)DependencyEditorSortBy::PATH_REVERSE);
+	popup_sort->add_radio_check_item(TTRC("Type (A to Z)"), (int)DependencyEditorSortBy::TYPE);
+	popup_sort->add_radio_check_item(TTRC("Type (Z to A)"), (int)DependencyEditorSortBy::TYPE_REVERSE);
+	popup_sort->add_radio_check_item(TTRC("Name (A to Z)"), (int)DependencyEditorSortBy::NAME);
+	popup_sort->add_radio_check_item(TTRC("Name (Z to A)"), (int)DependencyEditorSortBy::NAME_REVERSE);
+	popup_sort->add_radio_check_item(TTRC("Path (A to Z)"), (int)DependencyEditorSortBy::PATH);
+	popup_sort->add_radio_check_item(TTRC("Path (Z to A)"), (int)DependencyEditorSortBy::PATH_REVERSE);
 	popup_sort->set_item_checked((int)sort_by, true);
 
 	hbc_filter->add_child(menu_sort);
@@ -432,7 +432,7 @@ DependencyEditor::DependencyEditor() {
 	warning_label->set_autowrap_mode(TextServer::AUTOWRAP_WORD);
 	vb->add_child(warning_label);
 
-	set_title(TTR("Dependency Editor"));
+	set_title(TTR("Needed Files"));
 	search = memnew(EditorFileDialog);
 	search->connect("file_selected", callable_mp(this, &DependencyEditor::_searched));
 	search->set_file_mode(EditorFileDialog::FILE_MODE_OPEN_FILE);
@@ -460,7 +460,7 @@ void DependencyEditorOwners::_list_rmb_clicked(int p_item, const Vector2 &p_pos,
 		}
 
 		if (only_scenes_selected) {
-			file_options->add_icon_item(get_editor_theme_icon(SNAME("Load")), TTRN("Open Scene", "Open Scenes", selected_items.size()), FILE_MENU_OPEN);
+			file_options->add_icon_item(get_editor_theme_icon(SNAME("Load")), TTRN("Open Level", "Open Scenes", selected_items.size()), FILE_MENU_OPEN);
 		} else if (selected_items.size() == 1) {
 			file_options->add_icon_item(get_editor_theme_icon(SNAME("Load")), TTR("Open"), FILE_MENU_OPEN);
 		} else {
@@ -540,13 +540,13 @@ void DependencyEditorOwners::show(const String &p_path) {
 	int count = owners->get_item_count();
 	if (count > 0) {
 		empty->hide();
-		owners_count->set_text(vformat(TTR("Owners of: %s (Total: %d)"), p_path.get_file(), count));
+		owners_count->set_text(vformat(TTR("Used by %s (%d files)"), p_path.get_file(), count));
 		owners_count->show();
 		owners_mc->show();
 	} else {
 		owners_count->hide();
 		owners_mc->hide();
-		empty->set_text(vformat(TTR("No owners found for: %s"), p_path.get_file()));
+		empty->set_text(vformat(TTR("Nothing uses %s."), p_path.get_file()));
 		empty->show();
 	}
 
@@ -592,7 +592,7 @@ DependencyEditorOwners::DependencyEditorOwners() {
 	owners->set_allow_rmb_select(true);
 	owners_mc->add_child(owners);
 
-	set_title(TTRC("Owners List"));
+	set_title(TTRC("Used By"));
 }
 
 ///////////////////////
@@ -757,13 +757,13 @@ void DependencyRemoveDialog::show(const Vector<String> &p_folders, const Vector<
 	removed_deps.sort();
 	if (removed_deps.is_empty()) {
 		vb_owners->hide();
-		text->set_text(TTR("Remove the selected files from the project? (Cannot be undone.)\nDepending on your filesystem configuration, the files will either be moved to the system trash or deleted permanently."));
+		text->set_text(TTR("Delete the selected files? This can't be undone."));
 		reset_size();
 		popup_centered();
 	} else {
 		_build_removed_dependency_tree(removed_deps);
 		vb_owners->show();
-		text->set_text(TTR("The files being removed are required by other resources in order for them to work.\nRemove them anyway? (Cannot be undone.)\nDepending on your filesystem configuration, the files will either be moved to the system trash or deleted permanently."));
+		text->set_text(TTR("Other files need these files.\nDelete them anyway? This can't be undone."));
 		popup_centered(Size2(500, 350));
 	}
 
@@ -802,7 +802,7 @@ void DependencyRemoveDialog::ok_pressed() {
 		print_verbose("Moving to trash: " + path);
 		Error err = OS::get_singleton()->move_to_trash(path);
 		if (err != OK) {
-			EditorNode::get_singleton()->add_io_error(TTR("Cannot remove:") + "\n" + file + "\n");
+			EditorNode::get_singleton()->add_io_error(TTR("Couldn't delete:") + "\n" + file + "\n");
 		} else {
 			emit_signal(SNAME("file_removed"), file);
 		}
@@ -822,7 +822,7 @@ void DependencyRemoveDialog::ok_pressed() {
 			print_verbose("Moving to trash: " + path);
 			Error err = OS::get_singleton()->move_to_trash(path);
 			if (err != OK) {
-				EditorNode::get_singleton()->add_io_error(TTR("Cannot remove:") + "\n" + dirs_to_delete[i] + "\n");
+				EditorNode::get_singleton()->add_io_error(TTR("Couldn't delete:") + "\n" + dirs_to_delete[i] + "\n");
 			} else {
 				emit_signal(SNAME("folder_removed"), dirs_to_delete[i]);
 			}
@@ -859,7 +859,7 @@ void DependencyRemoveDialog::_bind_methods() {
 }
 
 DependencyRemoveDialog::DependencyRemoveDialog() {
-	set_ok_button_text(TTR("Remove"));
+	set_ok_button_text(TTR("Delete"));
 
 	VBoxContainer *vb = memnew(VBoxContainer);
 	vb->set_h_size_flags(Control::SIZE_EXPAND_FILL);
@@ -892,7 +892,7 @@ DependencyRemoveDialog::DependencyRemoveDialog() {
 
 	Label *owners_label = memnew(Label);
 	owners_label->set_theme_type_variation("HeaderSmall");
-	owners_label->set_text(TTR("Owners of files to be deleted:"));
+	owners_label->set_text(TTR("Files that use them:"));
 	vb_owners->add_child(owners_label);
 
 	mc = memnew(MarginContainer);
@@ -905,7 +905,7 @@ DependencyRemoveDialog::DependencyRemoveDialog() {
 	owners->set_scroll_hint_mode(Tree::SCROLL_HINT_MODE_BOTH);
 	owners->set_hide_root(true);
 	owners->set_custom_minimum_size(Size2(0, 94) * EDSCALE);
-	owners->set_accessibility_name(TTRC("Owners"));
+	owners->set_accessibility_name(TTRC("Used By"));
 	mc->add_child(owners);
 	owners->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 
@@ -928,7 +928,7 @@ void DependencyErrorDialog::show(const String &p_for_file, const HashMap<String,
 	for_file = p_for_file;
 
 	// TRANSLATORS: The placeholder is a filename.
-	set_title(vformat(TTR("Error loading: %s"), p_for_file.get_file()));
+	set_title(vformat(TTR("Couldn't load: %s"), p_for_file.get_file()));
 
 	HashMap<String, HashSet<String>> missing_to_owners;
 	for (const KeyValue<String, HashSet<String>> &E : p_report) {
@@ -957,10 +957,10 @@ void DependencyErrorDialog::show(const String &p_for_file, const HashMap<String,
 		for (const String &owner_path : E.value) {
 			TreeItem *owner_ti = missing_ti->create_child();
 			// TRANSLATORS: The placeholder is a file path.
-			owner_ti->set_text(0, vformat(TTR("Referenced by %s"), owner_path));
+			owner_ti->set_text(0, vformat(TTR("Used by %s"), owner_path));
 			owner_ti->set_metadata(0, owner_path);
 			owner_ti->set_auto_translate_mode(0, AUTO_TRANSLATE_MODE_DISABLED);
-			owner_ti->add_button(1, files->get_editor_theme_icon(SNAME("Edit")), BUTTON_ID_OPEN_DEPS_EDITOR, false, TTRC("Fix Dependencies"));
+			owner_ti->add_button(1, files->get_editor_theme_icon(SNAME("Edit")), BUTTON_ID_OPEN_DEPS_EDITOR, false, TTRC("Fix Missing Files"));
 		}
 	}
 
@@ -1068,12 +1068,12 @@ DependencyErrorDialog::DependencyErrorDialog() {
 	files->set_column_expand(1, false);
 	files->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 	files->connect("button_clicked", callable_mp(this, &DependencyErrorDialog::_on_files_button_clicked));
-	vb->add_margin_child(TTRC("Load failed due to missing dependencies:"), files, true);
+	vb->add_margin_child(TTRC("Couldn't open. These files are missing:"), files, true);
 
 	set_min_size(Size2(500, 320) * EDSCALE);
 	set_cancel_button_text(TTRC("Close"));
 
-	Label *text = memnew(Label(TTRC("Which action should be taken?")));
+	Label *text = memnew(Label(TTRC("What do you want to do?")));
 	text->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
 	vb->add_child(text);
 }
@@ -1088,7 +1088,7 @@ void OrphanResourcesDialog::ok_pressed() {
 		return;
 	}
 
-	delete_confirm->set_text(vformat(TTR("Permanently delete %d item(s)? (No undo!)"), paths.size()));
+	delete_confirm->set_text(vformat(TTR("Delete %d items for good? This can't be undone."), paths.size()));
 	delete_confirm->popup_centered();
 }
 
@@ -1140,7 +1140,7 @@ bool OrphanResourcesDialog::_fill_owners(EditorFileSystemDirectory *efsd, HashMa
 				int ds = efsd->get_file_deps(i).size();
 				ti->set_text(1, itos(ds));
 				if (ds) {
-					ti->add_button(1, files->get_editor_theme_icon(SNAME("GuiVisibilityVisible")), -1, false, TTR("Show Dependencies"));
+					ti->add_button(1, files->get_editor_theme_icon(SNAME("GuiVisibilityVisible")), -1, false, TTR("Show Needed Files"));
 				}
 				ti->set_metadata(0, path);
 				has_children = true;

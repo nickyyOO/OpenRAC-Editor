@@ -8,8 +8,8 @@ GODOT_ICON ICON platform/windows/godot_console.ico
 1 RT_MANIFEST "platform/windows/godot.manifest"
 
 1 VERSIONINFO
-FILEVERSION     GODOT_VERSION_MAJOR,GODOT_VERSION_MINOR,GODOT_VERSION_PATCH,0
-PRODUCTVERSION  GODOT_VERSION_MAJOR,GODOT_VERSION_MINOR,GODOT_VERSION_PATCH,0
+FILEVERSION     OPENRAC_EDITOR_VERSION_NUMBERS
+PRODUCTVERSION  OPENRAC_EDITOR_VERSION_NUMBERS
 FILEOS          4
 FILETYPE        1
 BEGIN
@@ -19,12 +19,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",            "OpenRAC"
             VALUE "FileDescription",        GODOT_VERSION_NAME " (Console)"
-            VALUE "FileVersion",            GODOT_VERSION_NUMBER
+            VALUE "FileVersion",            OPENRAC_EDITOR_VERSION
             VALUE "ProductName",            GODOT_VERSION_NAME " (Console)"
             VALUE "Licence",                "MIT"
             VALUE "LegalCopyright",         "OpenRAC contributors. Based on Godot Engine, (c) 2007-present Juan Linietsky, Ariel Manzur and Godot Engine contributors"
             VALUE "Info",                   "https://openrac.dev"
-            VALUE "ProductVersion",         GODOT_VERSION_FULL_BUILD
+            VALUE "ProductVersion",         OPENRAC_EDITOR_VERSION
         END
     END
     BLOCK "VarFileInfo"

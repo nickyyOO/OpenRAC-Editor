@@ -432,7 +432,7 @@ void EditorData::apply_changes_in_editors() {
 
 void EditorData::paste_object_params(Object *p_object) {
 	ERR_FAIL_NULL(p_object);
-	undo_redo_manager->create_action(TTR("Paste Params"));
+	undo_redo_manager->create_action(TTR("Paste Settings"));
 	for (const PropertyData &E : clipboard) {
 		String name = E.name;
 		undo_redo_manager->add_do_property(p_object, name, E.value);
@@ -779,12 +779,12 @@ bool EditorData::reload_scene_from_memory(int p_idx, bool p_mark_unsaved) {
 	Ref<PackedScene> pscene;
 	pscene.instantiate();
 
-	EditorProgress ep("update_scene", TTR("Updating Scene"), 2);
-	ep.step(TTR("Storing local changes..."), 0);
+	EditorProgress ep("update_scene", TTR("Updating Level"), 2);
+	ep.step(TTR("Saving your changes"), 0);
 	// Pack first, so it stores diffs to previous version of saved scene.
 	Error err = pscene->pack(edited_scene[p_idx].root);
 	ERR_FAIL_COND_V(err != OK, false);
-	ep.step(TTR("Updating scene..."), 1);
+	ep.step(TTR("Updating level"), 1);
 	Node *new_scene = pscene->instantiate(PackedScene::GEN_EDIT_STATE_MAIN);
 	ERR_FAIL_NULL_V(new_scene, false);
 
@@ -923,7 +923,7 @@ String EditorData::get_scene_title(int p_idx, bool p_always_strip_extension) con
 		return TTR("[empty]");
 	}
 	if (edited_scene[p_idx].root->get_scene_file_path().is_empty()) {
-		return TTR("[unsaved]");
+		return TTR("(unsaved)");
 	}
 
 	const String filename = edited_scene[p_idx].root->get_scene_file_path().get_file();

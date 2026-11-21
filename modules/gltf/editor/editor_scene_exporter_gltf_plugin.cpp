@@ -93,7 +93,7 @@ void SceneExporterGLTFPlugin::_popup_gltf_settings_dialog(const String &p_select
 void SceneExporterGLTFPlugin::_popup_gltf_export_dialog() {
 	Node *root = EditorNode::get_singleton()->get_tree()->get_edited_scene_root();
 	if (!root) {
-		EditorNode::get_singleton()->show_warning(TTR("This operation can't be done without a scene."));
+		EditorNode::get_singleton()->show_warning(TTR("Open a level first."));
 		return;
 	}
 	// Set the file dialog's file name to the scene name.

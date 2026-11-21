@@ -485,9 +485,10 @@ void EditorLog::_reset_message_counts() {
 }
 
 EditorLog::EditorLog() {
-	set_name(TTRC("Output"));
+	set_name(TTRC("Messages")); // OpenRAC Editor: a plain name; the layout key stays "Output" so saved layouts still work.
+	set_layout_key("Output");
 	set_icon_name("Output");
-	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("bottom_panels/toggle_output_bottom_panel", TTRC("Toggle Output Dock"), KeyModifierMask::ALT | Key::O));
+	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("bottom_panels/toggle_output_bottom_panel", TTRC("Show or Hide Messages"), KeyModifierMask::ALT | Key::O));
 	set_default_slot(EditorDock::DOCK_SLOT_BOTTOM);
 	set_available_layouts(EditorDock::DOCK_LAYOUT_HORIZONTAL | EditorDock::DOCK_LAYOUT_FLOATING);
 	set_process_shortcut_input(true);
@@ -531,10 +532,10 @@ EditorLog::EditorLog() {
 
 	// Clear.
 	clear_button = memnew(Button);
-	clear_button->set_accessibility_name(TTRC("Clear Log"));
+	clear_button->set_accessibility_name(TTRC("Clear Messages"));
 	clear_button->set_theme_type_variation("BottomPanelButton");
 	clear_button->set_focus_mode(FOCUS_ACCESSIBILITY);
-	clear_button->set_shortcut(ED_SHORTCUT("editor/clear_output", TTRC("Clear Output"), KeyModifierMask::CMD_OR_CTRL | KeyModifierMask::ALT | Key::K));
+	clear_button->set_shortcut(ED_SHORTCUT("editor/clear_output", TTRC("Clear Messages"), KeyModifierMask::CMD_OR_CTRL | KeyModifierMask::ALT | Key::K));
 	clear_button->connect(SceneStringName(pressed), callable_mp(this, &EditorLog::_clear_request));
 	bottom_hf->add_child(clear_button);
 
@@ -542,7 +543,7 @@ EditorLog::EditorLog() {
 	collapse_button = memnew(Button);
 	collapse_button->set_theme_type_variation("BottomPanelButton");
 	collapse_button->set_focus_mode(FOCUS_ACCESSIBILITY);
-	collapse_button->set_tooltip_text(TTR("Collapse duplicate messages into one log entry. Shows number of occurrences."));
+	collapse_button->set_tooltip_text(TTR("Show repeated messages once, with a count."));
 	collapse_button->set_toggle_mode(true);
 	collapse_button->set_pressed(false);
 	collapse_button->connect(SceneStringName(toggled), callable_mp(this, &EditorLog::_set_collapse));
@@ -563,27 +564,27 @@ EditorLog::EditorLog() {
 
 	// Message Type Filters.
 	LogFilter *std_filter = memnew(LogFilter(MSG_TYPE_STD));
-	std_filter->initialize_button(TTRC("Standard Messages"), TTRC("Toggle visibility of standard output messages."), callable_mp(this, &EditorLog::_set_filter_active));
+	std_filter->initialize_button(TTRC("Normal Messages"), TTRC("Show or hide normal messages."), callable_mp(this, &EditorLog::_set_filter_active));
 	hbox->add_child(std_filter->toggle_button);
 	type_filter_map.insert(MSG_TYPE_STD, std_filter);
 	type_filter_map.insert(MSG_TYPE_STD_RICH, std_filter);
 
 	LogFilter *error_filter = memnew(LogFilter(MSG_TYPE_ERROR));
-	error_filter->initialize_button(TTRC("Errors"), TTRC("Toggle visibility of errors."), callable_mp(this, &EditorLog::_set_filter_active));
+	error_filter->initialize_button(TTRC("Errors"), TTRC("Show or hide errors."), callable_mp(this, &EditorLog::_set_filter_active));
 	hbox->add_child(error_filter->toggle_button);
 	type_filter_map.insert(MSG_TYPE_ERROR, error_filter);
 
 	LogFilter *warning_filter = memnew(LogFilter(MSG_TYPE_WARNING));
-	warning_filter->initialize_button(TTRC("Warnings"), TTRC("Toggle visibility of warnings."), callable_mp(this, &EditorLog::_set_filter_active));
+	warning_filter->initialize_button(TTRC("Warnings"), TTRC("Show or hide warnings."), callable_mp(this, &EditorLog::_set_filter_active));
 	hbox->add_child(warning_filter->toggle_button);
 	type_filter_map.insert(MSG_TYPE_WARNING, warning_filter);
 
 	LogFilter *editor_filter = memnew(LogFilter(MSG_TYPE_EDITOR));
-	editor_filter->initialize_button(TTRC("Editor Messages"), TTRC("Toggle visibility of editor messages."), callable_mp(this, &EditorLog::_set_filter_active));
+	editor_filter->initialize_button(TTRC("Editor Messages"), TTRC("Show or hide editor messages."), callable_mp(this, &EditorLog::_set_filter_active));
 	hbox->add_child(editor_filter->toggle_button);
 	type_filter_map.insert(MSG_TYPE_EDITOR, editor_filter);
 
-	add_message(GODOT_VERSION_FULL_NAME " (c) 2007-present Juan Linietsky, Ariel Manzur & Godot Contributors.");
+	add_message(OPENRAC_EDITOR_VERSION_NAME); // OpenRAC Editor: its own version; Godot's credits are in About.
 
 	eh.errfunc = _error_handler;
 	eh.userdata = this;

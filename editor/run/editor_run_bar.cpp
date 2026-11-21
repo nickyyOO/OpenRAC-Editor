@@ -529,6 +529,7 @@ void EditorRunBar::update_profiler_autostart_indicator() {
 	bool network_profiler_active = EditorSettings::get_singleton()->get_project_metadata("debug_options", "autostart_network_profiler", false);
 	bool any_profiler_active = profiler_active | visual_profiler_active | network_profiler_active;
 	any_profiler_active &= !Engine::get_singleton()->is_recovery_mode_hint();
+	any_profiler_active = false; // OpenRAC Editor: no profilers (nothing runs in the editor).
 	profiler_autostart_indicator->set_visible(any_profiler_active);
 	if (any_profiler_active) {
 		String tooltip = TTR("Autostart is enabled for the following profilers, which can have a performance impact:");
@@ -724,4 +725,8 @@ EditorRunBar::EditorRunBar() {
 	write_movie_button->set_tooltip_text(TTRC("Enable Movie Maker mode.\nThe project will run at stable FPS and the visual and audio output will be recorded to a video file."));
 	write_movie_button->set_accessibility_name(TTRC("Enable Movie Maker Mode"));
 	write_movie_button->set_flat(false);
+
+	// OpenRAC Editor: the game runs in OpenRAC, not here, so Godot's run, pause, stop, run-scene and Movie
+	// Maker buttons have no use. "Check" and "Play" (the OpenRAC plugin, on the toolbar) take their place.
+	main_panel->hide();
 }

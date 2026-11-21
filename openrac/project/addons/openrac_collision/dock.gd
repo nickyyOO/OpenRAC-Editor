@@ -34,7 +34,7 @@ var pick_toggle: CheckButton
 var selection_label: Label
 
 ## The surface id a repaint gives.
-var surface_spin: SpinBox
+var surface_option: OptionButton
 
 ## The footstep sound class a repaint gives.
 var sound_spin: SpinBox
@@ -101,7 +101,7 @@ func _init() -> void:
 	scroll.add_child(box)
 
 	status_label = wrapped(box, "")
-	button(box, "How to edit collision", handle_help_pressed)
+	button(box, "How to Edit Collision", handle_help_pressed)
 	help_text = RichTextLabel.new()
 	help_text.bbcode_enabled = true
 	help_text.fit_content = true
@@ -133,34 +133,30 @@ static func px(value: float) -> float:
 
 ## The show toggle and the legend.
 func build_view(box: VBoxContainer) -> void:
-	header(box, "See")
+	header(box, "Look")
 	show_toggle = CheckButton.new()
-	show_toggle.text = "Show collision"
-	show_toggle.tooltip_text = "The level's collision and every moby's class collision, coloured by surface"
+	show_toggle.text = "Show Collision"
+	show_toggle.tooltip_text = "Colour the level's collision by ground type."
 	show_toggle.toggled.connect(handle_show_toggled)
 	box.add_child(show_toggle)
 	needs.level.append(show_toggle)
 	legend = VBoxContainer.new()
 	box.add_child(legend)
-	wrapped(box, "A face's type byte: bits 0-4 the surface id (the colour), bits 5-6 the footstep sound class "
-		+ "(0-3), bit 7 keeps the face out of some of the game's queries. Hero walls (yellow) are walls only "
-		+ "the player meets; they have no type byte.")
+	wrapped(box, "Each colour is a ground type. Yellow walls block only Ratchet.")
 
 
 ## The pick toggle and the selection tools.
 func build_selection(box: VBoxContainer) -> void:
-	header(box, "Select")
+	header(box, "Pick")
 	pick_toggle = CheckButton.new()
-	pick_toggle.text = "Pick faces in the 3D view"
+	pick_toggle.text = "Pick Faces"
 	pick_toggle.toggled.connect(handle_pick_toggled)
 	box.add_child(pick_toggle)
 	needs.level.append(pick_toggle)
-	wrapped(box, "Click a face to select it, Shift-click to add or take one out, drag for a box, "
-		+ "Alt-click for the connected faces of its surface (Shift-Alt-click adds them). Selecting a "
-		+ "tie or shrub selects the collision baked inside its bounds.")
+	wrapped(box, "Click a face to pick it. Shift-click adds, Alt-click picks the whole patch.")
 	var row := HBoxContainer.new()
 	box.add_child(row)
-	needs.selection.append(button(row, "Connected, same surface", handle_connected_pressed))
+	needs.selection.append(button(row, "Pick Whole Patch", handle_connected_pressed))
 	needs.selection.append(button(row, "Clear", handle_clear_pressed))
 	selection_label = wrapped(box, "")
 
@@ -171,24 +167,33 @@ func build_edit(box: VBoxContainer) -> void:
 	var grid := GridContainer.new()
 	grid.columns = 2
 	box.add_child(grid)
-	surface_spin = spin(grid, "Surface id", 0, 31, 1, Surfaces.DEFAULT_SURFACE)
-	surface_spin.value_changed.connect(handle_surface_changed)
-	sound_spin = spin(grid, "Sound class", 0, 3, 1, 0)
+	var surface_label := Label.new()
+	surface_label.text = "Ground type"
+	grid.add_child(surface_label)
+	surface_option = OptionButton.new()
+	surface_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for surface in 32:
+		var known: String = Surfaces.describe(surface)
+		surface_option.add_item(known, surface)
+	surface_option.select(surface_option.get_item_index(Surfaces.DEFAULT_SURFACE))
+	surface_option.item_selected.connect(func(_index: int) -> void: handle_surface_changed(surface_option.get_selected_id()))
+	grid.add_child(surface_option)
+	sound_spin = spin(grid, "Footstep sound", 0, 3, 1, 0)
 	excluded_check = CheckBox.new()
-	excluded_check.text = "Excluded from some queries (bit 7)"
+	excluded_check.text = "Ignore for shots"
 	box.add_child(excluded_check)
 	surface_meaning = wrapped(box, "")
-	handle_surface_changed(surface_spin.value)
-	needs.selection.append(button(box, "Repaint the selected faces", handle_repaint_pressed))
-	needs.selection.append(button(box, "Delete the selected faces", handle_delete_pressed))
+	handle_surface_changed(surface_option.get_selected_id())
+	needs.selection.append(button(box, "Repaint", handle_repaint_pressed))
+	needs.selection.append(button(box, "Delete", handle_delete_pressed))
 	var row := HBoxContainer.new()
 	box.add_child(row)
 
 	for axis in ["X", "Y", "Z"]:
 		move_spins.append(spin(row, axis, -1024, 1024, STEP_ACROSS, 0.0))
 
-	needs.selection.append(button(box, "Move the selected faces by this", handle_move_pressed))
-	wrapped(box, "Game units: X and Y across, Z up. Faces snap to the game's grid: 1/16 across, 1/64 up.")
+	needs.selection.append(button(box, "Move", handle_move_pressed))
+	wrapped(box, "Z is up. Faces snap to the game's grid.")
 
 
 ## The add tools.
@@ -201,22 +206,20 @@ func build_add(box: VBoxContainer) -> void:
 		size_spins.append(spin(row, axis, STEP_ACROSS, 64, STEP_ACROSS, 2.0))
 
 	place_label = wrapped(box, "")
-	needs.place.append(button(box, "Add a floor quad (X by Y) here", handle_quad_pressed))
-	needs.place.append(button(box, "Add a box (X by Y by Z) here", handle_box_pressed))
-	needs.mesh.append(button(box, "Make collision from the selected mesh", handle_mesh_pressed))
-	needs.level.append(button(box, "Add a static glTF model to the level", handle_static_model_pressed))
-	needs.level.append(button(box, "Add a spinning glTF prop to the level", handle_animated_model_pressed))
-	wrapped(box, "New faces take the surface id, sound class and exclusion above. Mesh corners snap to the game's "
-		+ "collision grid; dense cells use OpenRAC's expanded collision format. Static glTF imports add geometry, "
-		+ "not moby behavior. Spinning props are mod-only visual objects with no game collision.")
-	needs.level.append(button(box, "Check the limits", handle_check_pressed))
+	needs.place.append(button(box, "Add Floor", handle_quad_pressed))
+	needs.place.append(button(box, "Add Box", handle_box_pressed))
+	needs.mesh.append(button(box, "Collision From Model", handle_mesh_pressed))
+	needs.level.append(button(box, "Add Model", handle_static_model_pressed))
+	needs.level.append(button(box, "Add Spinning Model", handle_animated_model_pressed))
+	wrapped(box, "New faces use the ground type and sound above.")
+	needs.level.append(button(box, "Check Limits", handle_check_pressed))
 
 
 ## The object (moby class) tools.
 func build_object(box: VBoxContainer) -> void:
-	header(box, "Object collision (a moby's class)")
+	header(box, "Object collision")
 	object_label = wrapped(box, "")
-	needs.object.append(button(box, "Open its class scene to edit", handle_open_class_pressed))
+	needs.object.append(button(box, "Edit Its Type", handle_open_class_pressed))
 	var grid := GridContainer.new()
 	grid.columns = 2
 	box.add_child(grid)
@@ -225,24 +228,24 @@ func build_object(box: VBoxContainer) -> void:
 	part_spins.x = spin(grid, "Position X", -4096, 4096, 0.001, 0.0)
 	part_spins.y = spin(grid, "Position Y", -4096, 4096, 0.001, 0.0)
 	part_spins.z = spin(grid, "Position Z", -4096, 4096, 0.001, 0.0)
-	part_spins.queries = spin(grid, "Queries (bits)", 0, 3, 1, 3)
-	part_spins.surface = spin(grid, "Type byte", 0, 255, 1, Surfaces.DEFAULT_SURFACE)
+	part_spins.queries = spin(grid, "Hit by", 0, 3, 1, 3)
+	part_spins.surface = spin(grid, "Ground type", 0, 255, 1, Surfaces.DEFAULT_SURFACE)
 
 	for key in part_spins:
 		needs.part.append(part_spins[key])
 
-	needs.part.append(button(box, "Apply to the selected part", handle_apply_part_pressed))
+	needs.part.append(button(box, "Apply", handle_apply_part_pressed))
 	var row := HBoxContainer.new()
 	box.add_child(row)
 	mode_option = OptionButton.new()
 
 	for mode in ClassCollision.MODES:
-		mode_option.add_item(mode)
+		mode_option.add_item(mode.capitalize())
+		mode_option.set_item_metadata(mode_option.item_count - 1, mode)
 
 	row.add_child(mode_option)
-	needs.object.append(button(row, "Make class collision from its model", handle_make_class_pressed))
-	wrapped(box, "Model units of the class (the Collision node carries the class scale). Queries: 1 the "
-		+ "player's movement and other flag-0x4 queries, 2 shots, bolts and the rest.")
+	needs.object.append(button(row, "Make From Model", handle_make_class_pressed))
+	wrapped(box, "Sizes are in the model's own units.")
 
 
 ## A bold caption between sections.
@@ -300,9 +303,7 @@ func show_level(faces) -> void:
 
 	# A scene without the level's editable collision: say why, and hide the level tools.
 	if faces == null:
-		status_label.text = ("This scene has no level collision: the level's tools are in a level scene "
-			+ "(levels/level_NN/level_NN.tscn). In a class scene (mobys/moby_<class>.tscn), its object "
-			+ "collision is edited below.")
+		status_label.text = "This file isn't a level. Open a level to edit its collision."
 		level_box.visible = false
 		enable("level", false)
 		enable("selection", false)
@@ -323,17 +324,17 @@ func show_level(faces) -> void:
 
 	for surface in ids:
 		var colour: Color = Surfaces.HERO_COLOUR if surface < 0 else Surfaces.colour(surface)
-		var text: String = ("hero walls: %d faces" % by_surface[surface] if surface < 0
-			else "%d (0x%02x): %s; %d faces" % [surface, surface, Surfaces.describe(surface), by_surface[surface]])
+		var text: String = ("Yellow walls: %d faces" % by_surface[surface] if surface < 0
+			else "%s: %d faces" % [Surfaces.describe(surface), by_surface[surface]])
 		legend_row(colour, text)
 
-	var edited: String = " Edited: %d removed, %d added (saved with the scene)." % [
+	var edited: String = " Edited: %d removed, %d added." % [
 		faces.removed.size() + faces.hero_removed.size(), faces.added.size()] if faces.has_edits() else ""
 	status_label.text = "%d collision faces.%s" % [faces.face_count(), edited]
 
 	# Nodes the packer cannot read either are worth knowing about.
 	if not faces.unread.is_empty():
-		status_label.text += " Not read (the packer reads glTF files, BoxMesh, PlaneMesh, QuadMesh): %s." % [
+		status_label.text += " Skipped (not a model the editor can read): %s." % [
 			", ".join(faces.unread)]
 
 	enable("level", true)
@@ -362,8 +363,8 @@ func show_selection(faces, selected: PackedInt32Array) -> void:
 
 	# Nothing selected: say how to select.
 	if selected.is_empty():
-		selection_label.text = "Nothing selected." if pick_toggle.button_pressed else (
-			"Nothing selected. Turn on Pick faces, then click in the 3D view.")
+		selection_label.text = "Nothing picked." if pick_toggle.button_pressed else (
+			"Nothing picked. Turn on Pick Faces, then click a face.")
 		return
 
 	var surfaces: Dictionary = {}
@@ -387,20 +388,20 @@ func show_selection(faces, selected: PackedInt32Array) -> void:
 	var parts: PackedStringArray = PackedStringArray()
 
 	for surface in surfaces:
-		parts.append("surface %d (%d)" % [surface, surfaces[surface]])
+		parts.append("%s (%d)" % [Surfaces.describe(surface), surfaces[surface]])
 
-	var text: String = "%d faces selected" % selected.size()
+	var text: String = "%d faces picked" % selected.size()
 	text += (": %s." % ", ".join(parts)) if not parts.is_empty() else "."
 
 	# Sound classes and exclusion only for faces with a type byte.
 	if not sounds.is_empty():
 		var classes: Array = sounds.keys()
 		classes.sort()
-		text += " Sound class %s; %d excluded from some queries." % [
+		text += " Footstep sound %s; %d ignored for shots." % [
 			", ".join(classes.map(func(c: int) -> String: return str(c))), excluded]
 	# Hero faces and added faces are worth a word each.
 	if heroes > 0:
-		text += " %d of a hero wall (delete only)." % heroes
+		text += " %d on yellow walls (delete only)." % heroes
 	if added > 0:
 		text += " %d added with this dock." % added
 
@@ -409,7 +410,7 @@ func show_selection(faces, selected: PackedInt32Array) -> void:
 	# A single face's byte becomes the repaint's starting point.
 	if selected.size() == 1 and heroes == 0:
 		var kind: int = faces.face_kind(selected[0])
-		surface_spin.value = Surfaces.surface_of(kind)
+		surface_option.select(surface_option.get_item_index(Surfaces.surface_of(kind)))
 		sound_spin.value = Surfaces.sound_of(kind)
 		excluded_check.button_pressed = Surfaces.is_excluded(kind)
 
@@ -417,8 +418,8 @@ func show_selection(faces, selected: PackedInt32Array) -> void:
 ## Where added faces go (null: nowhere yet).
 func show_place(place) -> void:
 	enable("place", place != null)
-	place_label.text = ("Click a face (Pick faces on) to choose where." if place == null
-		else "Here: (%.2f, %.2f, %.2f), the last point you clicked." % [place.x, place.y, place.z])
+	place_label.text = ("Click a face to choose where." if place == null
+		else "Here: the last point you clicked.")
 
 
 ## Whether a mesh outside the collision is selected, for "Make collision from the selected mesh".
@@ -434,8 +435,7 @@ func show_report(text: String) -> void:
 ## The selected object's collision: {} for none, else "text", "can_open" (a moby of a level),
 ## "can_make" (the class scene is open), "part" (a selected part's values, or {}).
 func show_object(info: Dictionary) -> void:
-	object_label.text = info.get("text", "Select a moby to see its class's collision; open its class "
-		+ "scene to edit it.")
+	object_label.text = info.get("text", "Select an object to see its collision.")
 	needs.object[0].disabled = not info.get("can_open", false)
 	needs.object[1].disabled = not info.get("can_make", false)
 	var part: Dictionary = info.get("part", {})
@@ -464,7 +464,7 @@ func enable(group: String, on: bool) -> void:
 
 ## The type byte the controls give.
 func chosen_kind() -> int:
-	return Surfaces.type_byte(int(surface_spin.value), int(sound_spin.value), excluded_check.button_pressed)
+	return Surfaces.type_byte(surface_option.get_selected_id(), int(sound_spin.value), excluded_check.button_pressed)
 
 
 ## The vector of three spin boxes.
@@ -501,7 +501,7 @@ func handle_clear_pressed() -> void:
 
 ## Says what the chosen surface id is known for.
 func handle_surface_changed(value: float) -> void:
-	surface_meaning.text = "Surface %d: %s." % [int(value), Surfaces.describe(int(value))]
+	surface_meaning.text = "Ground type %d." % int(value)
 
 
 ## Repaints the selection.
@@ -567,4 +567,4 @@ func handle_apply_part_pressed() -> void:
 
 ## Makes the class's collision from its model.
 func handle_make_class_pressed() -> void:
-	plugin.make_class_collision(mode_option.get_item_text(mode_option.selected), chosen_kind())
+	plugin.make_class_collision(String(mode_option.get_item_metadata(mode_option.selected)), chosen_kind())

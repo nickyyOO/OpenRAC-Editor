@@ -226,9 +226,9 @@ void EditorDockManager::update_docks_menu() {
 		docks_menu->set_item_icon(id, icon.is_valid() ? icon : default_icon);
 		if (!dock->is_open) {
 			docks_menu->set_item_icon_modulate(id, closed_icon_color_mod);
-			docks_menu->set_item_tooltip(id, vformat(TTR("Open the %s dock."), TTR(dock->get_display_title())));
+			docks_menu->set_item_tooltip(id, vformat(TTR("Open the %s panel."), TTR(dock->get_display_title())));
 		} else {
-			docks_menu->set_item_tooltip(id, vformat(TTR("Focus on the %s dock."), TTR(dock->get_display_title())));
+			docks_menu->set_item_tooltip(id, vformat(TTR("Go to the %s panel."), TTR(dock->get_display_title())));
 		}
 		docks_menu_docks.push_back(dock);
 		id++;
@@ -621,7 +621,7 @@ void EditorDockManager::set_dock_enabled(EditorDock *p_dock, bool p_enabled) {
 	ERR_FAIL_NULL(p_dock);
 	ERR_FAIL_COND_MSG(!all_docks.has(p_dock), vformat("Cannot set enabled unknown dock '%s'.", p_dock->get_display_title()));
 
-	if (p_dock->enabled == p_enabled) {
+	if (p_dock->enabled == p_enabled || p_dock->openrac_hidden) { // OpenRAC Editor: hidden docks stay closed.
 		return;
 	}
 
@@ -655,6 +655,10 @@ void EditorDockManager::close_dock(EditorDock *p_dock) {
 void EditorDockManager::open_dock(EditorDock *p_dock, bool p_set_current) {
 	ERR_FAIL_NULL(p_dock);
 	ERR_FAIL_COND_MSG(!all_docks.has(p_dock), vformat("Cannot open unknown dock '%s'.", p_dock->get_display_title()));
+
+	if (p_dock->openrac_hidden) { // OpenRAC Editor: hidden docks stay closed.
+		return;
+	}
 
 	if (p_dock->is_open) {
 		// Show the dock if it is already open.
@@ -731,6 +735,20 @@ void EditorDockManager::focus_dock(EditorDock *p_dock) {
 	_make_dock_visible(p_dock, true);
 }
 
+// OpenRAC Editor: Godot's docks a level editor has no use for. They still exist (other parts of the
+// editor reach them), but they never open and are not in the Docks menu.
+static bool _is_openrac_hidden_dock(const EditorDock *p_dock) {
+	static const char *classes[] = { "ImportDock", "FileSystemDock", "SignalsDock", "GroupsDock", "EditorDebuggerNode",
+		"EditorAudioBuses", "AnimationTreeEditor", "ResourcePreloaderEditor", "FindInFilesContainer" };
+	for (const char *name : classes) {
+		if (p_dock->is_class(name)) {
+			return true;
+		}
+	}
+	const String title = p_dock->get_effective_layout_key();
+	return title == "Shader Editor" || title == "ShaderFile" || title == "Search Results";
+}
+
 void EditorDockManager::add_dock(EditorDock *p_dock) {
 	ERR_FAIL_NULL(p_dock);
 	ERR_FAIL_COND_MSG(all_docks.has(p_dock), vformat("Cannot add dock '%s', already added.", p_dock->get_display_title()));
@@ -739,6 +757,15 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
 	all_docks.push_back(p_dock);
 	p_dock->connect("_tab_style_changed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
 	p_dock->connect("renamed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
+
+	if (_is_openrac_hidden_dock(p_dock)) {
+		p_dock->openrac_hidden = true;
+		p_dock->enabled = false;
+		closed_dock_parent->add_child(p_dock);
+		p_dock->hide();
+		_update_layout();
+		return;
+	}
 
 	if (p_dock->default_slot != EditorDock::DOCK_SLOT_NONE) {
 		open_dock(p_dock, false);
@@ -857,8 +884,8 @@ void DockContextPopup::_notification(int p_what) {
 			if (is_layout_rtl()) {
 				tab_move_left_button->set_button_icon(get_editor_theme_icon(SNAME("Forward")));
 				tab_move_right_button->set_button_icon(get_editor_theme_icon(SNAME("Back")));
-				tab_move_left_button->set_tooltip_text(TTR("Move this dock right one tab."));
-				tab_move_right_button->set_tooltip_text(TTR("Move this dock left one tab."));
+				tab_move_left_button->set_tooltip_text(TTR("Move this panel one tab right."));
+				tab_move_right_button->set_tooltip_text(TTR("Move this panel one tab left."));
 			} else {
 				tab_move_left_button->set_button_icon(get_editor_theme_icon(SNAME("Back")));
 				tab_move_right_button->set_button_icon(get_editor_theme_icon(SNAME("Forward")));
@@ -914,18 +941,18 @@ void DockContextPopup::_float_dock() {
 
 void DockContextPopup::_update_buttons() {
 	if (context_dock->global || context_dock->closable) {
-		close_button->set_tooltip_text(TTRC("Close this dock."));
+		close_button->set_tooltip_text(TTRC("Close this panel."));
 		close_button->set_disabled(false);
 	} else {
-		close_button->set_tooltip_text(TTRC("This dock can't be closed."));
+		close_button->set_tooltip_text(TTRC("This panel can't be closed."));
 		close_button->set_disabled(true);
 	}
 	if (EditorNode::get_singleton()->is_multi_window_enabled()) {
 		if (!(context_dock->available_layouts & EditorDock::DOCK_LAYOUT_FLOATING)) {
-			make_float_button->set_tooltip_text(TTRC("This dock does not support floating."));
+			make_float_button->set_tooltip_text(TTRC("This panel can't be moved to its own window."));
 			make_float_button->set_disabled(true);
 		} else {
-			make_float_button->set_tooltip_text(TTRC("Make this dock floating."));
+			make_float_button->set_tooltip_text(TTRC("Move this panel to its own window."));
 			make_float_button->set_disabled(false);
 		}
 	}
@@ -970,7 +997,7 @@ DockContextPopup::DockContextPopup() {
 	header_hb->add_child(tab_move_left_button);
 
 	Label *position_label = memnew(Label);
-	position_label->set_text(TTRC("Dock Position"));
+	position_label->set_text(TTRC("Panel Position"));
 	position_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	position_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER);
 	header_hb->add_child(position_label);
@@ -993,7 +1020,7 @@ DockContextPopup::DockContextPopup() {
 	dock_select_popup_vb->add_child(separator);
 
 	make_float_button = memnew(Button);
-	make_float_button->set_text(TTRC("Make Floating"));
+	make_float_button->set_text(TTRC("Own Window"));
 	if (!EditorNode::get_singleton()->is_multi_window_enabled()) {
 		make_float_button->set_disabled(true);
 		make_float_button->set_tooltip_text(EditorNode::get_singleton()->get_multiwindow_support_tooltip_text());

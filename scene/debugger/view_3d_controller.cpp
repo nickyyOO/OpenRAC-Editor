@@ -647,58 +647,58 @@ String View3DController::get_view_type_name() const {
 	switch (view_type) {
 		case VIEW_TYPE_USER: {
 			if (orthogonal) {
-				name = RTR("Orthogonal");
+				name = RTR("Flat View");
 			} else {
-				name = RTR("Perspective");
+				name = RTR("Normal View");
 			}
 		} break;
 		case VIEW_TYPE_TOP: {
 			if (orthogonal) {
-				name = RTR("Top Orthogonal");
+				name = RTR("Top Flat");
 			} else {
-				name = RTR("Top Perspective");
+				name = RTR("Top Normal");
 			}
 		} break;
 		case VIEW_TYPE_BOTTOM: {
 			if (orthogonal) {
-				name = RTR("Bottom Orthogonal");
+				name = RTR("Bottom Flat");
 			} else {
-				name = RTR("Bottom Perspective");
+				name = RTR("Bottom Normal");
 			}
 		} break;
 		case VIEW_TYPE_LEFT: {
 			if (orthogonal) {
-				name = RTR("Left Orthogonal");
+				name = RTR("Left Flat");
 			} else {
-				name = RTR("Left Perspective");
+				name = RTR("Left Normal");
 			}
 		} break;
 		case VIEW_TYPE_RIGHT: {
 			if (orthogonal) {
-				name = RTR("Right Orthogonal");
+				name = RTR("Right Flat");
 			} else {
-				name = RTR("Right Perspective");
+				name = RTR("Right Normal");
 			}
 		} break;
 		case VIEW_TYPE_FRONT: {
 			if (orthogonal) {
-				name = RTR("Front Orthogonal");
+				name = RTR("Front Flat");
 			} else {
-				name = RTR("Front Perspective");
+				name = RTR("Front Normal");
 			}
 		} break;
 		case VIEW_TYPE_REAR: {
 			if (orthogonal) {
-				name = RTR("Rear Orthogonal");
+				name = RTR("Rear Flat");
 			} else {
-				name = RTR("Rear Perspective");
+				name = RTR("Rear Normal");
 			}
 		} break;
 	}
 
 	if (orthogonal == ORTHOGONAL_AUTO) {
 		// TRANSLATORS: This will be appended to the view name when Auto Orthogonal is enabled.
-		name += " " + RTR("[auto]");
+		name += " " + RTR("Auto");
 	}
 
 	return name;

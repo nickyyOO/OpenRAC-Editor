@@ -126,7 +126,7 @@ void InputEventConfigurationDialog::_set_event(const Ref<InputEvent> &p_event, c
 				event = Ref<InputEvent>();
 				original_event = Ref<InputEvent>();
 				event_listener->clear_event();
-				event_as_text->set_text(TTRC("No Event Configured"));
+				event_as_text->set_text(TTRC("No Shortcut Set"));
 
 				additional_options_container->hide();
 				input_list_tree->deselect_all();
@@ -224,7 +224,7 @@ void InputEventConfigurationDialog::_set_event(const Ref<InputEvent> &p_event, c
 		event = Ref<InputEvent>();
 		original_event = Ref<InputEvent>();
 		event_listener->clear_event();
-		event_as_text->set_text(TTRC("No Event Configured"));
+		event_as_text->set_text(TTRC("No Shortcut Set"));
 		event_exists->set_visible(false);
 		get_ok_button()->set_disabled(false);
 
@@ -355,7 +355,7 @@ void InputEventConfigurationDialog::_update_input_list() {
 
 	if (allowed_input_types & INPUT_JOY_BUTTON) {
 		TreeItem *joyb_root = input_list_tree->create_item(root);
-		joyb_root->set_text(0, TTR("Joypad Buttons"));
+		joyb_root->set_text(0, TTR("Gamepad Buttons"));
 		joyb_root->set_icon(0, icon_cache.joypad_button);
 		joyb_root->set_collapsed(collapse);
 		joyb_root->set_meta("__type", INPUT_JOY_BUTTON);
@@ -378,7 +378,7 @@ void InputEventConfigurationDialog::_update_input_list() {
 
 	if (allowed_input_types & INPUT_JOY_MOTION) {
 		TreeItem *joya_root = input_list_tree->create_item(root);
-		joya_root->set_text(0, TTR("Joypad Axes"));
+		joya_root->set_text(0, TTR("Gamepad Sticks"));
 		joya_root->set_icon(0, icon_cache.joypad_axis);
 		joya_root->set_collapsed(collapse);
 		joya_root->set_meta("__type", INPUT_JOY_MOTION);
@@ -668,9 +668,9 @@ void InputEventConfigurationDialog::popup_and_configure(const Ref<InputEvent> &p
 	}
 
 	if (!p_current_action_name.is_empty()) {
-		set_title(vformat(TTR("Event Configuration for \"%s\""), p_current_action_name));
+		set_title(vformat(TTR("Shortcut for \"%s\""), p_current_action_name));
 	} else {
-		set_title(TTR("Event Configuration"));
+		set_title(TTR("Shortcut Setup"));
 	}
 
 	popup_centered(Size2(0, 400) * EDSCALE);
@@ -717,8 +717,8 @@ InputEventConfigurationDialog::InputEventConfigurationDialog() {
 
 	input_list_search = memnew(LineEdit);
 	input_list_search->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-	input_list_search->set_placeholder(TTRC("Filter Inputs"));
-	input_list_search->set_accessibility_name(TTRC("Filter Inputs"));
+	input_list_search->set_placeholder(TTRC("Search Inputs"));
+	input_list_search->set_accessibility_name(TTRC("Search Inputs"));
 	input_list_search->set_clear_button_enabled(true);
 	input_list_search->connect(SceneStringName(text_changed), callable_mp(this, &InputEventConfigurationDialog::_search_term_updated));
 	manual_vbox->add_child(input_list_search);
@@ -783,10 +783,10 @@ InputEventConfigurationDialog::InputEventConfigurationDialog() {
 
 	mod_container->add_child(memnew(VSeparator));
 
-	autoremap_command_or_control_checkbox = memnew(CheckBox(TTRC("Command / Control (auto)")));
+	autoremap_command_or_control_checkbox = memnew(CheckBox(TTRC("Ctrl or Cmd (auto)")));
 	autoremap_command_or_control_checkbox->connect(SceneStringName(toggled), callable_mp(this, &InputEventConfigurationDialog::_autoremap_command_or_control_toggled));
 	autoremap_command_or_control_checkbox->set_pressed(false);
-	autoremap_command_or_control_checkbox->set_tooltip_text(TTRC("Automatically remaps between 'Meta' ('Command') and 'Control' depending on current platform."));
+	autoremap_command_or_control_checkbox->set_tooltip_text(TTRC("Uses Cmd on Mac and Ctrl elsewhere."));
 	mod_container->add_child(autoremap_command_or_control_checkbox);
 
 	mod_container->hide();
@@ -795,9 +795,9 @@ InputEventConfigurationDialog::InputEventConfigurationDialog() {
 	// Key Mode Selection
 
 	key_mode = memnew(OptionButton);
-	key_mode->add_item(TTRC("Keycode (Latin Equivalent)"), KEYMODE_KEYCODE);
-	key_mode->add_item(TTRC("Physical Keycode (Position on US QWERTY Keyboard)"), KEYMODE_PHY_KEYCODE);
-	key_mode->add_item(TTRC("Key Label (Unicode, Case-Insensitive)"), KEYMODE_UNICODE);
+	key_mode->add_item(TTRC("Key"), KEYMODE_KEYCODE);
+	key_mode->add_item(TTRC("Key Position (US Keyboard)"), KEYMODE_PHY_KEYCODE);
+	key_mode->add_item(TTRC("Key Label"), KEYMODE_UNICODE);
 	key_mode->connect(SceneStringName(item_selected), callable_mp(this, &InputEventConfigurationDialog::_key_mode_selected));
 	key_mode->hide();
 	additional_options_container->add_child(key_mode);
@@ -807,7 +807,7 @@ InputEventConfigurationDialog::InputEventConfigurationDialog() {
 	location_container = memnew(HBoxContainer);
 	location_container->hide();
 
-	location_container->add_child(memnew(Label(TTRC("Physical Location"))));
+	location_container->add_child(memnew(Label(TTRC("Which Side"))));
 
 	key_location = memnew(OptionButton);
 	key_location->set_h_size_flags(Control::SIZE_EXPAND_FILL);
@@ -817,14 +817,14 @@ InputEventConfigurationDialog::InputEventConfigurationDialog() {
 	key_location->add_item(String(), (int)KeyLocation::LEFT);
 	key_location->add_item(String(), (int)KeyLocation::RIGHT);
 	key_location->connect(SceneStringName(item_selected), callable_mp(this, &InputEventConfigurationDialog::_key_location_selected));
-	key_location->set_accessibility_name(TTRC("Physical Location"));
+	key_location->set_accessibility_name(TTRC("Which Side"));
 
 	location_container->add_child(key_location);
 	additional_options_container->add_child(location_container);
 
 	main_vbox->add_child(additional_options_container);
 
-	event_exists = memnew(Label(TTRC("Error: This action already contains this input event.")));
+	event_exists = memnew(Label(TTRC("This shortcut already has this input.")));
 	event_exists->set_theme_type_variation("HeaderSmall");
 	event_exists->set_visible(false);
 	main_vbox->add_child(event_exists);

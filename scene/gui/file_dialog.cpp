@@ -371,11 +371,11 @@ void FileDialog::update_dir() {
 		if (dir_access->get_current_dir().is_network_share_path()) {
 			_update_drives(false);
 			PopupMenu *pm = drives->get_popup();
-			pm->add_item(ETR("Network"));
+			pm->add_item(ETR("Network Drives"));
 			Dictionary meta;
 			meta["index"] = -1;
 			meta["path"] = String();
-			meta["name"] = ETR("Network");
+			meta["name"] = ETR("Network Drives");
 			pm->set_item_metadata(-1, meta);
 			pm->set_item_disabled(-1, true);
 			drives->set_text(meta["name"]);
@@ -548,7 +548,7 @@ void FileDialog::_action_pressed() {
 		}
 
 		if (customization_flags[CUSTOMIZATION_OVERWRITE_WARNING] && (dir_access->file_exists(f) || dir_access->is_bundle(f))) {
-			confirm_save->set_text(vformat(atr(ETR("File \"%s\" already exists.\nDo you want to overwrite it?")), f));
+			confirm_save->set_text(vformat(atr(ETR("\"%s\" already exists.\nReplace it?")), f));
 			confirm_save->popup_centered(Size2(250, 80));
 		} else {
 			_save_to_recent();
@@ -625,7 +625,7 @@ void FileDialog::deselect_all() {
 			set_default_ok_text(ETR("Open"));
 			break;
 		case FILE_MODE_OPEN_DIR:
-			set_default_ok_text(ETR("Select Current Folder"));
+			set_default_ok_text(ETR("Use This Folder"));
 			break;
 		case FILE_MODE_OPEN_ANY:
 			set_default_ok_text(ETR("Open"));
@@ -667,7 +667,7 @@ void FileDialog::_file_list_selected(int p_item) {
 	} else if (mode != FILE_MODE_SAVE_FILE) {
 		filename_edit->set_text("");
 		if (mode == FILE_MODE_OPEN_DIR || mode == FILE_MODE_OPEN_ANY) {
-			set_default_ok_text(ETR("Select This Folder"));
+			set_default_ok_text(ETR("Use This Folder"));
 		}
 	}
 
@@ -819,7 +819,7 @@ void FileDialog::_popup_menu(const Vector2 &p_pos, int p_for_item) {
 	item_menu->add_item((p_for_item == -1 || meta["dir"]) ? OS::get_singleton()->get_platform_string(OS::PLATFORM_STRING_FILE_MANAGER_OPEN) : OS::get_singleton()->get_platform_string(OS::PLATFORM_STRING_FILE_MANAGER_SHOW), ITEM_MENU_SHOW_IN_EXPLORER);
 	item_menu->set_item_icon(-1, theme_cache.menu_show_in_file_manager);
 	if (meta["bundle"]) {
-		item_menu->add_item(ETR("Show Package Contents"), ITEM_MENU_SHOW_BUNDLE_CONTENT);
+		item_menu->add_item(ETR("Show Contents"), ITEM_MENU_SHOW_BUNDLE_CONTENT);
 		item_menu->set_item_icon(-1, theme_cache.menu_open_bundle);
 	}
 #endif
@@ -860,7 +860,7 @@ void FileDialog::update_file_list() {
 	if (dir_access->is_readable(dir_access->get_current_dir().utf8().get_data())) {
 		message->hide();
 	} else {
-		message->set_text(ETR("You don't have permission to access contents of this folder."));
+		message->set_text(ETR("You can't open this folder."));
 		message->show();
 	}
 
@@ -1193,8 +1193,8 @@ void FileDialog::update_filters() {
 			native_all_name += ", ...";
 		}
 
-		filter->add_item(atr(ETR("All Recognized")) + " (" + all_filters + ")");
-		processed_filters.push_back(all_filters_full + ";" + atr(ETR("All Recognized")) + " (" + native_all_name + ")" + ";" + all_mime_full);
+		filter->add_item(atr(ETR("All Supported")) + " (" + all_filters + ")");
+		processed_filters.push_back(all_filters_full + ";" + atr(ETR("All Supported")) + " (" + native_all_name + ")" + ";" + all_mime_full);
 	}
 	for (int i = 0; i < filters.size(); i++) {
 		String flt = filters[i].get_slicec(';', 0).strip_edges();
@@ -1395,32 +1395,32 @@ void FileDialog::set_file_mode(FileMode p_mode) {
 		case FILE_MODE_OPEN_FILE:
 			set_default_ok_text(ETR("Open"));
 			if (mode_overrides_title) {
-				set_title(ETR("Open a File"));
+				set_title(ETR("Open File"));
 			}
 			break;
 		case FILE_MODE_OPEN_FILES:
 			set_default_ok_text(ETR("Open"));
 			if (mode_overrides_title) {
-				set_title(ETR("Open File(s)"));
+				set_title(ETR("Open Files"));
 			}
 			break;
 		case FILE_MODE_OPEN_DIR:
-			set_default_ok_text(ETR("Select Current Folder"));
+			set_default_ok_text(ETR("Use This Folder"));
 			if (mode_overrides_title) {
-				set_title(ETR("Open a Directory"));
+				set_title(ETR("Open Folder"));
 			}
 			break;
 		case FILE_MODE_OPEN_ANY:
 			set_default_ok_text(ETR("Open"));
 			if (mode_overrides_title) {
-				set_title(ETR("Open a File or Directory"));
+				set_title(ETR("Open File or Folder"));
 			}
 			make_dir_button->show();
 			break;
 		case FILE_MODE_SAVE_FILE:
 			set_default_ok_text(ETR("Save"));
 			if (mode_overrides_title) {
-				set_title(ETR("Save a File"));
+				set_title(ETR("Save File"));
 			}
 			break;
 	}
@@ -2339,7 +2339,7 @@ bool FileDialog::get_use_native_dialog() const {
 }
 
 FileDialog::FileDialog() {
-	set_title(ETR("Save a File"));
+	set_title(ETR("Save File"));
 	set_hide_on_ok(false);
 	set_size(Size2(640, 360));
 	set_default_ok_text(ETR("Save")); // Default mode text.
@@ -2368,19 +2368,19 @@ FileDialog::FileDialog() {
 
 	dir_prev = memnew(Button);
 	dir_prev->set_theme_type_variation(SceneStringName(FlatButton));
-	dir_prev->set_tooltip_text(ETR("Go to previous folder."));
+	dir_prev->set_tooltip_text(ETR("Back"));
 	top_toolbar->add_child(dir_prev);
 	dir_prev->connect(SceneStringName(pressed), callable_mp(this, &FileDialog::_go_back));
 
 	dir_next = memnew(Button);
 	dir_next->set_theme_type_variation(SceneStringName(FlatButton));
-	dir_next->set_tooltip_text(ETR("Go to next folder."));
+	dir_next->set_tooltip_text(ETR("Forward"));
 	top_toolbar->add_child(dir_next);
 	dir_next->connect(SceneStringName(pressed), callable_mp(this, &FileDialog::_go_forward));
 
 	dir_up = memnew(Button);
 	dir_up->set_theme_type_variation(SceneStringName(FlatButton));
-	dir_up->set_tooltip_text(ETR("Go to parent folder."));
+	dir_up->set_tooltip_text(ETR("Up one folder."));
 	dir_up->set_shortcut(action_shortcuts[ITEM_MENU_GO_UP]);
 	top_toolbar->add_child(dir_up);
 	dir_up->connect(SceneStringName(pressed), callable_mp(this, &FileDialog::_go_up));
@@ -2411,14 +2411,14 @@ FileDialog::FileDialog() {
 
 	refresh_button = memnew(Button);
 	refresh_button->set_theme_type_variation(SceneStringName(FlatButton));
-	refresh_button->set_tooltip_text(ETR("Refresh files."));
+	refresh_button->set_tooltip_text(ETR("Refresh the file list."));
 	refresh_button->set_shortcut(action_shortcuts[ITEM_MENU_REFRESH]);
 	top_toolbar->add_child(refresh_button);
 	refresh_button->connect(SceneStringName(pressed), callable_mp(this, &FileDialog::update_file_list));
 
 	favorite_button = memnew(Button);
 	favorite_button->set_theme_type_variation(SceneStringName(FlatButton));
-	favorite_button->set_tooltip_text(ETR("(Un)favorite current folder."));
+	favorite_button->set_tooltip_text(ETR("Add or remove this folder from favorites."));
 	top_toolbar->add_child(favorite_button);
 	favorite_button->connect(SceneStringName(pressed), callable_mp(this, &FileDialog::_favorite_pressed));
 
@@ -2499,7 +2499,7 @@ FileDialog::FileDialog() {
 	file_vbox->add_child(lower_toolbar);
 
 	{
-		Label *label = memnew(Label(ETR("Directories & Files:")));
+		Label *label = memnew(Label(ETR("Folders and Files:")));
 		label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 		label->set_theme_type_variation("HeaderSmall");
 		lower_toolbar->add_child(label);
@@ -2509,7 +2509,7 @@ FileDialog::FileDialog() {
 	show_hidden->set_theme_type_variation(SceneStringName(FlatButton));
 	show_hidden->set_toggle_mode(true);
 	show_hidden->set_pressed(is_showing_hidden_files());
-	show_hidden->set_tooltip_text(ETR("Toggle the visibility of hidden files."));
+	show_hidden->set_tooltip_text(ETR("Show or hide hidden files."));
 	show_hidden->set_shortcut(action_shortcuts[ITEM_MENU_TOGGLE_HIDDEN]);
 	lower_toolbar->add_child(show_hidden);
 	show_hidden->connect(SceneStringName(toggled), callable_mp(this, &FileDialog::set_show_hidden_files));
@@ -2528,7 +2528,7 @@ FileDialog::FileDialog() {
 	thumbnail_mode_button->set_pressed(true);
 	thumbnail_mode_button->set_button_group(view_mode_group);
 	thumbnail_mode_button->set_theme_type_variation(SceneStringName(FlatButton));
-	thumbnail_mode_button->set_tooltip_text(ETR("View items as a grid of thumbnails."));
+	thumbnail_mode_button->set_tooltip_text(ETR("Show as thumbnails."));
 	layout_container->add_child(thumbnail_mode_button);
 	thumbnail_mode_button->connect(SceneStringName(pressed), callable_mp(this, &FileDialog::set_display_mode).bind(DISPLAY_THUMBNAILS));
 
@@ -2536,7 +2536,7 @@ FileDialog::FileDialog() {
 	list_mode_button->set_toggle_mode(true);
 	list_mode_button->set_button_group(view_mode_group);
 	list_mode_button->set_theme_type_variation(SceneStringName(FlatButton));
-	list_mode_button->set_tooltip_text(ETR("View items as a list."));
+	list_mode_button->set_tooltip_text(ETR("Show as a list."));
 	layout_container->add_child(list_mode_button);
 	list_mode_button->connect(SceneStringName(pressed), callable_mp(this, &FileDialog::set_display_mode).bind(DISPLAY_LIST));
 
@@ -2546,7 +2546,7 @@ FileDialog::FileDialog() {
 	show_filename_filter_button = memnew(Button);
 	show_filename_filter_button->set_theme_type_variation(SceneStringName(FlatButton));
 	show_filename_filter_button->set_toggle_mode(true);
-	show_filename_filter_button->set_tooltip_text(ETR("Toggle the visibility of the filter for file names."));
+	show_filename_filter_button->set_tooltip_text(ETR("Show or hide the name filter."));
 	show_filename_filter_button->set_shortcut(action_shortcuts[ITEM_MENU_FIND]);
 	lower_toolbar->add_child(show_filename_filter_button);
 	show_filename_filter_button->connect(SceneStringName(toggled), callable_mp(this, &FileDialog::set_show_filename_filter));
@@ -2554,15 +2554,15 @@ FileDialog::FileDialog() {
 	file_sort_button = memnew(MenuButton);
 	file_sort_button->set_flat(false);
 	file_sort_button->set_theme_type_variation("FlatMenuButton");
-	file_sort_button->set_tooltip_text(ETR("Sort files"));
+	file_sort_button->set_tooltip_text(ETR("Sort Files"));
 
 	PopupMenu *sort_menu = file_sort_button->get_popup();
-	sort_menu->add_radio_check_item(ETR("Sort by Name (Ascending)"), int(FileSortOption::NAME));
-	sort_menu->add_radio_check_item(ETR("Sort by Name (Descending)"), int(FileSortOption::NAME_REVERSE));
+	sort_menu->add_radio_check_item(ETR("Sort by Name (A-Z)"), int(FileSortOption::NAME));
+	sort_menu->add_radio_check_item(ETR("Sort by Name (Z-A)"), int(FileSortOption::NAME_REVERSE));
 	sort_menu->add_radio_check_item(ETR("Sort by Type (Ascending)"), int(FileSortOption::TYPE));
 	sort_menu->add_radio_check_item(ETR("Sort by Type (Descending)"), int(FileSortOption::TYPE_REVERSE));
-	sort_menu->add_radio_check_item(ETR("Sort by Modified Time (Newest First)"), int(FileSortOption::MODIFIED_TIME));
-	sort_menu->add_radio_check_item(ETR("Sort by Modified Time (Oldest First)"), int(FileSortOption::MODIFIED_TIME_REVERSE));
+	sort_menu->add_radio_check_item(ETR("Sort by Newest"), int(FileSortOption::MODIFIED_TIME));
+	sort_menu->add_radio_check_item(ETR("Sort by Oldest"), int(FileSortOption::MODIFIED_TIME_REVERSE));
 	sort_menu->set_item_checked(0, true);
 	lower_toolbar->add_child(file_sort_button);
 	sort_menu->connect(SceneStringName(id_pressed), callable_mp(this, &FileDialog::_sort_option_selected));
@@ -2571,7 +2571,7 @@ FileDialog::FileDialog() {
 	file_list->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	file_list->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 	file_list->set_theme_type_variation("ItemListSecondary");
-	file_list->set_accessibility_name(ETR("Directories & Files:"));
+	file_list->set_accessibility_name(ETR("Folders and Files:"));
 	file_list->set_allow_rmb_select(true);
 	file_vbox->add_child(file_list);
 	file_list->connect("multi_selected", callable_mp(this, &FileDialog::_file_list_multi_selected));
@@ -2602,7 +2602,7 @@ FileDialog::FileDialog() {
 	filename_filter->set_stretch_ratio(4);
 	filename_filter->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	filename_filter->set_clear_button_enabled(true);
-	filename_filter->set_accessibility_name(ETR("Filename Filter:"));
+	filename_filter->set_accessibility_name(ETR("Name Filter:"));
 	filename_filter_box->add_child(filename_filter);
 	filename_filter->connect(SceneStringName(text_changed), callable_mp(this, &FileDialog::_filename_filter_changed).unbind(1));
 	filename_filter->connect(SceneStringName(text_submitted), callable_mp(this, &FileDialog::_filename_filter_selected).unbind(1));
@@ -2646,7 +2646,7 @@ FileDialog::FileDialog() {
 	confirm_save->connect(SceneStringName(confirmed), callable_mp(this, &FileDialog::_save_confirm_pressed));
 
 	delete_dialog = memnew(ConfirmationDialog);
-	delete_dialog->set_text(ETR("Delete the selected file?\nDepending on your filesystem configuration, the files will either be moved to the system trash or deleted permanently."));
+	delete_dialog->set_text(ETR("Delete the selected file?\nIt may go to the trash or be deleted for good."));
 	add_child(delete_dialog, false, INTERNAL_MODE_FRONT);
 	delete_dialog->connect(SceneStringName(confirmed), callable_mp(this, &FileDialog::_delete_confirm));
 
@@ -2664,11 +2664,11 @@ FileDialog::FileDialog() {
 	make_dir_dialog->register_text_enter(new_dir_name);
 
 	mkdirerr = memnew(AcceptDialog);
-	mkdirerr->set_text(ETR("Could not create folder."));
+	mkdirerr->set_text(ETR("Couldn't create the folder."));
 	add_child(mkdirerr, false, INTERNAL_MODE_FRONT);
 
 	exterr = memnew(AcceptDialog);
-	exterr->set_text(ETR("Invalid extension, or empty filename."));
+	exterr->set_text(ETR("Add a file name and the right file type ending."));
 	add_child(exterr, false, INTERNAL_MODE_FRONT);
 
 	item_menu = memnew(PopupMenu);

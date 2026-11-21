@@ -12,11 +12,11 @@ const PRESETS: Dictionary = {
 	"orbit": {"radius": [4.0, 0.0, 1000.0, "units"], "speed": [45.0, -3600.0, 3600.0, "degrees a second"]},
 	"face_hero": {"speed": [180.0, 0.0, 3600.0, "degrees a second"]},
 	"follow": {"speed": [4.0, 0.0, 200.0, "units a second"], "distance": [3.0, 0.0, 1000.0, "units"],
-		"range": [30.0, 0.0, 10000.0, "units; 0: always"]},
+		"range": [30.0, 0.0, 10000.0, "units; 0 means always"]},
 }
 
 const LABELS: Dictionary = {"spin": "Spin", "bob": "Bob", "patrol": "Patrol", "orbit": "Orbit",
-	"face_hero": "Face the hero", "follow": "Follow the hero"}
+	"face_hero": "Face Ratchet", "follow": "Follow Ratchet"}
 
 var undo_redo: EditorUndoRedoManager
 
@@ -42,14 +42,13 @@ func _parse_begin(object: Object) -> void:
 func section(node: Node3D) -> Control:
 	var box := VBoxContainer.new()
 	var title := Label.new()
-	title.text = "Behaviour"
-	title.tooltip_text = ("A simple move the editor mod plays in the game. The moby's own logic stops while it runs. "
-		+ "Pack, then play with the mod on.")
+	title.text = "Simple Move"
+	title.tooltip_text = "A simple move the object plays in the game, in place of its own."
 	title.mouse_filter = Control.MOUSE_FILTER_PASS
 	box.add_child(title)
 
 	var choice := OptionButton.new()
-	choice.add_item("None (its own logic)")
+	choice.add_item("None")
 	choice.set_item_metadata(0, "")
 	var preset: String = String(node.get_meta("rc1_behaviour", ""))
 
@@ -71,7 +70,7 @@ func section(node: Node3D) -> Control:
 			box.add_child(number_row(node, key, "%s (%s)" % [key.capitalize(), spec[3]],
 				float(node.get_meta("rc1_behaviour_" + key, spec[0])), spec[1], spec[2], 0.05))
 
-		box.add_child(number_row(node, "sequence", "Animation (the class's sequence; -1: its own)",
+		box.add_child(number_row(node, "sequence", "Animation (-1: its own)",
 			float(node.get_meta("rc1_behaviour_sequence", -1)), -1.0, 255.0, 1.0))
 
 	return box

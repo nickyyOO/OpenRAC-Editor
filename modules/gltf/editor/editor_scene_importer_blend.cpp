@@ -54,7 +54,7 @@
 static bool _get_blender_version(const String &p_path, int &r_major, int &r_minor, String *r_err = nullptr) {
 	if (!FileAccess::exists(p_path)) {
 		if (r_err) {
-			*r_err = TTR("Path does not point to a valid executable.");
+			*r_err = TTR("This isn't the Blender program.");
 		}
 		return false;
 	}
@@ -64,14 +64,14 @@ static bool _get_blender_version(const String &p_path, int &r_major, int &r_mino
 	Error err = OS::get_singleton()->execute(p_path, args, &pipe);
 	if (err != OK) {
 		if (r_err) {
-			*r_err = TTR("Couldn't run Blender executable.");
+			*r_err = TTR("Couldn't start Blender.");
 		}
 		return false;
 	}
 	int bl = pipe.find("Blender ");
 	if (bl == -1) {
 		if (r_err) {
-			*r_err = vformat(TTR("Unexpected --version output from Blender executable at: %s."), p_path);
+			*r_err = vformat(TTR("Couldn't read the Blender version at: %s."), p_path);
 		}
 		return false;
 	}
@@ -80,7 +80,7 @@ static bool _get_blender_version(const String &p_path, int &r_major, int &r_mino
 	int pp = pipe.find_char('.');
 	if (pp == -1) {
 		if (r_err) {
-			*r_err = vformat(TTR("Couldn't extract version information from Blender executable at: %s."), p_path);
+			*r_err = vformat(TTR("Couldn't read the Blender version at: %s."), p_path);
 		}
 		return false;
 	}
@@ -88,7 +88,7 @@ static bool _get_blender_version(const String &p_path, int &r_major, int &r_mino
 	r_major = v.to_int();
 	if (r_major < 3) {
 		if (r_err) {
-			*r_err = vformat(TTR("Found Blender version %d.x, which is too old for this importer (3.0+ is required)."), r_major);
+			*r_err = vformat(TTR("Blender %d.x is too old. Install Blender 3.0 or newer."), r_major);
 		}
 		return false;
 	}
@@ -449,14 +449,14 @@ void EditorFileSystemImportFormatSupportQueryBlend::_validate_path(String p_path
 	String error;
 	bool success = false;
 	if (p_path == "") {
-		error = TTR("Path is empty.");
+		error = TTR("Pick where Blender is.");
 	} else {
 		if (_test_blender_path(p_path, &error)) {
 			success = true;
 			if (auto_detected_path == p_path) {
-				error = TTR("Path to Blender executable is valid (Autodetected).");
+				error = TTR("Blender found.");
 			} else {
-				error = TTR("Path to Blender executable is valid.");
+				error = TTR("Blender found.");
 			}
 		}
 	}
@@ -553,13 +553,13 @@ bool EditorFileSystemImportFormatSupportQueryBlend::query() {
 
 	if (!configure_blender_dialog) {
 		configure_blender_dialog = memnew(ConfirmationDialog);
-		configure_blender_dialog->set_title(TTR("Configure Blender Importer"));
+		configure_blender_dialog->set_title(TTR("Set Up Blender"));
 		configure_blender_dialog->set_flag(Window::FLAG_BORDERLESS, true); // Avoid closing accidentally.
 		configure_blender_dialog->set_close_on_escape(false);
 
-		String select_exec_label = TTR("Blender 3.0+ is required to import '.blend' files.\nPlease provide a valid path to a Blender executable.");
+		String select_exec_label = TTR("Opening .blend files needs Blender 3.0 or newer.\nPick where Blender is installed.");
 #ifdef MACOS_ENABLED
-		select_exec_label += "\n" + TTR("On macOS, this should be the `Contents/MacOS/blender` file within the Blender `.app` folder.");
+		select_exec_label += "\n" + TTR("On Mac, pick the blender file inside Blender.app/Contents/MacOS.");
 #endif
 		VBoxContainer *vb = memnew(VBoxContainer);
 		vb->add_child(memnew(Label(select_exec_label)));
@@ -592,8 +592,8 @@ bool EditorFileSystemImportFormatSupportQueryBlend::query() {
 		EditorNode::get_singleton()->get_gui_base()->add_child(configure_blender_dialog);
 
 		configure_blender_dialog->set_ok_button_text(TTR("Confirm Path"));
-		configure_blender_dialog->set_cancel_button_text(TTR("Disable '.blend' Import"));
-		configure_blender_dialog->get_cancel_button()->set_tooltip_text(TTR("Disables Blender '.blend' files import for this project. Can be re-enabled in Project Settings."));
+		configure_blender_dialog->set_cancel_button_text(TTR("Turn Off .blend Files"));
+		configure_blender_dialog->get_cancel_button()->set_tooltip_text(TTR("Stops opening .blend files. You can turn this back on in Settings."));
 		configure_blender_dialog->connect(SceneStringName(confirmed), callable_mp(this, &EditorFileSystemImportFormatSupportQueryBlend::_path_confirmed));
 
 		browse_dialog = memnew(EditorFileDialog);
@@ -639,7 +639,7 @@ bool EditorFileSystemImportFormatSupportQueryBlend::query() {
 		ProjectSettings::get_singleton()->set("filesystem/import/blender/enabled", false);
 		ProjectSettings::get_singleton()->save();
 
-		if (EditorNode::immediate_confirmation_dialog(TTR("Disabling '.blend' file import requires restarting the editor."), TTR("Save & Restart"), TTR("Restart"))) {
+		if (EditorNode::immediate_confirmation_dialog(TTR("Restart the editor to apply this."), TTR("Save and Restart"), TTR("Restart"))) {
 			EditorNode::get_singleton()->save_all_scenes();
 		}
 		EditorNode::get_singleton()->restart_editor();

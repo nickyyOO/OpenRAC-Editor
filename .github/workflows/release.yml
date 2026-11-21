@@ -63,6 +63,8 @@ jobs:
 
       - name: Build the editor
         shell: bash
+        env:
+          OPENRAC_EDITOR_VERSION: ${{ inputs.tag || github.ref_name }}
         run: scons ${{ matrix.scons }} profile=build/custom.py -j"$(python -c 'import os; print(os.cpu_count())')"
 
       - name: Pack it

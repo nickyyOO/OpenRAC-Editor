@@ -95,7 +95,7 @@ func _init() -> void:
 	var row := HBoxContainer.new()
 	box.add_child(row)
 	search = LineEdit.new()
-	search.placeholder_text = "Name or class number"
+	search.placeholder_text = "Name or type number"
 	search.clear_button_enabled = true
 	search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# Refilled once typing pauses: a list of every level takes a moment to fill.
@@ -110,7 +110,7 @@ func _init() -> void:
 		refill())
 	row.add_child(search)
 	refresh_button = Button.new()
-	refresh_button.tooltip_text = "Look for levels again (after reading another disc)."
+	refresh_button.tooltip_text = "Look for levels again."
 	refresh_button.flat = true
 	refresh_button.pressed.connect(rescan)
 	row.add_child(refresh_button)
@@ -121,14 +121,14 @@ func _init() -> void:
 	filter.clip_text = true
 	filter.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	filter.add_item("Everything", SHOW_ALL)
-	filter.add_item("In this level (with the game's logic)", SHOW_HERE)
-	filter.add_item("From other levels, with their own logic", SHOW_IMPORTS)
+	filter.add_item("In this level", SHOW_HERE)
+	filter.add_item("From other levels", SHOW_IMPORTS)
 	filter.add_item("This game", SHOW_THIS_GAME)
 	filter.add_item("Other games", SHOW_OTHER_GAMES)
 	filter.item_selected.connect(func(_index: int) -> void: refill())
 	box.add_child(filter)
 	planet = OptionButton.new()
-	planet.tooltip_text = "Only the assets of one planet (each level's name)."
+	planet.tooltip_text = "Show one planet only."
 	planet.fit_to_longest_item = false
 	planet.clip_text = true
 	planet.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -144,8 +144,8 @@ func _init() -> void:
 	legend = VBoxContainer.new()
 	legend.add_theme_constant_override("separation", 0)
 	for entry in [[FULL_COLOUR, "In this level: works as in the game."],
-			[IMPORT_COLOUR, "From another level: can bring its logic."],
-			[LOOK_COLOUR, "Look only, or on another class's logic."]]:
+			[IMPORT_COLOUR, "From another level: can bring how it acts."],
+			[LOOK_COLOUR, "Scenery only, or acts like another type."]]:
 		var line := Label.new()
 		line.text = "\u25A0 " + entry[1]
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -206,11 +206,11 @@ func _init() -> void:
 	var buttons := VBoxContainer.new()
 	buttons.add_theme_constant_override("separation", roundi(px(2.0)))
 	box.add_child(buttons)
-	add_button = action_button(buttons, "Add in front of the camera",
+	add_button = action_button(buttons, "Add",
 		func() -> void: with_selected(func(asset: Dictionary) -> void: plugin.add_in_view(asset)))
-	own_button = action_button(buttons, "Add with its own logic",
+	own_button = action_button(buttons, "Add With Its Actions",
 		func() -> void: with_selected(func(asset: Dictionary) -> void: plugin.add_foreign(asset)))
-	as_button = action_button(buttons, "Add on a class's logic...", show_classes)
+	as_button = action_button(buttons, "Add as Another Type", show_classes)
 	classes_menu = PopupMenu.new()
 	classes_menu.id_pressed.connect(func(id: int) -> void:
 		with_selected(func(asset: Dictionary) -> void: plugin.add_as(asset, id)))
@@ -284,21 +284,20 @@ func show_selected() -> void:
 	var status: String = Library.status(asset, here)
 	var refusal: String = Library.import_refusal(asset, here)
 	var colour: Color = FULL_COLOUR if status == Library.FULL else (IMPORT_COLOUR if refusal.is_empty() else LOOK_COLOUR)
-	details.text = "[b][color=#%s]%s[/color][/b]  class %d\n%s" % [colour.to_html(false),
+	details.text = "[b][color=#%s]%s[/color][/b]  type %d\n%s" % [colour.to_html(false),
 		asset["name"], int(asset["class"]), Library.origin(asset)]
 
 	add_button.disabled = here.is_empty()
-	add_button.text = "Add in front of the camera" + (" (with its logic)" if status == Library.FULL else " (look only)")
-	add_button.tooltip_text = ("Open a level scene first." if here.is_empty() else
-		"The game's own %s of this level, with its logic." % asset["kind"].trim_suffix("s") if status == Library.FULL else
-		"Static scenery: look only, no logic. Or drag it into the 3D view.")
+	add_button.text = "Add"
+	add_button.tooltip_text = ("Open a level first." if here.is_empty() else
+		"The game's own %s of this level." % asset["kind"].trim_suffix("s") if status == Library.FULL else
+		"Scenery only. Or drag it into the 3D view.")
 	own_button.disabled = not refusal.is_empty()
 	own_button.tooltip_text = (refusal if not refusal.is_empty() else
-		"Brings its class and logic from its level, with the paths, zones and mobys it needs. "
-		+ "Pack, then play. Costs about 0.5 ms a frame each.")
+		"Brings it from its level with what it needs. May slow the game a little.")
 	as_button.disabled = not can_add_as(asset)
-	as_button.tooltip_text = ("Pick a class of this level: it runs that class's logic and looks like this model."
-		if can_add_as(asset) else "Only for a moby this level lacks, in a level with mobys.")
+	as_button.tooltip_text = ("Pick a type of this level: it acts like that type and looks like this."
+		if can_add_as(asset) else "Only for objects this level doesn't have.")
 
 
 func _ready() -> void:
@@ -376,15 +375,15 @@ func rescan() -> void:
 
 		for kind in Library.KINDS:
 			var kind_item: TreeItem = tree.create_item(level_item)
-			kind_item.set_text(0, kind.capitalize())
+			kind_item.set_text(0, {"mobys": "Objects", "ties": "Big scenery", "shrubs": "Small scenery"}.get(kind, kind.capitalize()))
 			kind_item.set_metadata(0, {"level": level, "kind": kind})
 
 		level_item.collapsed = true
 
 	fill_planets()
 	fit_tree()
-	show_report("Levels found: %d, in games: %d." % [levels.size(), folders.size()] if not levels.is_empty()
-		else "No levels found. Read a disc's levels from the launcher's Level editor tab first.")
+	show_report(("%d %s found." % [levels.size(), "level" if levels.size() == 1 else "levels"]) if not levels.is_empty()
+		else "No levels found. Read your disc in the launcher's Level editor tab first.")
 	refill()
 
 
@@ -498,7 +497,7 @@ func refill() -> void:
 	if shown.is_empty():
 		var looked: bool = not words.is_empty() or filter.selected > 0 or not planet_name.is_empty() or selected != null
 		note.text = ("No assets match." if looked else "No assets here." if not here.is_empty()
-			else "Open a level scene, search, or pick a level above.")
+			else "Open a level, search, or pick a level above.")
 	note.visible = shown.is_empty()
 
 
@@ -553,13 +552,13 @@ func is_here(level: Dictionary) -> bool:
 
 func tooltip(asset: Dictionary, status: String) -> String:
 	var where: String = Library.origin(asset)
-	var does: String = ("In this level: placed as the game's own %s, with its logic." % asset["kind"].trim_suffix("s")
+	var does: String = ("In this level: acts as the game's own %s." % asset["kind"].trim_suffix("s")
 		if status == Library.FULL else
-		"Placed as static scenery: look only, no logic."
+		"Scenery only: it doesn't move or act."
 		+ ("\nOr \"Add with its own logic\": brings its class from its level."
 			if Library.import_refusal(asset, here).is_empty() else "")
 		+ ("\nOr \"Add on a class's logic\": acts as a class of this level." if asset["kind"] == "mobys" else ""))
-	return "%s, class %d\nFrom %s\n%s\nDrag it into the 3D view, or double-click to add it." % [
+	return "%s, type %d\nFrom %s\n%s\nDrag it into the 3D view, or double-click to add it." % [
 		asset["name"], int(asset["class"]), where, does]
 
 
@@ -592,7 +591,7 @@ func show_classes() -> void:
 	entries.sort_custom(func(a: Array, b: Array) -> bool: return a[0].naturalnocasecmp_to(b[0]) < 0)
 
 	for entry in entries:
-		classes_menu.add_item("%s (class %d)" % entry if entry[0] != "Class %d" % entry[1] else entry[0], entry[1])
+		classes_menu.add_item("%s (type %d)" % entry if entry[0] != "Class %d" % entry[1] else entry[0], entry[1])
 
 	classes_menu.position = Vector2i(as_button.get_screen_position() + Vector2(0, as_button.size.y))
 	classes_menu.max_size = Vector2i(roundi(px(400.0)), roundi(px(500.0)))

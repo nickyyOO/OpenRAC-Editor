@@ -203,7 +203,7 @@ void CutsceneEditorPlugin::_notification(int p_what) {
 CutsceneEditorPlugin::CutsceneEditorPlugin() {
 	game_view = memnew(MenuButton);
 	game_view->set_text(TTRC("Game View"));
-	game_view->set_tooltip_text(TTRC("What the game shows over a view that looks through a cutscene's camera (the camera's Preview)."));
+	game_view->set_tooltip_text(TTRC("What the game shows when you look through the cutscene camera."));
 	game_view->set_flat(false);
 	game_view->set_theme_type_variation("FlatMenuButton");
 	PopupMenu *popup = game_view->get_popup();

@@ -493,19 +493,19 @@ func planet_and_tree() -> void:
 func details() -> void:
 	reset_dock()
 	var full: Dictionary = await pick("vendor")
-	check("the game's own: added with its logic", not dock.add_button.disabled and dock.add_button.text.ends_with("(with its logic)"), dock.add_button.text)
-	check("the game's own: no import", dock.own_button.disabled and dock.own_button.tooltip_text == "This level has the class already.", dock.own_button.tooltip_text)
+	check("the game's own: added with its logic", not dock.add_button.disabled and dock.add_button.text == "Add" and dock.add_button.tooltip_text.begins_with("The game's own"), dock.add_button.tooltip_text)
+	check("the game's own: no import", dock.own_button.disabled and dock.own_button.tooltip_text == "This level has this type already.", dock.own_button.tooltip_text)
 	check("the game's own: no other class's logic", dock.as_button.disabled)
 	check("details name it", dock.details.text.contains(String(full.get("name", "?"))), dock.details.text)
 	await pick("red_ship_1")
 	check("another level's moby: import and class logic", not dock.own_button.disabled and not dock.as_button.disabled
-		and dock.add_button.text.ends_with("(look only)"))
+		and dock.add_button.tooltip_text.begins_with("Scenery only"))
 	dock.filter.select(dock.filter.get_item_index(Dock.SHOW_ALL))
 	var pal: Dictionary = await pick("turret_gaspar_2")
 	check("another disc's: no import", not pal.is_empty() and dock.own_button.disabled
 		and dock.own_button.tooltip_text == "Only between levels of the same disc.", [pal.get("name"), dock.own_button.tooltip_text])
 	await pick("682")
-	check("a tie: no logic of its own", dock.own_button.disabled and dock.own_button.tooltip_text == "Only mobys have logic of their own.")
+	check("a tie: no logic of its own", dock.own_button.disabled and dock.own_button.tooltip_text == "Only objects can act on their own.")
 	check("a tie: no class logic", dock.as_button.disabled)
 	reset_dock()
 
@@ -567,8 +567,8 @@ func own_logic_after_pick() -> void:
 	check("not moved to StaticAssets", not children_of("StaticAssets").any(func(node: Node) -> bool: return node.has_meta("rc1_foreign_level")))
 	check("no scenery metadata", foreign.size() == 1 and not foreign[0].has_meta("rc1_asset"))
 	check("standing", foreign.size() == 1 and standing(foreign[0]))
-	check("one undo step", history()[-1].ends_with("with its own logic"), history())
-	check("the report says own logic", dock.report.text.contains("with its own logic"), dock.report.text)
+	check("one undo step", history()[-1].ends_with("with its actions"), history())
+	check("the report says own logic", dock.report.text.contains("with its actions"), dock.report.text)
 
 
 func class_logic() -> void:
@@ -706,7 +706,7 @@ func foreign_switch() -> void:
 	var switch: CheckBox = null
 
 	for node in EditorInterface.get_inspector().find_children("*", "CheckBox", true, false):
-		if node.text.begins_with("Import without"):
+		if node.text.begins_with("Leave Out Extras"):
 			switch = node
 
 	check("the Inspector shows the switch", switch != null)
@@ -716,7 +716,7 @@ func foreign_switch() -> void:
 
 	await press(switch)
 	check("switching on sets the metadata", foreign[0].get_meta("rc1_foreign_partial", false) == true)
-	check("as an undo step", history()[-1].ends_with("without what does not fit"), history())
+	check("as an undo step", history()[-1].ends_with("without extras"), history())
 	await undo()
 	check("Ctrl+Z takes it back", not foreign[0].has_meta("rc1_foreign_partial"))
 	EditorInterface.edit_node(null)
@@ -758,7 +758,7 @@ func class_menu_names() -> void:
 		labels.append(dock.classes_menu.get_item_text(i))
 
 	dock.classes_menu.hide()
-	check("the dock's names in the class menu", labels == ["vendor (class 11)"], labels)
+	check("the dock's names in the class menu", labels == ["vendor (type 11)"], labels)
 
 
 ## A scene that is not a level, then none: nothing is brought in, and the dock says why.
@@ -775,14 +775,14 @@ func no_level() -> void:
 	await frames(2)
 	reset_dock()
 	check("no level here", dock.here.is_empty())
-	check("the list says what to do", dock.note.visible and dock.note.text == "Open a level scene, search, or pick a level above.", dock.note.text)
+	check("the list says what to do", dock.note.visible and dock.note.text == "Open a level, search, or pick a level above.", dock.note.text)
 	await pick("red_ship_1")
 	check("no button works", dock.add_button.disabled and dock.own_button.disabled and dock.as_button.disabled)
 	var files: int = DirAccess.get_files_at("res://library/rac1/ntsc/level_03/ties").size() if DirAccess.dir_exists_absolute("res://library/rac1/ntsc/level_03/ties") else 0
-	check("a drag carries nothing", dock.list._get_drag_data(dock.list.get_local_mouse_position()) == null and dock.report.text == "Open a level scene first.", dock.report.text)
+	check("a drag carries nothing", dock.list._get_drag_data(dock.list.get_local_mouse_position()) == null and dock.report.text == "Open a level first.", dock.report.text)
 	await click(item_centre(0), true)
 	check("a double-click adds nothing", scene().get_children().all(func(node: Node) -> bool: return node.owner == null)
-		and dock.report.text == "Open a level scene first.")
+		and dock.report.text == "Open a level first.")
 	# Every scene closed: the dock still lists and says what to do.
 	while scene() != null:
 		EditorInterface.close_scene()
@@ -930,7 +930,7 @@ func broken_assets() -> void:
 	check("a file that is no model: listed with its waiting picture", not asset.is_empty() and dock.list.get_item_icon(0) == dock.placeholder)
 	await press(dock.add_button)
 	await frames(2)
-	check("no model: says so", dock.report.text.contains("not a glTF model"), dock.report.text)
+	check("no model: says so", dock.report.text.contains("isn't a model the editor can read"), dock.report.text)
 	check("no drag for it", dock.list._get_drag_data(item_centre(0)) == null)
 	check("nothing added", children_of("StaticAssets").size() == count)
 	check("not left waiting", not plugin.waiting_for_import)
@@ -965,7 +965,7 @@ func refresh_click() -> void:
 	dock.refill()
 	var levels: int = dock.levels.size()
 	await press(dock.refresh_button)
-	check("levels read again", dock.levels.size() == levels and dock.report.text.begins_with("Levels found: %d" % levels), dock.report.text)
+	check("levels read again", dock.levels.size() == levels and dock.report.text.begins_with("%d level" % levels), dock.report.text)
 	check("search and filter kept", dock.search.text == "red" and dock.filter.get_selected_id() == Dock.SHOW_IMPORTS and names() == ["red_ship_1"], [names(), dock.search.text, dock.filter.get_selected_id()])
 	reset_dock()
 
@@ -983,7 +983,7 @@ func closed_while_importing() -> void:
 	EditorInterface.close_scene()
 	await until(func() -> bool: return not plugin.waiting_for_import, 600)
 	check("it waited, then stopped", waited and not plugin.waiting_for_import, dock.report.text)
-	check("and says why it did not place it", dock.report.text == "Open a level scene first." or scene() != null, dock.report.text)
+	check("and says why it did not place it", dock.report.text == "Open a level first." or scene() != null, dock.report.text)
 	EditorInterface.open_scene_from_path("res://levels/level_05/level_05.tscn")
 	await until(func() -> bool: return scene() != null and not dock.here.is_empty(), 300)
 	check("back on the level", int(dock.here.get("level", -1)) == 5)
@@ -1136,12 +1136,12 @@ static func place(root: Node, node: Node) -> String:
 ## a refused edit listed and selected with a click (the command itself: test_openrac_editor.py).
 func check_and_play() -> void:
 	var play: Node = plugin.get("play")
-	check("on the toolbar", play != null and play.get_parent() != null and play.check_button.text == "Check level"
-		and play.play_button.text == "Play level")
+	check("on the toolbar", play != null and play.get_parent() != null and play.check_button.text == "Check Level"
+		and play.play_button.text == "Play Level")
 	var level: Dictionary = play.this_level()
 	check("this level is found", String(level.get("project", "")) != "" and level.get("version") == "ntsc", level)
 	check("without the launcher it says how", String(play.command_for("check", level)).begins_with("Open the level from the launcher"))
-	check("not a level: nothing to pack", String(play.command_for("play", {})).begins_with("This project is not"))
+	check("not a level: nothing to pack", String(play.command_for("play", {})).begins_with("This isn't a Ratchet & Clank level"))
 	play.show_result("check", 1, PackedStringArray(["openrac-progress: pack 1/1", "openrac-problem: Vendor_0000: a mirrored object (a negative scale) cannot be packed",
 		"Some edits cannot be packed yet: fix them and check again."]))
 	await frames(2)
