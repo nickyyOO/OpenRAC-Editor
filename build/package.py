@@ -10,6 +10,7 @@ application bundle misc/dist/macos_tools.app.
 """
 
 import json
+import re
 from pathlib import Path
 import sys
 import zipfile
@@ -32,6 +33,13 @@ def put(archive: zipfile.ZipFile, name: str, data: bytes, executable: bool = Fal
     archive.writestr(info, data)
 
 
+def plist_version(data: bytes, version: str) -> bytes:
+    """Info.plist with the editor's version (v0.2.0 -> 0.2.0, dev -> 0.0.0)."""
+    numbers = re.findall(r"\d+", version)[:3]
+    plain = ".".join(numbers + ["0"] * (3 - len(numbers))).encode()
+    return re.sub(rb"(<key>CFBundle(?:ShortVersionString|Version)</key>\s*<string>)[^<]*", rb"\g<1>" + plain, data)
+
+
 def package(program: Path, system: str, version: str, out: Path) -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     manifest["version"] = version
@@ -41,7 +49,10 @@ def package(program: Path, system: str, version: str, out: Path) -> None:
             bundle = REPO / "misc/dist/macos_tools.app"
             top = at.split("/Contents/")[0]
             for path in sorted(p for p in bundle.rglob("*") if p.is_file()):
-                put(archive, f"{top}/{path.relative_to(bundle).as_posix()}", path.read_bytes())
+                data = path.read_bytes()
+                if path.name == "Info.plist":
+                    data = plist_version(data, version)
+                put(archive, f"{top}/{path.relative_to(bundle).as_posix()}", data)
         put(archive, at, program.read_bytes(), executable=True)
         for path in sorted(p for p in (REPO / "openrac").rglob("*") if p.is_file()):
             rel = path.relative_to(REPO / "openrac")

@@ -40,7 +40,8 @@ Then make the app: copy `misc/dist/macos_tools.app` to `OpenRAC Editor.app` and 
 
 ## Check it
 
-- `bin/<program> --version` prints `4.7.2.stable.custom_build`.
+- `bin/<program> --version` prints `dev.<commit>`. A release build prints its tag, like `v0.2.0`:
+  set `OPENRAC_EDITOR_VERSION=v0.2.0` before `scons` (the release workflow does this from the tag).
 - Started with no level, the editor says to open a level from the OpenRAC launcher and quits.
 - `bin/<program> --editor --path <level folder>` opens a level the launcher made.
 

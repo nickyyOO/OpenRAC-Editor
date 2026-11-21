@@ -322,11 +322,12 @@ static String unescape_cmdline(const String &p_str) {
 }
 
 static String get_full_version_string() {
+	// OpenRAC Editor: its own version ("v0.2.0", or "dev.<commit>" for any other build).
 	String hash = String(GODOT_VERSION_HASH);
-	if (!hash.is_empty()) {
-		hash = "." + hash.left(9);
+	if (String(OPENRAC_EDITOR_VERSION) == "dev" && !hash.is_empty()) {
+		return String(OPENRAC_EDITOR_VERSION) + "." + hash.left(7);
 	}
-	return String(GODOT_VERSION_FULL_BUILD) + hash;
+	return String(OPENRAC_EDITOR_VERSION);
 }
 
 #if defined(TOOLS_ENABLED) && defined(MODULE_GDSCRIPT_ENABLED)
@@ -437,15 +438,15 @@ void Main::print_header(bool p_rich) {
 	if (GODOT_VERSION_TIMESTAMP > 0) {
 		// Version timestamp available.
 		if (p_rich) {
-			Engine::get_singleton()->print_header_rich("\u001b[38;5;39m" + String(GODOT_VERSION_NAME) + "\u001b[0m v" + get_full_version_string() + " (" + Time::get_singleton()->get_datetime_string_from_unix_time(GODOT_VERSION_TIMESTAMP, true) + " UTC) - \u001b[4m" + String(GODOT_VERSION_WEBSITE));
+			Engine::get_singleton()->print_header_rich("\u001b[38;5;39m" + String(GODOT_VERSION_NAME) + "\u001b[0m " + get_full_version_string() + " (" + Time::get_singleton()->get_datetime_string_from_unix_time(GODOT_VERSION_TIMESTAMP, true) + " UTC) - \u001b[4m" + String(GODOT_VERSION_WEBSITE));
 		} else {
-			Engine::get_singleton()->print_header(String(GODOT_VERSION_NAME) + " v" + get_full_version_string() + " (" + Time::get_singleton()->get_datetime_string_from_unix_time(GODOT_VERSION_TIMESTAMP, true) + " UTC) - " + String(GODOT_VERSION_WEBSITE));
+			Engine::get_singleton()->print_header(String(GODOT_VERSION_NAME) + " " + get_full_version_string() + " (" + Time::get_singleton()->get_datetime_string_from_unix_time(GODOT_VERSION_TIMESTAMP, true) + " UTC) - " + String(GODOT_VERSION_WEBSITE));
 		}
 	} else {
 		if (p_rich) {
-			Engine::get_singleton()->print_header_rich("\u001b[38;5;39m" + String(GODOT_VERSION_NAME) + "\u001b[0m v" + get_full_version_string() + " - \u001b[4m" + String(GODOT_VERSION_WEBSITE));
+			Engine::get_singleton()->print_header_rich("\u001b[38;5;39m" + String(GODOT_VERSION_NAME) + "\u001b[0m " + get_full_version_string() + " - \u001b[4m" + String(GODOT_VERSION_WEBSITE));
 		} else {
-			Engine::get_singleton()->print_header(String(GODOT_VERSION_NAME) + " v" + get_full_version_string() + " - " + String(GODOT_VERSION_WEBSITE));
+			Engine::get_singleton()->print_header(String(GODOT_VERSION_NAME) + " " + get_full_version_string() + " - " + String(GODOT_VERSION_WEBSITE));
 		}
 	}
 }

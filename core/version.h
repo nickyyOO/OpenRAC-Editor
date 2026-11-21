@@ -78,6 +78,11 @@
 // Example: "Godot v3.1.4.stable.official.mono.double"
 #define GODOT_VERSION_FULL_NAME GODOT_VERSION_NAME " v" GODOT_VERSION_FULL_BUILD
 
+// OpenRAC Editor: the editor's own version, shown everywhere a person or tool sees one, instead of
+// the engine's 4.7.2. "v0.2.0" for a release (its GitHub tag), "dev" for any other build.
+// Example: "OpenRAC Editor v0.2.0"
+#define OPENRAC_EDITOR_VERSION_NAME GODOT_VERSION_NAME " " OPENRAC_EDITOR_VERSION
+
 // Git commit hash, generated at build time in `core/version_hash.gen.cpp`.
 extern const char *const GODOT_VERSION_HASH;
 

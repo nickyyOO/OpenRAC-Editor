@@ -30,6 +30,8 @@ def version_info_builder(target, source, env):
 #define GODOT_VERSION_WEBSITE "{website}"
 #define GODOT_VERSION_DOCS_BRANCH "{docs_branch}"
 #define GODOT_VERSION_DOCS_URL "https://docs.godotengine.org/en/" GODOT_VERSION_DOCS_BRANCH
+#define OPENRAC_EDITOR_VERSION "{openrac_label}"
+#define OPENRAC_EDITOR_VERSION_NUMBERS {openrac_numbers}
 """.format(**source[0].read())
         )
 

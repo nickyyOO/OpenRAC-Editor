@@ -168,7 +168,11 @@ Dictionary Engine::get_version_info() const {
 		stringver += "." + String(dict["patch"]);
 	}
 	stringver += "-" + String(dict["status"]) + " (" + String(dict["build"]) + ")";
-	dict["string"] = stringver;
+	dict["engine_string"] = stringver;
+	// OpenRAC Editor: the version people see is the editor's own ("v0.2.0" or "dev"); the numbers above
+	// stay the engine's, which project files and scripts check.
+	dict["string"] = OPENRAC_EDITOR_VERSION;
+	dict["openrac_editor"] = OPENRAC_EDITOR_VERSION;
 
 	return dict;
 }

@@ -110,7 +110,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS, Godot 4.7.2 imported one extracted level this way in five seconds; a 4.9 development build crashed on it."
+        "todo": "Run it from the desktop app. From a shell on macOS, the editor imported one extracted level this way in five seconds."
       },
       {
         "id": "editor-open",
@@ -239,7 +239,7 @@
           "editor"
         ],
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS a 4x terrain texture showed at its size in Godot 4.7.2 after the import."
+        "todo": "Run it from the desktop app. From a shell on macOS a 4x terrain texture showed at its size in the editor after the import."
       },
       {
         "id": "editor-hide-packs",
@@ -263,7 +263,7 @@
           "editor"
         ],
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS a 4x terrain texture showed at its size in Godot 4.7.2 after the import."
+        "todo": "Run it from the desktop app. From a shell on macOS a 4x terrain texture showed at its size in the editor after the import."
       }
     ],
     "rac1/ntsc": [
@@ -470,7 +470,7 @@
           "editor"
         ],
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS a 4x terrain texture showed at its size in Godot 4.7.2 after the import."
+        "todo": "Run it from the desktop app. From a shell on macOS a 4x terrain texture showed at its size in the editor after the import."
       },
       {
         "id": "editor-hide-packs",
@@ -494,7 +494,7 @@
           "editor"
         ],
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS a 4x terrain texture showed at its size in Godot 4.7.2 after the import."
+        "todo": "Run it from the desktop app. From a shell on macOS a 4x terrain texture showed at its size in the editor after the import."
       }
     ],
     "rac1/pal1": [
@@ -1050,7 +1050,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) Godot 4.7.2 imported a level of each later game without errors."
+        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) the editor imported a level of each later game without errors."
       },
       {
         "id": "editor-open",
@@ -1193,7 +1193,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) Godot 4.7.2 imported a level of each later game without errors."
+        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) the editor imported a level of each later game without errors."
       },
       {
         "id": "editor-open",
@@ -1336,7 +1336,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) Godot 4.7.2 imported a level of each later game without errors."
+        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) the editor imported a level of each later game without errors."
       },
       {
         "id": "editor-open",
@@ -1479,7 +1479,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) Godot 4.7.2 imported a level of each later game without errors."
+        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) the editor imported a level of each later game without errors."
       },
       {
         "id": "editor-open",
@@ -1613,7 +1613,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) Godot 4.7.2 imported a level of each later game without errors."
+        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) the editor imported a level of each later game without errors."
       },
       {
         "id": "editor-open",
@@ -1747,7 +1747,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/LEVEL_EDITOR.md",
-        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) Godot 4.7.2 imported a level of each later game without errors."
+        "todo": "Run it from the desktop app. From a shell on macOS (2026-10-20) the editor imported a level of each later game without errors."
       },
       {
         "id": "editor-open",

@@ -5953,8 +5953,8 @@ String EditorNode::_get_system_info() const {
 	}
 	const String distribution_version = OS::get_singleton()->get_version_alias();
 
-	String godot_version = "OpenRAC Editor v" + String(GODOT_VERSION_FULL_CONFIG); // OpenRAC Editor: its own name.
-	if (String(GODOT_VERSION_BUILD) != "official") {
+	String godot_version = OPENRAC_EDITOR_VERSION_NAME; // OpenRAC Editor: its own name and version.
+	if (String(OPENRAC_EDITOR_VERSION) == "dev") {
 		String hash = String(GODOT_VERSION_HASH);
 		hash = hash.is_empty() ? String("unknown") : vformat("(%s)", hash.left(9));
 		godot_version += " " + hash;

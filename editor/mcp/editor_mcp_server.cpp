@@ -438,7 +438,7 @@ Variant EditorMCPServer::_handle_rpc(const Dictionary &p_request, bool &r_is_not
 		Dictionary server_info;
 		server_info["name"] = "openrac-editor";
 		server_info["title"] = "OpenRAC Editor";
-		server_info["version"] = GODOT_VERSION_FULL_CONFIG;
+		server_info["version"] = OPENRAC_EDITOR_VERSION;
 		result["protocolVersion"] = version;
 		result["capabilities"] = caps;
 		result["serverInfo"] = server_info;
@@ -1284,7 +1284,7 @@ void EditorMCPServer::_collect_owned(Node *p_node, Node *p_owner, List<Node *> &
 
 Dictionary EditorMCPServer::_tool_editor_state(const Dictionary &p_args) {
 	Dictionary d;
-	d["editor"] = "OpenRAC Editor " + String(GODOT_VERSION_FULL_CONFIG);
+	d["editor"] = OPENRAC_EDITOR_VERSION_NAME;
 	d["project"] = ProjectSettings::get_singleton()->get_resource_path();
 	Array open;
 	PackedStringArray scenes = EditorInterface::get_singleton()->get_open_scenes();
