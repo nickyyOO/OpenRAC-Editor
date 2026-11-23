@@ -19,7 +19,8 @@ the game instead of running its own logic. The level's pack writes them to
 - Or, for a moby of another level's class brought in for its look ("Add With a Simple Move" in
   the Assets dock): `class`, `position`, `rotation` (radians) and `scale`. The mod makes it there
   and drives it from the start, so its class's code never runs (a class the game only makes from
-  code, such as Drek, works too).
+  code, such as Drek, works too). Its `scale` is the moby's scale as the game keeps it: its class's
+  scale times the size it is placed at.
 - `sequence`: the class's animation it plays standing; -1 keeps the one it plays.
 - `walk_sequence`: the one it plays while it moves; -1 (or none) plays `sequence` then too.
 - The preset's numbers. A missing one takes its default; each is held to its range.

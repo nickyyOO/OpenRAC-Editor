@@ -310,7 +310,7 @@ class Placement(unittest.TestCase):
             for a, b in zip(m, again):
                 self.assertAlmostEqual(a, b, places=6)
 
-    def test_a_moby_made_by_the_mod_is_at_its_place_at_its_class_size(self):
+    def test_a_moby_made_by_the_mod_is_at_its_place_with_the_games_own_scale(self):
         from mobys import matrix
         from pack import made_by_mod, scene_transform
         node = {"class_id": 1249, "transform": scene_transform(matrix((170.0, 136.4, 60.5), (0.0, 0.0, 0.5), 3.0)),
@@ -319,7 +319,8 @@ class Placement(unittest.TestCase):
         self.assertEqual(made["class"], 1249)
         for got, want in zip(made["position"] + made["rotation"], (170.0, 136.4, 60.5, 0.0, 0.0, 0.5)):
             self.assertAlmostEqual(got, want, places=4)
-        self.assertAlmostEqual(made["scale"], 2.0, places=5)
+        # The game's own scale for the moby, its class's in it: the mod sets it as it is.
+        self.assertAlmostEqual(made["scale"], 3.0, places=5)
 
     def test_uneven_scale_is_refused(self):
         from formats import FormatError

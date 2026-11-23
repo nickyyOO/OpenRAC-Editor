@@ -279,11 +279,10 @@ def virtual_range(next_sector: list[int], count: int) -> int:
 
 def made_by_mod(node: dict) -> dict:
     """Where the editor-runtime mod makes NODE, a moby of a class imported for its look (pack()):
-    its class, place, turn and scale, as the game's (behaviours.py)."""
+    its class, place, turn and scale, as the game's (behaviours.py). The scale is the moby's own as
+    the game keeps it, its class's scale in it (the node's, drawn at its class's size): the mod
+    sets it as it is, where a placed record's scale is the game's over its class's."""
     (x, y, z), (rx, ry, rz), scale = placement(node["transform"])
-    class_scale = node["meta"].get("foreign_class_scale", 1.0)
-    if isinstance(class_scale, (int, float)) and class_scale > 0:
-        scale /= class_scale
     return {"class": node["class_id"], "position": [x, y, z], "rotation": [rx, ry, rz], "scale": scale}
 
 
