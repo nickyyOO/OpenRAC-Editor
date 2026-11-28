@@ -110,7 +110,7 @@ class SecondExportTests(unittest.TestCase):
             oe.export_godot(dest, [0], True, True, fake_godot(oe.GODOT_SCHEMA))
         godot = self.data / "levels"
         oe.export_godot(godot, [0], True, True, fake_godot(oe.GODOT_SCHEMA))
-        with self.assertRaisesRegex(FormatError, "Godot projects"):
+        with self.assertRaisesRegex(FormatError, "projects, not what this command writes"):
             oe.ours(godot, "port")
 
 
