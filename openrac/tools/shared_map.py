@@ -343,6 +343,28 @@ def _donor_cores(disc, survey: dict, project: Path, sources: Sources) -> list[tu
     return out
 
 
+def _table(data: bytes) -> list[int]:
+    """The first 24 words of a level's file: (offset, size) of each of its parts."""
+    return list(struct.unpack_from("<24i", data)) if len(data) >= 96 else []
+
+
+def _streams(data: bytes) -> list[tuple[int, bytes]]:
+    """(start, unpacked) of each WAD stream in DATA that holds something."""
+    found, i = [], data.find(b"WAD")
+    while i >= 0:
+        try:
+            end = i + struct.unpack_from("<I", data, i + 3)[0]
+            unpacked = wad(data[i:end]) if 16 < end - i and end <= len(data) else b""
+        except (FormatError, struct.error):
+            unpacked = b""
+        if unpacked:
+            found.append((i, unpacked))
+            i = data.find(b"WAD", end)
+        else:
+            i = data.find(b"WAD", i + 1)
+    return found
+
+
 def _file_parts(rel, data, replaces, disc, sources, levels, donors, statics, own) -> list[list]:
     bases: list[tuple[int, bytes]] = []
     spans: list[tuple[int, int, list]] = []
@@ -351,17 +373,22 @@ def _file_parts(rel, data, replaces, disc, sources, levels, donors, statics, own
         original = disc.sectors(first, count)
         outer = sources.add({"disc": [first, count]}, original)
         bases.append((outer, original))
+        was_streams = _streams(original)
+        table, was_table = _table(data), _table(original)
         for start, end, unpacked in wad_spans(data):
+            # The stream it replaces: the one the original's table of parts (its first words)
+            # names in the same slot, as a pack moves a part that grew to the end; else the
+            # original's at the same place.
+            slot = next((j for j in range(0, min(len(table), len(was_table)), 2) if table[j] == start), None)
+            places = ([was_table[slot]] if slot is not None else []) + [start]
+            was = next(((at, u) for place in places for at, u in was_streams if at == place), None)
             inner_bases = list(donors)
-            if original[start:start + 3] == b"WAD":
-                try:
-                    stream_end = start + struct.unpack_from("<I", original, start + 3)[0]
-                    was = wad(original[start:stream_end])
-                    inner_bases.insert(0, (sources.add({"wad": outer, "at": start}, was), was))
-                except (FormatError, struct.error):
-                    pass
+            if was is not None:
+                inner_bases.insert(0, (sources.add({"wad": outer, "at": was[0]}, was[1]), was[1]))
             header = diff(data[start:start + 16], [(outer, original)], own)
             spans.append((start, end, [["wad", header, diff(unpacked, inner_bases, own)]]))
+        if rel.split("/")[-2:-1] == ["classes"]:
+            bases += donors                 # an imported class's file is in the core it comes from
     same = levels / rel
     if same.is_file():
         base = same.read_bytes()
