@@ -382,7 +382,9 @@ it to anyone. Each player's own disc fills in the rest.
 to save the file. The launcher's **Share a level as a map** does the same.
 
 **Add it.** In the launcher, go to **Mods** and add the file like any mod (pick
-it or drop it). OpenRAC Editor must be downloaded. The map becomes its own
+it or drop it), on a computer or on Android. The editor is not needed: the
+launcher carries the editor's map tools (`build/map_tools.py`, at the commit
+OpenRAC's `launcher/map-tools.lock` pins). The map becomes its own
 project beside your levels, `level_NN-<map id>`. Your own `level_NN` is not
 touched. It is also added as a new planet: board the ship and pick it. Adding
 the same map again updates it, and the old copy goes to the backups folder.

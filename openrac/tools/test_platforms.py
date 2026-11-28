@@ -225,6 +225,33 @@ class Release(unittest.TestCase):
                             self.assertIn(f"{bundle}/Contents/Info.plist", names)
 
 
+class MapTools(unittest.TestCase):
+    def test_map_tools_archive_plays_a_map_without_the_editor(self):
+        """What OpenRAC's launcher carries (launcher/map-tools.lock): the tools, the project files
+        and the editor's mod, no program, no numpy, no tests."""
+        spec = importlib.util.spec_from_file_location("map_tools", REPO / "build" / "map_tools.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            mod = Path(tmp) / "mod"
+            mod.mkdir()
+            (mod / "openrac-mod.json").write_text("{}\n", encoding="utf-8", newline="\n")
+            out = Path(tmp) / "map-tools.zip"
+            module.pack("android", "v9.9.9", out, mod)
+            with zipfile.ZipFile(out) as archive:
+                names = archive.namelist()
+                about = json.loads(archive.read("map-tools.json"))
+            self.assertEqual(about["version"], "v9.9.9")
+            self.assertEqual(about["extractorApi"], list(openrac_root.API_VERSIONS))
+            for name in ("openrac/tools/openrac_editor.py", "openrac/tools/shared_map.py",
+                         "openrac/project/project_format.json", "openrac/mods/editor-runtime/openrac-mod.json"):
+                self.assertIn(name, names)
+            for name in names:
+                self.assertNotIn("/vendor/", name)
+                self.assertFalse(name.rsplit("/", 1)[-1].startswith("test_"), name)
+                self.assertNotIn("__pycache__", name)
+
+
 class Starting(unittest.TestCase):
     def test_starts_on_its_own_on_each_system(self):
         """Detached, so closing the launcher leaves the editor open: a new session off Windows,
