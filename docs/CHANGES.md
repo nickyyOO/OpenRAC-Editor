@@ -92,8 +92,8 @@ These are deleted from the source:
   AnimationPlayer. Saving the level writes each one to `cutscenes/<name>.cutscene` beside it; a
   `.cutscene` imports back into nodes. Lines the game's font cannot write (Japanese) are drawn into
   the file as pictures. Tests: `modules/openrac_cutscene/tests/run_tests.sh`.
-- **editor-runtime** (`mods/editor-runtime/`): the OpenRAC mod that plays what the editor packs
-  with a level, which such a level needs on: its cutscenes ([CUTSCENE_FORMAT.md](CUTSCENE_FORMAT.md))
+- **The map player** (built into OpenRAC, `port/game/rac1/editor_runtime`): plays what the editor
+  packs with a level: its cutscenes ([CUTSCENE_FORMAT.md](CUTSCENE_FORMAT.md))
   and the behaviours set in a moby's Inspector, spin, bob, patrol, orbit, face or follow the hero
   ([BEHAVIOUR_FORMAT.md](BEHAVIOUR_FORMAT.md)).
 

@@ -13,7 +13,6 @@ classes run the new planet, and the original planet stays as it is.
 from __future__ import annotations
 
 import openrac_root  # noqa: F401,I001  (OpenRAC's extractor on the import path)
-import json
 import re
 import secrets
 import tempfile
@@ -167,24 +166,15 @@ def level_of(project: Path) -> int:
 
 
 def map_note(project: Path) -> tuple[str, str]:
-    """The author and the line about the map a shared map's import keeps (.openrac/map.json),
-    else the author the project's settings name."""
-    note = {}
-    try:
-        note = json.loads((project / ".openrac" / "map.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        pass
-    if not isinstance(note, dict):
-        note = {}
-    author = note.get("author") if isinstance(note.get("author"), str) else ""
-    about = note.get("about") if isinstance(note.get("about"), str) else ""
-    return author or settings(project).get("map/author", "").strip(), about
+    """The map's author and its line about it, from the project's settings (map/author, map/about)."""
+    found = settings(project)
+    return found.get("map/author", "").strip(), found.get("map/about", "").strip()
 
 
-def add_planet(disc, survey: dict, project: Path, into: Path, keep_problems: bool = False) -> dict:
-    """Packs PROJECT's level, exports it as a new planet and installs it in the launcher's packs
-    folder INTO: what was done, for the report. A level with problems a player would see
-    (map_check.py) is refused, unless KEEP_PROBLEMS."""
+def make_planet(disc, survey: dict, project: Path, out: Path, keep_problems: bool = False) -> dict:
+    """Packs PROJECT's level and exports it as a new planet's pack into the folder OUT: what was
+    done, for the report. A level with problems a player would see (map_check.py) is refused,
+    unless KEEP_PROBLEMS."""
     from map_mod import export_map
     from pack import pack
     if not (project / "project.godot").is_file():
@@ -195,7 +185,7 @@ def add_planet(disc, survey: dict, project: Path, into: Path, keep_problems: boo
     with tempfile.TemporaryDirectory(prefix=".openrac-planet-") as temp:
         packed = Path(temp) / "packed"
         packed.mkdir()
-        levels, mobys = pack(disc, survey, project, packed, {})
+        pack(disc, survey, project, packed, {})
         report = (packed / "changes.txt").read_text(encoding="utf-8")
         refused = [line.strip() for line in report.splitlines() if line.lstrip().startswith("not packed:")]
         if refused:
@@ -209,10 +199,17 @@ def add_planet(disc, survey: dict, project: Path, into: Path, keep_problems: boo
             if lines:
                 raise PlanetError("The map has problems a player would see:\n"
                                   + "\n".join(f"  {line}" for line in lines), INCOMPLETE)
-        out = Path(temp) / "planet"
         author, about = map_note(project)
         manifest = export_map(packed, project, out, name, level, destination=True, map_id=ident,
                               author=author, description=about)
-        installed, _, _ = overrides.add(out, into)
-    return {"name": name, "id": ident, "installed": installed, "level": level, "report": report,
+    return {"name": name, "id": ident, "level": level, "report": report, "author": author, "about": about,
             "spawn": manifest["map"]["spawn"]}
+
+
+def add_planet(disc, survey: dict, project: Path, into: Path, keep_problems: bool = False) -> dict:
+    """Makes PROJECT's planet (make_planet) and installs it in the launcher's packs folder INTO:
+    what was done, for the report."""
+    with tempfile.TemporaryDirectory(prefix=".openrac-planet-") as temp:
+        made = make_planet(disc, survey, project, Path(temp) / "planet", keep_problems)
+        installed, _, _ = overrides.add(Path(temp) / "planet", into)
+    return {**made, "installed": installed}

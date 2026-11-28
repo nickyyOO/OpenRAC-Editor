@@ -3,7 +3,7 @@ extends EditorInspectorPlugin
 ## The Behaviour section in the Inspector of a moby under Game/Mobys: a preset (spin, bob, patrol,
 ## orbit, face the hero, follow the hero, wander), its numbers and the animations it plays standing
 ## and moving, kept as rc1_behaviour metadata, which
-## editor/behaviours.py packs and the editor-runtime mod plays. Undoable.
+## editor/behaviours.py packs and the game's map player plays. Undoable.
 
 ## Each preset's numbers, their defaults and steps (editor/behaviours.py PRESETS), and a hint.
 const PRESETS: Dictionary = {

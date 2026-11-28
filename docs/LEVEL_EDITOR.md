@@ -226,7 +226,7 @@ in as the game's own, with its logic; anything else as static scenery
 starts from a moby of it in another level; one no level places (the game makes it from its code,
 like a cutscene's ship) comes as scenery, or moves with a simple move. A moby's Inspector also has a
 **Behaviour** section (spin, bob, patrol, orbit, face or follow the hero), which
-the editor-runtime mod plays.
+the game's built-in map player plays.
 
 To set things down on the ground, run `openrac_editor.py place <project>` (or the MCP tool
 `level_place`). It looks at each moby's, tie's and shrub's whole underside, not one point: a
@@ -242,9 +242,8 @@ your scenes and, in the background, packs into your packed levels folder (as the
 does) and starts the game on this level with your edits, movies skipped. Every disc of the game:
 Europe, Europe v1.00, USA and Japan. When the game can't take an edit, such as a mirrored object or
 a value out of range, it lists each one instead: click one to select its node, fix it and play
-again. The game starts straight in the level, and with the editor's own mod (editor-runtime, carried in
-the editor's download) on, so cutscenes and simple moves play: Play copies it into the game's
-mods folder and turns it on for that run only, leaving your own mod list as it is. Once the game is up the button says Game Started and its window comes to the front (on a
+again. The game starts straight in the level, and its built-in map player plays the level's cutscenes
+and simple moves. Once the game is up the button says Game Started and its window comes to the front (on a
 Mac it draws with Vulkan through MoltenVK, as the launcher does by default). A game that closes within a few seconds
 is an error, shown with the last lines it wrote; its whole output is in `game.log` beside the packed
 levels folder. (The MCP tools can also check without playing: `level_check`.)

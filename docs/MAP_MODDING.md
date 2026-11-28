@@ -133,12 +133,11 @@ desktop.
 move: spin, bob, patrol, orbit, face the hero, follow the hero or wander, with its
 numbers and the animations to play standing and moving. It works on any moby, skinned ones too.
 The Assets dock's **Add With a Simple Move** adds an object with one: this level's as it is,
-another level's (of the same disc) for its look, made by the mod, so even one the game only makes
+another level's (of the same disc) for its look, made by the map player, so even one the game only makes
 from its code (Drek) can walk about. It is
 stored as `rc1_behaviour` metadata; Pack writes `behaviours.json`
-(`openrac/tools/behaviours.py`) and the editor-runtime mod (`mods/editor-runtime` in
-the editor's repository) plays it, so a level made in the editor needs that mod
-on. The moby moves through walls, and its own update stops.
+(`openrac/tools/behaviours.py`) and the map player built into OpenRAC plays it.
+The moby moves through walls, and its own update stops.
 
 Every placement can be undone. The copies under `library/` come from your own
 disc: do not share them. A shared project names each asset by its `rc1_asset`
@@ -374,35 +373,33 @@ standalone map; creators should use format 4 and normal launcher preparation.
 
 ## Share a map
 
-A shared map is one `.openrac-map` file. It holds no game data, so you can send
-it to anyone. Each player's own disc fills in the rest.
+A shared map is one `.openrac-map` file, ready to play. It holds no game data, so
+you can send it to anyone. Each player's own disc and extracted levels give the
+game's bytes back.
 
 **Make it.** Click the level (the top object in the Level list). Type its
 **Planet Name** and, if you like, **Made By**. Press **Share Map** and pick where
-to save the file. The launcher's **Share a level as a map** does the same.
+to save the file. The launcher's **Share a level as a map** does the same. It
+packs the level as Add as Planet does, then keeps only your own bytes: a few
+minutes.
 
-**Add it.** In the launcher, go to **Mods** and add the file like any mod (pick
-it or drop it). OpenRAC Editor must be downloaded. The map becomes its own
-project beside your levels, `level_NN-<map id>`. Your own `level_NN` is not
-touched. It is also added as a new planet: board the ship and pick it. Adding
-the same map again updates it, and the old copy goes to the backups folder.
+**Play it.** In OpenRAC, go to **Mods** and add the file like any mod (pick it or
+drop it). OpenRAC makes the planet from the player's files in a few seconds, with
+no editor: board the ship and pick it. Adding the same map again replaces it.
 
-What is in the file:
+What is in the file: the planet's files, each as ranges of the player's own files
+(the disc, the extracted levels, the game's packed streams) and the bytes only you
+made: your terrain, collision, placements, textures and models. Models of the
+game you placed as statics are named, not carried (one with collision on is
+refused). The format is in OpenRAC's
+[SHARED_MAPS.md](https://github.com/OpenRAC/OpenRAC/blob/develop/docs/port/SHARED_MAPS.md).
 
-| What you did | What the file holds |
-|---|---|
-| moved, changed, added or deleted objects | only those nodes; a copy names the object it copies |
-| edited collision or other level files | a patch with only the new bytes |
-| used textures or models of the game (Assets, static imports) | their level, path and sha256 |
-| added your own models, textures, cutscenes | the files as they are |
-
-Credit the people whose models you used: put a `CREDITS.txt` or license file in
-the project, and it goes into the map. A map works only with the same disc
-version it was made from (PAL, NTSC-U and so on).
+Credit the people whose models you used with `--credit`. A map works only with
+the same disc version it was made from (PAL, NTSC-U and so on), and with levels
+extracted by the same OpenRAC.
 
 From a shell:
 
 ```sh
-python3 <editor>/openrac/tools/openrac_editor.py map export assets/levels/rac1/pal/level_02 my-world.openrac-map --author "Your name"
-python3 <editor>/openrac/tools/openrac_editor.py map import my-world.openrac-map assets/levels/rac1/pal --planet <data>/overrides
+python3 <editor>/openrac/tools/openrac_editor.py map export assets/levels/rac1/pal/level_02 my-world.openrac-map --levels <openrac>/assets/port/rac1/pal --author "Your name"
 ```

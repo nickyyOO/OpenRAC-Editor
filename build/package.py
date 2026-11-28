@@ -10,7 +10,6 @@ application bundle misc/dist/macos_tools.app.
 """
 
 import json
-import os
 import re
 from pathlib import Path
 import subprocess
@@ -92,15 +91,6 @@ def package(program: Path, system: str, version: str, out: Path) -> None:
         for name, data in vendored(system):
             put(archive, f"openrac/tools/vendor/{name}", data,
                 executable=name.endswith((".so", ".dylib", ".pyd", ".dll")))
-        # The editor's mod, built for this system (mods/editor-runtime's package folder, named by
-        # OPENRAC_EDITOR_MOD): Play installs it into the game's mods folder (openrac_editor.py).
-        mod = os.environ.get("OPENRAC_EDITOR_MOD", "")
-        if mod:
-            folder = Path(mod)
-            if not (folder / "openrac-mod.json").is_file():
-                raise SystemExit(f"OPENRAC_EDITOR_MOD={mod}: no built mod there (no openrac-mod.json)")
-            for path in sorted(p for p in folder.rglob("*") if p.is_file()):
-                put(archive, f"openrac/mods/editor-runtime/{path.relative_to(folder).as_posix()}", path.read_bytes())
         # The guides the editor's MCP server serves to AI assistants (mcp_knowledge.gd) come too.
         for doc in ("docs/LEVEL_EDITOR.md", "docs/AI_GUIDE.md", "docs/MCP.md", "docs/CUTSCENE_FORMAT.md",
                     "docs/MAP_MODDING.md", "docs/LEVEL_MODDING.md", "docs/BEHAVIOUR_FORMAT.md",

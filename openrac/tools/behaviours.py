@@ -1,7 +1,7 @@
-"""Behaviours: simple movements given to a level's mobys, which the editor-runtime mod plays.
+"""Behaviours: simple movements given to a level's mobys, which the game's map player plays.
 
 A moby under Game/Mobys with rc1_behaviour metadata (a preset's name) and its numbers is driven by
-the mod (in the editor's repository, mods/editor-runtime): its own update stops and it moves as
+the map player built into OpenRAC (port/game/rac1/editor_runtime): its own update stops and it moves as
 the preset says, from where it is placed. Pack writes them beside the level's placements:
 
     <out>/level_NN/behaviours.json   {"format": 1, "mobys": [{"spawn_id", "preset", <numbers>}]}

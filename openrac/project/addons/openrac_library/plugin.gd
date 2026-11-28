@@ -541,7 +541,7 @@ func add_in_view(asset: Dictionary, place: Variant = null, job: String = "", beh
 	active_job = job
 
 	# A class the game only makes from its code has no moby to start its logic from: scenery, unless
-	# it gets a simple move (the editor-runtime mod makes it).
+	# it gets a simple move (the game's map player makes it).
 	if behaviour.is_empty() and Library.made_only(asset, here()):
 		asset = asset.duplicate()
 		asset["look"] = true
@@ -608,7 +608,7 @@ func add_in_view(asset: Dictionary, place: Variant = null, job: String = "", beh
 
 ## Adds ASSET with the simple move BEHAVIOUR (behaviour_inspector.gd PRESETS) in place of its own
 ## logic: an object of this level as it is, another level's brought in for its look and moved by the
-## editor-runtime mod. Undoable.
+## the game's map player. Undoable.
 func add_simple(asset: Dictionary, behaviour: String, place: Variant = null, job: String = "") -> void:
 	var refusal: String = Library.simple_refusal(asset, here())
 

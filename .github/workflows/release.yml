@@ -67,25 +67,6 @@ jobs:
           OPENRAC_EDITOR_VERSION: ${{ inputs.tag || github.ref_name }}
         run: scons ${{ matrix.scons }} profile=build/custom.py -j"$(python -c 'import os; print(os.cpu_count())')"
 
-      # The editor's mod (mods/editor-runtime), built against OpenRAC's mod SDK for this system and
-      # packed into the archive: Play installs it into the game's mods folder.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: OpenRAC/OpenRAC
-          ref: develop
-          path: openrac-game
-          persist-credentials: false
-
-      - name: Build the editor's mod
-        shell: bash
-        run: |
-          cmake -S mods/editor-runtime -B build-mod -DOPENRAC_SDK="$PWD/openrac-game/sdk" -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-mod --config Release
-          manifest="$(find build-mod/package -name openrac-mod.json | head -n 1)"
-          test -n "$manifest"
-          ls -R "$(dirname "$manifest")"
-          echo "OPENRAC_EDITOR_MOD=$PWD/$(dirname "$manifest")" >> "$GITHUB_ENV"
-
       - name: Pack it
         shell: bash
         env:

@@ -1,241 +1,147 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 the OpenRAC contributors
-"""Shared maps: byte patches, scene changes, and an export and import with no game data inside."""
+"""Shared maps: a planet pack as parts of the player's own files, made back byte for byte."""
 import openrac_root  # noqa: F401,I001  (OpenRAC's extractor on the import path)
 import json
 import os
 from pathlib import Path
-import shutil
+import random
 import tempfile
 import unittest
-from unittest import mock
 import zipfile
+
+from formats import wad
+from wadpack import compress
 
 import shared_map
 
-SCENE = """[gd_scene format=3]
-
-[ext_resource type="Script" path="res://rc1/level.gd" id="level"]
-[ext_resource type="PackedScene" path="res://levels/level_02/mobys/moby_13.tscn" id="moby_13"]
-
-[node name="Level_02" type="Node3D"]
-script = ExtResource("level")
-metadata/rc1_level = 2
-
-[node name="Game" type="Node3D" parent="."]
-
-[node name="Mobys" type="Node3D" parent="Game"]
-
-[node name="Bolt_0010" parent="Game/Mobys" instance=ExtResource("moby_13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 137.00002, 233, 31)
-metadata/rc1_spawn_id = 114
-metadata/rc1_pvar = [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]
-
-[node name="Bolt_0011" parent="Game/Mobys" instance=ExtResource("moby_13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 139, 229, 31)
-metadata/rc1_spawn_id = 115
-metadata/rc1_pvar = [9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]
-"""
+SECTOR = 2048
 
 
-def edited_scene() -> str:
-    """SCENE as Godot saves it after an edit: uids and unique ids added, floats its own way."""
-    text = SCENE.replace('id="moby_13"]', 'uid="uid://b1" id="moby_13"]')
-    text = text.replace('[node name="Game" type="Node3D" parent="."]', '[node name="Game" type="Node3D" parent="." unique_id=55]')
-    text = text.replace("137.00002, 233, 31", "150.5, 233, 35").replace("139, 229, 31", "139.0000001, 229, 31")
-    text = text.replace('[ext_resource type="PackedScene" path="res://levels/level_02/mobys/moby_13.tscn"',
-                        '[ext_resource type="PackedScene" path="res://models/rock.glb" id="r1"]\n'
-                        '[ext_resource type="PackedScene" path="res://levels/level_02/mobys/moby_13.tscn"')
-    copy = SCENE.split('[node name="Bolt_0011"')[1].replace("139, 229, 31", "160, 227, 40")
-    return (text + '\n[node name="Bolt_0011_2"' + copy +
-            '\n[node name="Rock" parent="Game" instance=ExtResource("r1")]\ntransform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 2, 3)\n')
+def build(parts: list, sources: list[bytes], own: bytes) -> bytes:
+    """What PARTS make (the data, copy and wad parts, as OpenRAC's maps.rs makes them)."""
+    out = bytearray()
+    for part in parts:
+        if part[0] == "data":
+            out += own[part[1]:part[1] + part[2]]
+        elif part[0] == "copy":
+            out += sources[part[1]][part[2]:part[2] + part[3]]
+        elif part[0] == "wad":
+            out += compress(build(part[2], sources, own), build(part[1], sources, own))
+        else:
+            raise AssertionError(f"unexpected part {part[0]}")
+    return bytes(out)
 
 
-class Patches(unittest.TestCase):
-    def test_round_trip_holds_only_new_bytes(self):
-        # High bytes only, so no byte of the plain-text insert can match the base by chance.
-        base = bytes(b | 0x80 for b in os.urandom(200_000))
-        target = base[:1000] + b"creator's own bytes" + base[1000:150_000] + base[150_100:]
-        patch = shared_map.make_patch(base, target)
-        self.assertEqual(shared_map.apply_patch(base, patch), target)
-        self.assertLess(len(patch), 200)
-        self.assertIn(b"creator's own bytes", patch)
-
-    def test_refuses_another_base_and_a_broken_patch(self):
-        base, target = os.urandom(5000), os.urandom(5000)
-        patch = shared_map.make_patch(base, target)
-        with self.assertRaises(shared_map.MapError):
-            shared_map.apply_patch(os.urandom(5000), patch)
-        with self.assertRaises(shared_map.MapError):
-            shared_map.apply_patch(base, patch[:-10])
-        self.assertEqual(shared_map.apply_patch(b"", shared_map.make_patch(b"", b"abc")), b"abc")
+def read_sources(manifest: dict, disc: bytes, levels: Path) -> list[bytes]:
+    found: list[bytes] = []
+    for spec in manifest["sources"]:
+        if "port" in spec:
+            data = (levels / spec["port"]).read_bytes()
+        elif "disc" in spec:
+            first, count = spec["disc"]
+            data = disc[first * SECTOR:(first + count) * SECTOR]
+        else:
+            outer = found[spec["wad"]]
+            data = wad(outer[spec["at"]:])
+        assert shared_map.sha(data) == spec["sha256"]
+        found.append(data)
+    return found
 
 
-class Scenes(unittest.TestCase):
-    def test_changes_hold_edits_only_and_apply_back(self):
-        changes = shared_map.scene_changes(SCENE, edited_scene())
-        text = json.dumps(changes)
-        # The copy names what it copies; the game's pvar words stay out.
-        self.assertNotIn("[9, 9, 9", text)
-        self.assertNotIn("[7, 7, 7", text)
-        added = {e["key"]: e for e in changes["added"]}
-        self.assertEqual(added["node:Game/Mobys/Bolt_0011_2"]["base"], "node:Game/Mobys/Bolt_0011")
-        # Godot's own ids and its float spelling are not edits.
-        self.assertEqual([e["key"] for e in changes["changed"]], ["node:Game/Mobys/Bolt_0010"])
-        problems = []
-        made = shared_map.apply_scene_changes(SCENE, changes, problems)
-        self.assertEqual(problems, [])
-        again = shared_map.scene_changes(SCENE, made)
-        self.assertEqual(again["removed"], [])
-        self.assertEqual(sorted(e["key"] for e in again["added"]), sorted(added))
-        self.assertIn('path="res://models/rock.glb"', made)
-        self.assertIn("160, 227, 40", made)
-        self.assertIn("[9, 9, 9", made.split('name="Bolt_0011_2"')[1])
+class FakeDisc:
+    def __init__(self, data: bytes):
+        self.data = data
 
-    def test_removed_node_and_a_change_for_a_missing_node(self):
-        text = SCENE.split('[node name="Bolt_0011"')[0]
-        changes = shared_map.scene_changes(SCENE, text)
-        self.assertEqual(changes["removed"], ["node:Game/Mobys/Bolt_0011"])
-        changes["changed"].append({"key": "node:Game/Nothing", "set": {"visible": "false"}})
-        problems = []
-        made = shared_map.apply_scene_changes(SCENE, changes, problems)
-        self.assertNotIn("Bolt_0011", made)
-        self.assertEqual(len(problems), 1)
+    def sectors(self, first: int, count: int) -> bytes:
+        return self.data[first * SECTOR:(first + count) * SECTOR]
 
 
-    def test_a_copy_of_a_removed_node(self):
-        # The model is removed and only its moved copy stays: the copy still comes back.
-        head, rest = SCENE.split('[node name="Bolt_0011"')
-        text = head + '[node name="Bolt_0011_2"' + rest.replace("139, 229, 31", "160, 227, 40")
-        changes = shared_map.scene_changes(SCENE, text)
-        self.assertEqual(changes["removed"], ["node:Game/Mobys/Bolt_0011"])
-        problems = []
-        made = shared_map.apply_scene_changes(SCENE, changes, problems)
-        self.assertEqual(problems, [])
-        self.assertNotIn('name="Bolt_0011"', made)
-        self.assertIn("[9, 9, 9", made.split('name="Bolt_0011_2"')[1])
+def game_bytes(seed: int, size: int) -> bytes:
+    """Bytes like a level's: words from a small set, so a WAD stream packs them."""
+    rng = random.Random(seed)
+    words = [rng.randbytes(4) for _ in range(64)]
+    return b"".join(rng.choice(words) for _ in range(size // 4))
 
 
-def project(root: Path, level: int, files: dict) -> Path:
-    folder = root / f"level_{level:02}"
-    for rel, data in files.items():
-        (folder / rel).parent.mkdir(parents=True, exist_ok=True)
-        (folder / rel).write_bytes(data if isinstance(data, bytes) else data.encode())
-    return folder
+class Diff(unittest.TestCase):
+    def test_copies_the_players_bytes_and_keeps_the_rest(self):
+        base = os.urandom(200_000)
+        target = base[:50_000] + b"mine" * 100 + base[60_000:150_000] + os.urandom(3000) + base[150_000:]
+        own = bytearray()
+        parts = shared_map.diff(target, [(0, base)], own)
+        self.assertEqual(build(parts, [base], bytes(own)), target)
+        self.assertLess(len(own), 4000)
+
+    def test_runs_across_two_bases(self):
+        a, b = os.urandom(40_000), os.urandom(40_000)
+        target = a[30_000:] + b[:20_000]
+        own = bytearray()
+        parts = shared_map.diff(target, [(0, a), (1, b)], own)
+        self.assertEqual(build(parts, [a, b], bytes(own)), target)
+        self.assertEqual(len(own), 0)
+
+    def test_no_base(self):
+        own = bytearray()
+        self.assertEqual(build(shared_map.diff(b"abc", [], own), [], bytes(own)), b"abc")
+        self.assertEqual(shared_map.diff(b"", [], own), [])
 
 
-def disc_files(level: int) -> dict:
-    name = f"levels/level_{level:02}"
-    return {"project.godot": 'config_version=5\n\n[application]\n\nconfig/name="Level"\n',
-            f"{name}/level.json": json.dumps({"schema": 3, "game": "rac1", "version": "pal"}),
-            f"{name}/level_{level:02}.tscn": SCENE.replace("level_02", f"level_{level:02}"),
-            f"{name}/textures/terrain_0001.png": b"\x89PNG game texture %d" % level + os.urandom(64),
-            f"{name}/collision/hero_000.glb": b"glTF game collision" + os.urandom(4000),
-            f"{name}/ties/tie_7.glb": b"glTF game tie %d" % level + os.urandom(3000)}
+class Make(unittest.TestCase):
+    """A planet whose core is the disc's level with one WAD stream changed, and a texture the same
+    as an extracted level's: the map carries only what the maker changed."""
+
+    def test_map_holds_only_the_makers_bytes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            unpacked = game_bytes(4, 60_000)
+            stream = compress(unpacked)
+            head = os.urandom(8 * SECTOR)
+            level = head + stream + bytes(-(len(head) + len(stream)) % SECTOR)
+            disc = bytes(10 * SECTOR) + level
+            levels = root / "levels"
+            (levels / "level_11" / "textures").mkdir(parents=True)
+            texture = os.urandom(5000)
+            (levels / "level_11" / "textures" / "0001.png").write_bytes(texture)
+            pack = root / "planet"
+            (pack / "level_11" / "textures").mkdir(parents=True)
+            mine = b"the maker's own" * 50
+            edited = unpacked[:30_000] + mine + unpacked[30_000:]
+            (pack / "level_11" / "core_pal.bin").write_bytes(head + compress(edited, stream[:16]))
+            (pack / "level_11" / "textures" / "0001.png").write_bytes(texture)
+            (pack / "placements.json").write_text('{"mine": true}')
+            (pack / "patches.tsv").write_text(f"10\t{len(level) // SECTOR}\tlevel_11/core_pal.bin\n")
+            project = root / "project"
+            project.mkdir()
+            out = root / "test.openrac-map"
+            about = {"id": "test", "name": "Test", "author": "Me", "about": "", "credits": [],
+                     "made": "2026-11-28", "disc": "pal"}
+            shared_map.make(pack, out, about, FakeDisc(disc), {"levels": []}, levels, project)
+
+            with zipfile.ZipFile(out) as archive:
+                manifest = json.loads(archive.read("map.json"))
+                blobs = {name: archive.read(name) for name in archive.namelist() if name != "map.json"}
+            self.assertEqual((manifest["format"], manifest["version"]), ("openrac-map", 2))
+            self.assertEqual(manifest["author"], "Me")
+            sources = read_sources(manifest, disc, levels)
+            for i, entry in enumerate(manifest["files"]):
+                made = build(entry["parts"], sources, blobs.get(f"data/{i}.bin", b""))
+                self.assertEqual(shared_map.sha(made), entry["sha256"], entry["path"])
+                self.assertEqual((pack / entry["path"]).read_bytes(), made)
+            carried = b"".join(blobs.values())
+            # The core is the disc's level but for the maker's bytes; the texture is only named.
+            self.assertIn(mine, carried)
+            self.assertLess(len(carried), 4 * len(mine))
+            self.assertNotIn(texture[:256], carried)
+            self.assertNotIn(head[:256], carried)
 
 
-class ExportImport(unittest.TestCase):
-    def setUp(self):
-        self.root = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.root)
-        # What the disc gives: the same files every time a level is read.
-        self.disc = {n: disc_files(n) for n in (2, 5)}
-
-        def extract(_disc, levels, into):
-            for n in levels:
-                project(Path(into), n, self.disc[n])
-            return Path(into)
-
-        disc = mock.MagicMock()
-        disc.return_value.__enter__.return_value.version.key = "pal"
-        self.patches = [mock.patch.object(shared_map, "extract_levels", side_effect=extract),
-                        mock.patch("disc.Disc", disc)]
-        for p in self.patches:
-            p.start()
-            self.addCleanup(p.stop)
-
-    def creator(self) -> Path:
-        projects = self.root / "creator"
-        for n in (2, 5):
-            project(projects, n, self.disc[n])
-        level = projects / "level_02"
-        scene = level / "levels/level_02/level_02.tscn"
-        scene.write_text(edited_scene(), encoding="utf-8")
-        hero = level / "levels/level_02/collision/hero_000.glb"
-        hero.write_bytes(hero.read_bytes()[:2000] + b"moved face" + hero.read_bytes()[2010:])
-        (level / "models").mkdir()
-        (level / "models/rock.glb").write_bytes(b"glTF the creator's rock")
-        (level / "models/rock.glb.import").write_text("[remap]\nimporter=\"scene\"\n")
-        # A texture of another level, copied in by hand: named, never carried.
-        shutil.copy(projects / "level_05/levels/level_05/textures/terrain_0001.png", level / "models/borrowed.png")
-        (level / "levels/level_02/textures/terrain_0001.png.import").write_text("[remap]\n")
-        (level / ".godot").mkdir()
-        (level / ".godot/cache.bin").write_bytes(b"cache")
-        import planet
-        planet.set_setting(level, planet.NAME, "Test World")
-        return level
-
-    def test_export_has_no_game_bytes_and_import_gives_the_same_project(self):
-        level = self.creator()
-        done = shared_map.export(level, self.root / "out" / "test.openrac-map", author="Me",
-                                 disc_path=self.root / "disc.iso")
-        self.assertEqual(sorted(done["own"]), ["models/rock.glb", "models/rock.glb.import"])
-        with zipfile.ZipFile(done["out"]) as archive:
-            inside = b"".join(archive.read(n) for n in archive.namelist())
-            manifest = json.loads(archive.read("map.json"))
-        for n in (2, 5):
-            for rel, data in self.disc[n].items():
-                if isinstance(data, bytes) and len(data) > 60:
-                    self.assertNotIn(data[-60:], inside, rel)
-        self.assertNotIn(b"cache", inside)
-        self.assertEqual(manifest["author"], "Me")
-        kinds = {e["path"]: e["kind"] for e in manifest["files"]}
-        self.assertEqual(kinds["models/borrowed.png"], "game")
-        self.assertEqual(kinds["levels/level_02/collision/hero_000.glb"], "patch")
-        self.assertEqual(kinds["levels/level_02/level_02.tscn"], "scene")
-        # The player: their own levels, from their own disc.
-        player = self.root / "player"
-        for n in (2, 5):
-            project(player, n, self.disc[n])
-        got = shared_map.import_map(done["out"], player, disc_path=self.root / "disc.iso")
-        self.assertEqual(got["problems"], [])
-        made = got["project"]
-        self.assertEqual(made.name, f"level_02-{manifest['id']}")
-        for rel in ("models/rock.glb", "models/borrowed.png", "levels/level_02/collision/hero_000.glb"):
-            self.assertEqual((made / rel).read_bytes(), (level / rel).read_bytes(), rel)
-        self.assertEqual(shared_map.scene_changes((level / "levels/level_02/level_02.tscn").read_text(),
-                                                  (made / "levels/level_02/level_02.tscn").read_text())["removed"], [])
-        self.assertEqual((player / "level_02/levels/level_02/level_02.tscn").read_text(), self.disc[2]["levels/level_02/level_02.tscn"])
-        import planet
-        self.assertEqual(planet.settings(made)[planet.ID], manifest["id"])
-        self.assertEqual(planet.settings(made)[shared_map.AUTHOR], "Me")
-        # Adding it again keeps the earlier copy in the backups.
-        again = shared_map.import_map(done["out"], player, disc_path=self.root / "disc.iso")
-        self.assertTrue(again["backup"].is_dir())
-
-    def test_import_refuses_another_disc_and_paths_out_of_the_project(self):
-        level = self.creator()
-        done = shared_map.export(level, self.root / "test.openrac-map", disc_path=self.root / "disc.iso")
-        player = self.root / "player"
-        project(player, 2, self.disc[2])
-        Disc = __import__("disc").Disc
-        Disc.return_value.__enter__.return_value.version.key = "ntsc"
-        with self.assertRaisesRegex(shared_map.MapError, "PAL disc"):
-            shared_map.import_map(done["out"], player, disc_path=self.root / "disc.iso")
-        Disc.return_value.__enter__.return_value.version.key = "pal"
-        bad = self.root / "bad.openrac-map"
-        with zipfile.ZipFile(done["out"]) as source, zipfile.ZipFile(bad, "w") as out:
-            manifest = json.loads(source.read("map.json"))
-            manifest["files"] = [{"path": "../evil.txt", "kind": "file", "data": "files/x", "sha256": ""}]
-            out.writestr("map.json", json.dumps(manifest))
-        with self.assertRaisesRegex(shared_map.MapError, "outside"):
-            shared_map.import_map(bad, player, disc_path=self.root / "disc.iso")
-        self.assertFalse((self.root / "evil.txt").exists())
-
-    def test_source_of_copied_models(self):
-        self.assertEqual(shared_map.source_of("library/rac1/pal/level_05/ties/tie_7.glb", self.root),
-                         (5, "levels/level_05/ties/tie_7.glb"))
-        self.assertIsNone(shared_map.source_of("library/skins/rac1/pal/level_05/mobys/m.glb", self.root))
+class Spans(unittest.TestCase):
+    def test_finds_streams_that_pack_again(self):
+        stream = compress(game_bytes(6, 30_000))
+        data = b"x" * 100 + stream + b"WADnot a stream" + b"y" * 50
+        found = shared_map.wad_spans(data)
+        self.assertEqual([(s, e) for s, e, _ in found], [(100, 100 + len(stream))])
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ copy per video mode. Both native ports select the 60 Hz copy on their own disc
     <out>/changes.txt                 what was changed, in words
     <out>/packed.json                 the disc it was packed from (overrides.py stacks it for that disc only)
     <out>/level_NN/cutscenes/         the level's cutscenes, as OpenRAC Editor wrote them beside its
-                                      scene, for the editor-runtime mod (pack_cutscenes)
+                                      scene, for the game's map player (pack_cutscenes)
 
 The disc image is never written. The native port reads `patches.tsv` (its
 `--mods` option) and serves those sectors from the files instead of the disc.
@@ -278,7 +278,7 @@ def virtual_range(next_sector: list[int], count: int) -> int:
 
 
 def made_by_mod(node: dict) -> dict:
-    """Where the editor-runtime mod makes NODE, a moby of a class imported for its look (pack()):
+    """Where the game's map player makes NODE, a moby of a class imported for its look (pack()):
     its class, place, turn and scale, as the game's (behaviours.py)."""
     (x, y, z), (rx, ry, rz), scale = placement(node["transform"])
     class_scale = node["meta"].get("foreign_class_scale", 1.0)
@@ -330,7 +330,7 @@ def apply(node: dict, record: dict, original: dict | None, whole: bool, problems
 def sharing(name: str, spawn_id: int, spawn_ids: dict[str, int], what: str = "skin") -> str:
     """What a change line adds when other mobys have NAME's spawn number (two of the disc's levels
     have such a pair): the port finds a moby by it. A skin is drawn on each of them; a behaviour
-    (the editor-runtime mod) drives the first the game lists, which may be the other one."""
+    (the game's map player) drives the first the game lists, which may be the other one."""
     others = sorted(other for other, number in spawn_ids.items() if number == spawn_id and other != name)
     if not others:
         return ""
@@ -380,7 +380,7 @@ def pack_level(level_id: int, gameplay: bytes, scene: str, available_classes: se
     FOREIGN_PLACED, when given, gets each moby of a class FOREIGN has: (its record, its Donor).
     CORE_DONORS (class -> Donor) are mobys in other levels of classes this level loads but never
     places: a new moby of one takes its pvars, and runs as this level's own class. MADE_HERE names
-    the nodes the editor-runtime mod makes instead (a simple move, no moby to copy): no record."""
+    the nodes the game's map player makes instead (a simple move, no moby to copy): no record."""
     originals = moby_instances(gameplay)
     raw = gp.records(gameplay)
     nodes = scene_mobys(scene)
@@ -490,7 +490,7 @@ def pack_level(level_id: int, gameplay: bytes, scene: str, available_classes: se
                         "this level or import the model as static scenery."
                     )
                 elif made_here and node["name"] in made_here:
-                    continue    # the editor-runtime mod makes it (pack(): behaviours.py)
+                    continue    # the game's map player makes it (pack(): behaviours.py)
                 elif core_donors and node["class_id"] in core_donors:
                     # The level loads the class but places none: a moby of it in another level
                     # gives its values and pvars, moved to where this one stands.
@@ -976,7 +976,7 @@ def pack_cutscenes(scene_dir: Path, out_dir: Path, level_id: int | None = None, 
                    classes=None) -> tuple[list[str], list[str], list[str]]:
     """Copies the level's cutscenes (OpenRAC Editor writes them to <scene folder>/cutscenes/ on
     save) with the files beside them (voices, music, meshes, layers' frames) to
-    <out>/level_NN/cutscenes/, where the editor-runtime mod reads them. Each is checked first
+    <out>/level_NN/cutscenes/, where the game's map player reads them. Each is checked first
     (check_cutscene). Returns (changes, problems, notes) in words: a .cutscene that is not one, or
     has an error, is a problem (the pack is refused until it is fixed); a warning is a note (the
     player skips that part, the rest plays)."""
@@ -1175,7 +1175,7 @@ def pack(disc, survey: dict, project: Path, out: Path,
         donors, blobs, sources = {}, {}, {}
         owner: dict[int, int] = {}     # each imported class: the placed class it came with
         # A class whose every imported moby has a simple move (rc1_behaviour) comes for its look and
-        # animations only: the editor-runtime mod makes those mobys and moves them, its code never
+        # animations only: the game's map player makes those mobys and moves them, its code never
         # runs, so it needs no moby of it in its level to copy (behaviours.py).
         foreign_nodes = [n for n in scene_mobys(text) if n["meta"].get("foreign_level") is not None]
         acting = {c for c in wanted if all("behaviour" in n["meta"] for n in foreign_nodes if n["class_id"] == c)}
@@ -1354,14 +1354,14 @@ def pack(disc, survey: dict, project: Path, out: Path,
         skin_changes, skin_problems = skins.write_skins(scene.parents[2], text, out / name, moby_spawn_ids)
         scenery_changes += skin_changes
         scenery_problems += skin_problems
-        # Behaviours: mobys the editor-runtime mod moves (behaviours.py), beside the placements.
+        # Behaviours: mobys the game's map player moves (behaviours.py), beside the placements.
         import behaviours
         behaviour_changes, behaviour_problems = behaviours.write_behaviours(
             text, out / name, moby_spawn_ids,
             {n["name"]: made_by_mod(n) for n in foreign_nodes if n["class_id"] in looks} | made_here)
         scenery_changes += behaviour_changes
         scenery_problems += behaviour_problems
-        # Cutscenes: files the editor-runtime mod reads from the pack, beside the level's.
+        # Cutscenes: files the game's map player reads from the pack, beside the level's.
         level_classes = []
 
         def classes_loaded() -> set:

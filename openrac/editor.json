@@ -192,7 +192,7 @@
       {
         "id": "editor-share-map",
         "label": "Share a level as a map",
-        "description": "Saves the level you pick as one .openrac-map file in your levels folder's shared-maps. It holds your edits and your own models and textures, no game data, so you can send it to anyone: they add it in Mods and their own disc fills in the rest. Name the level in OpenRAC Editor first (Planet Name).",
+        "description": "Saves the level you pick as one .openrac-map file in your levels folder's shared-maps. It holds your edits and your own models and textures, no game data, so you can send it to anyone: they add it in OpenRAC's Mods and play, their own disc and levels give the rest. Name the level in OpenRAC Editor first (Planet Name).",
         "kind": "edit",
         "area": "editor",
         "state": "unverified",
@@ -203,6 +203,8 @@
           "export",
           "{projects}/level_{level}",
           "{projects}/shared-maps",
+          "--levels",
+          "{levels}",
           "--anywhere"
         ],
         "output": "{projects}/shared-maps",
@@ -215,35 +217,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/MAP_MODDING.md",
-        "todo": "In a Linux container with the NTSC-U disc: a map exported from an edited Aridia and imported into fresh levels packed to the same bytes. Not run from the desktop app yet."
-      },
-      {
-        "id": "editor-import-map",
-        "label": "Add a shared map",
-        "description": "Makes a project of a shared map (.openrac-map) beside your levels, from your own disc, and adds it to your mods as a new planet the ship can fly to. Your own levels stay as they are. Adding the same map again updates it.",
-        "kind": "edit",
-        "area": "editor",
-        "state": "unverified",
-        "program": "{python}",
-        "args": [
-          "{editor_tools}/openrac_editor.py",
-          "map",
-          "import",
-          "{path}",
-          "{projects}",
-          "--planet",
-          "{data}/overrides",
-          "--anywhere"
-        ],
-        "output": "{data}/overrides",
-        "cwd": ".",
-        "requires": [
-          "disc",
-          "python",
-          "editor"
-        ],
-        "docs": "docs/MAP_MODDING.md",
-        "todo": "In a Linux container with the NTSC-U disc: imported a map into fresh levels, which packed to the same bytes as the creator's. The launcher runs it when a .openrac-map is added in Mods. Not run from the desktop app yet."
+        "todo": "In a Linux container with the PAL disc: the museum map exported, and OpenRAC's launcher made its planet pack again byte for byte in about a second. Not run from the desktop app yet."
       },
       {
         "id": "editor-new-planet",
@@ -535,7 +509,7 @@
       {
         "id": "editor-share-map",
         "label": "Share a level as a map",
-        "description": "Saves the level you pick as one .openrac-map file in your levels folder's shared-maps. It holds your edits and your own models and textures, no game data, so you can send it to anyone: they add it in Mods and their own disc fills in the rest. Name the level in OpenRAC Editor first (Planet Name).",
+        "description": "Saves the level you pick as one .openrac-map file in your levels folder's shared-maps. It holds your edits and your own models and textures, no game data, so you can send it to anyone: they add it in OpenRAC's Mods and play, their own disc and levels give the rest. Name the level in OpenRAC Editor first (Planet Name).",
         "kind": "edit",
         "area": "editor",
         "state": "unverified",
@@ -546,6 +520,8 @@
           "export",
           "{projects}/level_{level}",
           "{projects}/shared-maps",
+          "--levels",
+          "{levels}",
           "--anywhere"
         ],
         "output": "{projects}/shared-maps",
@@ -558,35 +534,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/MAP_MODDING.md",
-        "todo": "In a Linux container with the NTSC-U disc: a map exported from an edited Aridia and imported into fresh levels packed to the same bytes. Not run from the desktop app yet."
-      },
-      {
-        "id": "editor-import-map",
-        "label": "Add a shared map",
-        "description": "Makes a project of a shared map (.openrac-map) beside your levels, from your own disc, and adds it to your mods as a new planet the ship can fly to. Your own levels stay as they are. Adding the same map again updates it.",
-        "kind": "edit",
-        "area": "editor",
-        "state": "unverified",
-        "program": "{python}",
-        "args": [
-          "{editor_tools}/openrac_editor.py",
-          "map",
-          "import",
-          "{path}",
-          "{projects}",
-          "--planet",
-          "{data}/overrides",
-          "--anywhere"
-        ],
-        "output": "{data}/overrides",
-        "cwd": ".",
-        "requires": [
-          "disc",
-          "python",
-          "editor"
-        ],
-        "docs": "docs/MAP_MODDING.md",
-        "todo": "In a Linux container with the NTSC-U disc: imported a map into fresh levels, which packed to the same bytes as the creator's. The launcher runs it when a .openrac-map is added in Mods. Not run from the desktop app yet."
+        "todo": "In a Linux container with the PAL disc: the museum map exported, and OpenRAC's launcher made its planet pack again byte for byte in about a second. Not run from the desktop app yet."
       },
       {
         "id": "editor-show-packs",
@@ -846,7 +794,7 @@
       {
         "id": "editor-share-map",
         "label": "Share a level as a map",
-        "description": "Saves the level you pick as one .openrac-map file in your levels folder's shared-maps. It holds your edits and your own models and textures, no game data, so you can send it to anyone: they add it in Mods and their own disc fills in the rest. Name the level in OpenRAC Editor first (Planet Name).",
+        "description": "Saves the level you pick as one .openrac-map file in your levels folder's shared-maps. It holds your edits and your own models and textures, no game data, so you can send it to anyone: they add it in OpenRAC's Mods and play, their own disc and levels give the rest. Name the level in OpenRAC Editor first (Planet Name).",
         "kind": "edit",
         "area": "editor",
         "state": "unverified",
@@ -857,6 +805,8 @@
           "export",
           "{projects}/level_{level}",
           "{projects}/shared-maps",
+          "--levels",
+          "{levels}",
           "--anywhere"
         ],
         "output": "{projects}/shared-maps",
@@ -869,35 +819,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/MAP_MODDING.md",
-        "todo": "In a Linux container with the NTSC-U disc: a map exported from an edited Aridia and imported into fresh levels packed to the same bytes. Not run from the desktop app yet."
-      },
-      {
-        "id": "editor-import-map",
-        "label": "Add a shared map",
-        "description": "Makes a project of a shared map (.openrac-map) beside your levels, from your own disc, and adds it to your mods as a new planet the ship can fly to. Your own levels stay as they are. Adding the same map again updates it.",
-        "kind": "edit",
-        "area": "editor",
-        "state": "unverified",
-        "program": "{python}",
-        "args": [
-          "{editor_tools}/openrac_editor.py",
-          "map",
-          "import",
-          "{path}",
-          "{projects}",
-          "--planet",
-          "{data}/overrides",
-          "--anywhere"
-        ],
-        "output": "{data}/overrides",
-        "cwd": ".",
-        "requires": [
-          "disc",
-          "python",
-          "editor"
-        ],
-        "docs": "docs/MAP_MODDING.md",
-        "todo": "In a Linux container with the NTSC-U disc: imported a map into fresh levels, which packed to the same bytes as the creator's. The launcher runs it when a .openrac-map is added in Mods. Not run from the desktop app yet."
+        "todo": "In a Linux container with the PAL disc: the museum map exported, and OpenRAC's launcher made its planet pack again byte for byte in about a second. Not run from the desktop app yet."
       },
       {
         "id": "editor-show-packs",
@@ -1155,7 +1077,7 @@
       {
         "id": "editor-share-map",
         "label": "Share a level as a map",
-        "description": "Saves the level you pick as one .openrac-map file in your levels folder's shared-maps. It holds your edits and your own models and textures, no game data, so you can send it to anyone: they add it in Mods and their own disc fills in the rest. Name the level in OpenRAC Editor first (Planet Name).",
+        "description": "Saves the level you pick as one .openrac-map file in your levels folder's shared-maps. It holds your edits and your own models and textures, no game data, so you can send it to anyone: they add it in OpenRAC's Mods and play, their own disc and levels give the rest. Name the level in OpenRAC Editor first (Planet Name).",
         "kind": "edit",
         "area": "editor",
         "state": "unverified",
@@ -1166,6 +1088,8 @@
           "export",
           "{projects}/level_{level}",
           "{projects}/shared-maps",
+          "--levels",
+          "{levels}",
           "--anywhere"
         ],
         "output": "{projects}/shared-maps",
@@ -1178,35 +1102,7 @@
         ],
         "artifact": "{projects}/level_{level}/project.godot",
         "docs": "docs/MAP_MODDING.md",
-        "todo": "In a Linux container with the NTSC-U disc: a map exported from an edited Aridia and imported into fresh levels packed to the same bytes. Not run from the desktop app yet."
-      },
-      {
-        "id": "editor-import-map",
-        "label": "Add a shared map",
-        "description": "Makes a project of a shared map (.openrac-map) beside your levels, from your own disc, and adds it to your mods as a new planet the ship can fly to. Your own levels stay as they are. Adding the same map again updates it.",
-        "kind": "edit",
-        "area": "editor",
-        "state": "unverified",
-        "program": "{python}",
-        "args": [
-          "{editor_tools}/openrac_editor.py",
-          "map",
-          "import",
-          "{path}",
-          "{projects}",
-          "--planet",
-          "{data}/overrides",
-          "--anywhere"
-        ],
-        "output": "{data}/overrides",
-        "cwd": ".",
-        "requires": [
-          "disc",
-          "python",
-          "editor"
-        ],
-        "docs": "docs/MAP_MODDING.md",
-        "todo": "In a Linux container with the NTSC-U disc: imported a map into fresh levels, which packed to the same bytes as the creator's. The launcher runs it when a .openrac-map is added in Mods. Not run from the desktop app yet."
+        "todo": "In a Linux container with the PAL disc: the museum map exported, and OpenRAC's launcher made its planet pack again byte for byte in about a second. Not run from the desktop app yet."
       },
       {
         "id": "editor-show-packs",

@@ -2,8 +2,8 @@
 
 A moby's Inspector in the editor has a **Behaviour** section: a simple movement the moby makes in
 the game instead of running its own logic. The level's pack writes them to
-`level_NN/behaviours.json`, beside the level's placements, and the editor-runtime mod
-(`mods/editor-runtime`) plays them.
+`level_NN/behaviours.json`, beside the level's placements, and the map player built into
+OpenRAC ([`port/game/rac1/editor_runtime`](https://github.com/OpenRAC/OpenRAC/tree/develop/port/game/rac1/editor_runtime)) plays them.
 
 ```json
 {"format": 1, "mobys": [

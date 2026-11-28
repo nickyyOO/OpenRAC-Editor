@@ -3,8 +3,8 @@ extends EditorInspectorPlugin
 ## The Planet section in the Properties of a level (the top object in the Level list): the name the
 ## ship's menu shows when the level is added as a new planet (openrac/tools/planet.py). It is kept in
 ## project.godot ([openrac] planet/name), as the editor has no Project Settings window.
-## Share Map writes the level as one .openrac-map file others can import on their own disc
-## (openrac/tools/shared_map.py): the creator's edits and own files, no game data.
+## Share Map writes the level as one .openrac-map file players add in OpenRAC and play
+## (openrac/tools/shared_map.py): the maker's own bytes only, the game's come from each player's disc.
 
 const Play = preload("play.gd")
 
@@ -123,7 +123,7 @@ func section() -> Control:
 
 	var share := Button.new()
 	share.text = "Share Map"
-	share.tooltip_text = "Saves this level as one .openrac-map file. It holds your edits and your own models, no game data: players import it on their own disc."
+	share.tooltip_text = "Saves this level as one .openrac-map file. It holds your edits and your own models, no game data: players add it in OpenRAC and play it on their own disc."
 	share.pressed.connect(func() -> void:
 		save_author(author.text)
 		apply.call()
@@ -161,8 +161,8 @@ static func pick_file() -> void:
 	picker.popup_file_dialog()
 
 
-## Saves the scenes and writes the map to PATH off the editor's thread (it reads the level from the
-## disc again, some seconds).
+## Saves the scenes and writes the map to PATH off the editor's thread (it packs the level, a few
+## minutes).
 static func export_to(path: String) -> void:
 	var python: String = Play.user_arg("--openrac-python")
 	var tools: String = Play.user_arg("--openrac-tools")
@@ -178,6 +178,11 @@ static func export_to(path: String) -> void:
 
 	EditorInterface.save_all_scenes()
 	var args := PackedStringArray([tools.path_join("openrac_editor.py"), "map", "export", level["project"], path])
+	var levels: String = Play.user_arg("--openrac-levels")
+
+	if levels != "":
+		args.append_array(["--levels", levels])
+
 	var author: String = String(ProjectSettings.get_setting(AUTHOR_SETTING, "")).strip_edges()
 
 	if author != "":
@@ -214,7 +219,7 @@ static func show_result(code: int, lines: PackedStringArray) -> void:
 		EditorInterface.get_base_control().add_child(result)
 
 	if code == 0:
-		result.dialog_text = "Your map is saved. Send the file to players: they add it in the launcher.\n\n" + "\n".join(said)
+		result.dialog_text = "Your map is saved. Send the file to players: they add it in OpenRAC's Mods and play.\n\n" + "\n".join(said)
 	else:
 		result.dialog_text = "\n".join(said) if not said.is_empty() else "Couldn't save the map. Try again."
 
